@@ -1,0 +1,29 @@
+[package]
+edition = "2021"
+name = "riot_prefiltering"
+version = "1.0.0"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ahash = "0.8.3"
+bio = "1.1.0"
+csv = "1.2.1"
+indicatif = "0.17.3"
+itertools = "0.10.5"
+pyo3 = { version = "0.19.2", features = ["extension-module"] }
+rand = "0.8.5"
+rayon = "1.7.0"
+serde = "1.0.164"
+serde_json = "1.0.99"
+
+[profile.release]
+debug = true
+
+[lib]
+# The name of the native library. This is the name which will be used in Python to import the
+# library (i.e. `import string_sum`). If you change this, you must also change the name of the
+# `#[pymodule]` in `src/lib.rs`.
+name = "riot_na"
+crate-type = ["cdylib"]
+path = "riot_prefiltering/lib.rs"

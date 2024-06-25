@@ -1,0 +1,231 @@
+name: PR flow
+
+on:
+  push:
+    branches:
+    - master
+  pull_request:
+  workflow_dispatch:
+
+
+env:
+  python-version: "3.10"
+  min-test-coverage-percent: 0
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+
+    - name: Setup python
+      uses: actions/setup-python@v5
+      id: setup-python
+      with:
+        python-version: ${{ env.python-version }}
+    - run: |
+        pip install poetry
+
+    - name: Cache poetry virtualenv
+      id: cache-poetry
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/pypoetry/virtualenvs
+        key: ${{ runner.os }}-python-${{ steps.setup-python.outputs.python-version }}-poetry-${{ hashFiles('**/poetry.lock', '**/.pre-commit-config.yaml') }}
+
+    - name: Install necessary system packages
+      run: |
+        sudo apt-get install -y build-essential python3-dev
+
+    - name: Install dependencies
+      if: steps.cache-poetry.outputs.cache-hit != 'true'
+      run: poetry install
+
+    - name: Install Rust subproject
+      run: poetry run maturin develop -r
+
+    - name: Install main project again
+      run: poetry install
+
+    - name: Lint
+      run: |
+        poetry run pre-commit run --all-files
+        poetry run cz check -m "$(git log --format=%B -n 1)"e
+    - name: Test
+      run: |
+        set +e
+        OUTPUT=$(poetry run pytest --doctest-modules --junitxml=junit/test-results.xml --cov=riot_na --cov-report=xml --cov-report=html --cov-report=term-missing)
+        CODE=$?
+        echo "$OUTPUT"
+        echo "$OUTPUT" > pytest-output.txt
+        exit $CODE
+    - name: Upload pytest test results
+      uses: actions/upload-artifact@v4
+      with:
+        name: pytest-results-${{ env.python-version }}
+        path: |
+          pytest-output.txt
+          junit/test-results.xml
+          coverage.xml
+          htmlcov/
+      # Use always() to always run this step to publish test results when there are test failures
+      if: ${{ always() }}
+
+    - name: Pytest coverage comment
+      uses: MishaKav/pytest-coverage-comment@main
+      with:
+        pytest-coverage-path: pytest-output.txt
+        title: Coverage report
+        badge-title: Coverage
+        hide-badge: false
+        hide-report: false
+        create-new-comment: false
+        hide-comment: false
+        junitxml-path: junit/test-results.xml
+      if: ${{ always() }}
+
+    - name: Fail on too low coverage
+      if: ${{ github.ref != 'refs/heads/master' }}
+      run: poetry run coverage report --fail-under=${{ env.min-test-coverage-percent }}
+
+  release:
+    needs: test
+    if: ${{ github.ref == 'refs/heads/master' }}
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Install poetry
+      run: pipx install poetry
+
+    - name: Set up python
+      uses: actions/setup-python@v5
+      id: setup-python
+      with:
+        python-version: ${{ env.python-version }}
+        cache: "poetry"
+
+    - name: Install dependencies
+      if: steps.cache-poetry.outputs.cache-hit != 'true'
+      run: poetry install
+
+    - name: Create release
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        git config --global user.name "github-actions"
+        git config --global user.email "action@github.com"
+        poetry run semantic-release version --skip-build
+
+  linux:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        ref: master
+    - uses: PyO3/maturin-action@v1
+      with:
+        manylinux: auto
+        command: build
+        args: --release --sdist -o dist --find-interpreter
+    - name: Upload wheels
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheels_linux
+        path: dist
+
+  windows:
+    needs: release
+    runs-on: windows-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        ref: master
+    - uses: PyO3/maturin-action@v1
+      with:
+        command: build
+        args: --release -o dist --find-interpreter
+    - name: Upload wheels
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheels_windows
+        path: dist
+
+  macos:
+    needs: release
+    runs-on: macos-latest
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        ref: master
+    - uses: PyO3/maturin-action@v1
+      with:
+        command: build
+        args: --release -o dist --target universal2-apple-darwin --find-interpreter
+    - name: Upload wheels
+      uses: actions/upload-artifact@v4
+      with:
+        name: wheels_macos
+        path: dist
+
+  publish:
+    needs: [linux, windows, macos]
+    if: ${{ github.ref == 'refs/heads/master' }}
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      # IMPORTANT: this permission is mandatory for trusted publishing
+      id-token: write
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+        ref: master
+    - name: Download artifacts
+      uses: actions/download-artifact@v4
+      with:
+        path: dist
+        merge-multiple: true
+
+    - name: Install poetry
+      run: pipx install poetry
+
+    - name: Set up python
+      uses: actions/setup-python@v5
+      id: setup-python
+      with:
+        python-version: ${{ env.python-version }}
+        cache: "poetry"
+
+    - name: Install dependencies
+      if: steps.cache-poetry.outputs.cache-hit != 'true'
+      run: poetry install
+
+    - name: Publish artifacts
+      env:
+        GH_TOKEN: ${{ secrets.GH_TOKEN }}
+      run: |
+        git config --global user.name "github-actions"
+        git config --global user.email "action@github.com"
+        poetry run semantic-release publish
+
+    - name: Clean test results
+      run: |
+        rm -f dist/coverage.xml
+        rm -f dist/pytest-output.txt
+        rm -rf dist/junit/
+        rm -f dist/coverage.xml
+        rm -rf dist/htmlcov/
+
+    - name: Publish package distributions to PyPI
+      uses: pypa/gh-action-pypi-publish@release/v1
