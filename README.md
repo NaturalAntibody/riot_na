@@ -8,7 +8,7 @@ Antibodies are a cornerstone of the immune system, playing a pivotal role in ide
 
 ## Installation
 
-Riot is distributed in prebuild binary wheels for all major platforms. Just run:
+Riot is distributed in prebuild binary wheels for all major platforms. Just run in your chosen virtualenv:
 
 ```
 pip install riot-na
