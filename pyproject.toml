@@ -5,7 +5,7 @@ authors = ["NaturalAntibody"]
 description = ""
 include = [{ path = "riot_na/riot_na.*.so", format = "wheel" }]
 name = "riot_na"
-version = "0.0.0"
+version = "1.0.0"
 
 [tool.poetry.dependencies]
 blosum = "^2.0.2"
@@ -67,7 +67,7 @@ dependencies = [
 ]
 name = "riot_na"
 requires-python = ">=3.10"
-version = "0.0.0"
+version = "1.0.0"
 
 [project.scripts]
 riot_na = "riot_na.cli:run_riot"
