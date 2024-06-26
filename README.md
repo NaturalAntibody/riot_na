@@ -420,3 +420,13 @@ poetry install
 poetry run maturin develop -r
 poetry install
 ```
+
+## Citing this work
+The code and data in this package is based on the following paper <*coming soon*>. If you use it, please cite:
+```
+@misc{riot,
+      title={RIOT - Rapid Immunoglobulin Overview Tool - rapid annotation of nucleotide and amino acid immunoglobulin sequences using an open germline database.},
+      author={Paweł Dudzic, Bartosz Janusz, Tadeusz Satława, Dawid Chomicz, Tomasz Gawłowski, Rafał Grabowski, Przemysław Jóźwiak, Mateusz Tarkowski, Maciej Mycielski, Sonia Wróbel, Konrad Krawczyk*},
+
+}
+```
