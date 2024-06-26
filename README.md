@@ -2,7 +2,7 @@
 
 Have some raw antibody sequences? Find matching germlines, perform numbering and get results in a familiar AIRR format!
 
-RIOT supports both nucleotide and amino acid sequences and all major schemas: KABAT, CHOTHIA, MARTIN and IMGT.
+RIOT supports both nucleotide and amino acid sequences as well as all major schemas: KABAT, CHOTHIA, MARTIN and IMGT.
 
 <details>
   <summary>MOTIVATION</summary>
