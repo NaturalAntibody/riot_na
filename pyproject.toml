@@ -66,8 +66,12 @@ dependencies = [
     "tqdm ~= 4.66.1",
 ]
 name = "riot_na"
+description = "Antibody numbering software"
 requires-python = ">=3.10"
 version = "1.0.1"
+
+[project.urls]
+Homepage = "https://github.com/NaturalAntibody/riot_na"
 
 [project.scripts]
 riot_na = "riot_na.cli:run_riot"
