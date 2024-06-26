@@ -1,10 +1,50 @@
 # RIOT - Rapid Immunoglobulin Overview Tool
 
+Have some raw antibody sequences? Find matching germlines, perform numbering and get results in a familiar AIRR format!
+
+RIOT supports both nucleotide and amino acid sequences and all major schemas: KABAT, CHOTHIA, MARTIN and IMGT.
+
+<details>
+  <summary>MOTIVATION</summary>
+
 Antibodies are a cornerstone of the immune system, playing a pivotal role in identifying and neutralizing infections caused by bacteria, viruses, and other pathogens. Understanding their structure, function, can provide insights into both the body's natural defenses and the principles behind many therapeutic interventions, including vaccines and antibody-based drugs. The analysis and annotation of antibody sequences, including the identification of variable, diversity, joining, and constant genes, as well as the delineation of framework regions and complementarity determining regions, are essential for understanding their structure and function. Currently analyzing large volumes of antibody sequences for is routine in antibody discovery, requiring fast and accurate tools. While there are existing tools designed for the annotation and numbering of antibody sequences, they often have limitations such as being restricted to either nucleotide or amino acid sequences, reliance on non-uniform germline databases, or slow execution times. Here we present Rapid Immunoglobulin Overview Tool (RIOT), a novel open source solution for antibody numbering that addresses these shortcomings. RIOT handles nucleotide and amino acid sequence processing, comes with a free germline database, and is computationally efficient. We hope the tool will facilitate rapid annotation of antibody sequencing outputs for the benefit of understanding of antibody biology and discovering novel therapeutics.
 
+</details>
+
+## Links:
+- [PyPI](https://pypi.org/project/riot-na/)
+- [Source code](https://github.com/NaturalAntibody/riot_na)
+- [Collab example](https://colab.research.google.com/drive/1xKO4udsX5gmnY88eDKWsQaUnHsLuFwVA?usp=sharing)
 
 ## Requirements
  - Python ^3.10
+
+## Quickstart
+```
+> pip install riot-na
+
+> riot_na -s GGGCGTTTTGGCAC...
+
+{
+    "sequence_header": "-",
+    "sequence": "GGGCGTTTTGGCAC...",
+    "numbering_scheme": "imgt",
+    "locus": "igh",
+    "stop_codon": False,
+    "vj_in_frame": True,
+    "v_frameshift": False,
+    "j_frameshift": False,
+    "productive": True,
+    "rev_comp": False,
+    "complete_vdj": True,
+    "v_call": "IGHV1-69*01",
+    "d_call": "IGHD3-3*01",
+    "j_call": "IGHJ6*02",
+    "c_call": "IGHM",
+    "v_frame": 0,
+    ...
+}
+```
 
 ## Installation
 
@@ -351,3 +391,32 @@ Following table describes additional validation flags calculated alongside main 
 | conserved_C104_present                    | scheme_residue_mapping                                                                                                                                                                     | True if conserved Cysteine on IMGT position 104 is present.                                                                                                                                               |
 | conserved_W118_heavy_present              | scheme_residue_mapping                                                                                                                                                                     | True if conserved Tryptophan on IMGT position 118 is present (heavy chain only).                                                                                                                          |
 | conserved_F118_light_present              | scheme_residue_mapping                                                                                                                                                                     | True if conserved Phenylalanine on IMGT position 118 is present (light chain only).                                                                                                                       |
+
+## Development
+
+RIOT uses prefiltering module written in Rust, which requires some extra steps to install from source.
+
+```
+# Install Poetry
+
+curl -sSL https://install.python-poetry.org | python3 - --version 1.7.1
+
+# Add `export PATH="/root/.local/bin:$PATH"` to your shell configuration file.****
+
+# Download and run the Rust installation script
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+
+# Restart shell to reload PATH
+
+# Verify the installation
+!poetry --version
+!rustc --version
+!cargo --version
+
+git clone https://github.com/NaturalAntibody/riot_na
+cd riot_na
+
+poetry install
+poetry run maturin develop -r
+poetry install
+```
