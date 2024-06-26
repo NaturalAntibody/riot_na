@@ -422,7 +422,7 @@ poetry install
 ```
 
 ## Citing this work
-The code and data in this package is based on the following paper <*coming soon*>. If you use it, please cite:
+The code and data in this package is based on the following paper <*we release the paper once it clears peer review*>. If you use it, please cite:
 ```
 @misc{riot,
       title={RIOT - Rapid Immunoglobulin Overview Tool - rapid annotation of nucleotide and amino acid immunoglobulin sequences using an open germline database.},
