@@ -66,7 +66,10 @@ class RiotNumberingNT:
         """
         query_sequence = query_sequence.upper()
         translated_alignments = None
+        nt_offsets = None
+        aa_offsets = None
         sch_alignment = None
+        positional_scheme_mapping = None
         aligned_sequence = None
         numbering = None
         scheme_alignment_exc = None
@@ -135,6 +138,8 @@ class RiotNumberingNT:
             airr_builder.with_c_gene_alignment(alignments.c)
 
         if sch_alignment:
+            assert nt_offsets
+            assert aa_offsets
             airr_builder.with_nt_region_offsets(nt_offsets)
             airr_builder.with_aa_region_offsets(aa_offsets)
             airr_builder.with_aa_scheme_alignment(sch_alignment)
@@ -185,7 +190,9 @@ class RiotNumberingAA:
         """
         query_sequence = query_sequence.upper()
         sch_alignment = None
+        aa_offsets = None
         aligned_sequence = None
+        positional_scheme_mapping = None
         numbering = None
         scheme_alignment_exc = None
 
@@ -233,6 +240,7 @@ class RiotNumberingAA:
             airr_builder.with_j_gene_alignment_aa(alignments.j)
 
         if sch_alignment:
+            assert aa_offsets
             airr_builder.with_aa_region_offsets(aa_offsets)
             airr_builder.with_aa_scheme_alignment(sch_alignment)
 
