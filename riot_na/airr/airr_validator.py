@@ -441,7 +441,7 @@ def validate_airr_entry(rearrangement: AirrRearrangementEntryNT, scheme: Scheme)
 
 VALIDATORS_AA: dict[str, Callable[[AirrRearrangementEntryAA], Optional[bool]]] = {
     "regions_aa_in_aligned_sequence_aa": partial(validate_regions_in_aligned_sequence, seq_type=SeqType.AA),
-    "cdr3_aa_in_junction_aa": partial(validate_cdr3_in_junction, seq_type=SeqType.AA),
+    "cdr3_aa_in_junction_aa": validate_cdr3_aa_in_junction_aa,
     "locus_as_in_v_gene": validate_locus_as_in_v_gene,
     "v_gene_alignment_aa": partial(validate_gene_alignment, gene=Gene.V, seq_type=SeqType.AA),
     "j_gene_alignment_aa": partial(validate_gene_alignment, gene=Gene.J, seq_type=SeqType.AA),
