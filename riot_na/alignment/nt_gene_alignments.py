@@ -79,7 +79,7 @@ class VDJCAlignerNT:
 
 def create_vdjc_aligner_nt(allowed_species: Optional[list[Organism]] = None, db_dir: Path = GENE_DB_DIR):
     if not allowed_species:
-        allowed_species = list(Organism)
+        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS]
 
     v_aligner = create_v_gene_aligner(allowed_species=allowed_species, db_dir=db_dir)
 
@@ -104,8 +104,10 @@ def create_vdjc_aligner_nt(allowed_species: Optional[list[Organism]] = None, db_
     c_aligners = {}
 
     for locus in Locus:
+        c_organism = Organism.HOMO_SAPIENS if organism != Organism.CUSTOM else Organism.CUSTOM
+            
         c_aligner = create_aligner(
-            allowed_species=Organism.HOMO_SAPIENS, germline_gene=GermlineGene.C, locus=locus, db_dir=db_dir
+            allowed_species=c_organism, germline_gene=GermlineGene.C, locus=locus, db_dir=db_dir
         )
         c_aligners[locus] = c_aligner
 

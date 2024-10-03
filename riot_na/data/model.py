@@ -108,6 +108,7 @@ class Scheme(str, Enum):
 class Organism(str, Enum):
     HOMO_SAPIENS = "human"
     MUS_MUSCULUS = "mouse"
+    CUSTOM = "custom"
 
 
 class ShortRegion(str, Enum):
