@@ -234,7 +234,7 @@ class RiotNumberingAA:
 
         if alignments.v:
             airr_builder.with_v_gene_alignment_aa(alignments.v)
-            airr_builder.with_sequence_alignment_aa(aligned_sequence)
+            # airr_builder.with_sequence_alignment_aa(aligned_sequence)
 
         if alignments.j:
             airr_builder.with_j_gene_alignment_aa(alignments.j)

@@ -1,16 +1,17 @@
-from math import ceil
 from typing import Optional
 
 from riot_na.airr.airr_validator import validate_airr_entry
-from riot_na.alignment.alignment_utils import fold_cigar, has_frameshift
+from riot_na.alignment.alignment_utils import fold_cigar, has_frameshift, unfold_cigar, align_sequences, translate
 from riot_na.data.model import (
     AirrRearrangementEntryNT,
     AlignmentEntryNT,
+    AlignmentEntryAA,
     AlignmentString,
     RegionOffsetsAA,
     RegionOffsetsNT,
     Scheme,
     SchemeAlignment,
+    TranslatedAlignmentsNT,
 )
 
 
@@ -26,9 +27,11 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
 
         self.v_gene_sequence: Optional[str] = None
         self.v_gene_alignment: Optional[AlignmentEntryNT] = None
+        self.v_gene_alignment_aa: Optional[AlignmentEntryAA] = None
 
         self.j_gene_alignment: Optional[AlignmentEntryNT] = None
         self.j_gene_sequence: Optional[str] = None
+        self.j_gene_alignment_aa: Optional[AlignmentEntryAA] = None
 
         self.c_gene_alignment: Optional[AlignmentEntryNT] = None
         self.c_gene_sequence: Optional[str] = None
@@ -56,20 +59,25 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         self.rearrangement.v_call = v_aln.target_id
         self.rearrangement.locus = v_aln.locus.value
 
-        # alignment positions are 0-indexed, add 1 to start index to convert to 1-based
         self.rearrangement.v_sequence_start = v_aln.q_start + 1
         self.rearrangement.v_sequence_end = v_aln.q_end
 
         self.rearrangement.v_germline_start = v_aln.t_start + 1
         self.rearrangement.v_germline_end = v_aln.t_end
 
-        self.rearrangement.v_sequence_alignment = self.sequence[v_aln.q_start : v_aln.q_end]
+        v_sequence_segment = self.sequence[v_aln.q_start : v_aln.q_end]
+        v_germline_segment = v_aln.t_seq[v_aln.t_start : v_aln.t_end]
+
+        v_sequence_alignment, v_germline_alignment = align_sequences(
+            v_sequence_segment, v_germline_segment, unfold_cigar(v_aln.cigar)
+        )
+
+        self.rearrangement.v_sequence_alignment = v_sequence_alignment
+        self.rearrangement.v_germline_alignment = v_germline_alignment
 
         # 1 based, hence need to add 1
         self.rearrangement.v_alignment_start = 1
-        self.rearrangement.v_alignment_end = v_aln.q_end - v_aln.q_start
-
-        self.rearrangement.v_germline_alignment = v_aln.t_seq[v_aln.t_start : v_aln.t_end]
+        self.rearrangement.v_alignment_end = len(v_sequence_alignment)
 
         self.rearrangement.v_score = v_aln.alignment_score
         self.rearrangement.v_cigar = v_aln.cigar
@@ -97,14 +105,27 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
             self.rearrangement.j_germline_start = j_aln.t_start + 1
             self.rearrangement.j_germline_end = j_aln.t_end
 
-            self.rearrangement.j_sequence_alignment = self.sequence[j_aln.q_start : j_aln.q_end]
+            j_sequence_segment = self.sequence[j_aln.q_start : j_aln.q_end]
+            j_germline_segment = j_aln.t_seq[j_aln.t_start : j_aln.t_end]
+
+            j_sequence_alignment, j_germline_alignment = align_sequences(
+                j_sequence_segment, j_germline_segment, unfold_cigar(j_aln.cigar)
+            )
+
+            self.rearrangement.j_sequence_alignment = j_sequence_alignment
+            self.rearrangement.j_germline_alignment = j_germline_alignment
 
             # 1 based, hence need to add 1
             assert self.rearrangement.v_sequence_start is not None
-            self.rearrangement.j_alignment_start = j_aln.q_start + 1 - self.v_gene_alignment.q_start
-            self.rearrangement.j_alignment_end = j_aln.q_end - self.v_gene_alignment.q_start
 
-            self.rearrangement.j_germline_alignment = j_aln.t_seq[j_aln.t_start : j_aln.t_end]
+            d_aligned = self.d_gene_alignment is not None
+
+            v_alignment_str = unfold_cigar(self.v_gene_alignment.cigar)
+            d_alignment_str = unfold_cigar(self.d_gene_alignment.cigar) if d_aligned else ""
+            deletions_vd = v_alignment_str.count("D") + d_alignment_str.count("D")
+
+            self.rearrangement.j_alignment_start = j_aln.q_start + 1 - self.v_gene_alignment.q_start + deletions_vd
+            self.rearrangement.j_alignment_end = j_aln.q_end - self.v_gene_alignment.q_start + deletions_vd
 
             self.rearrangement.j_score = j_aln.alignment_score
             self.rearrangement.j_cigar = j_aln.cigar
@@ -136,14 +157,15 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         self.rearrangement.c_germline_start = c_aln.t_start + 1
         self.rearrangement.c_germline_end = c_aln.t_end
 
-        self.rearrangement.c_sequence_alignment = self.sequence[c_aln.q_start : c_aln.q_end]
+        c_sequence_segment = self.sequence[c_aln.q_start : c_aln.q_end]
+        c_germline_segment = c_aln.t_seq[c_aln.t_start : c_aln.t_end]
 
-        # 1 based, hence need to add 1
-        assert self.v_gene_alignment is not None
-        self.rearrangement.c_alignment_start = c_aln.q_start + 1 - self.v_gene_alignment.q_start
-        self.rearrangement.c_alignment_end = c_aln.q_end - self.v_gene_alignment.q_start
+        c_sequence_alignment, c_germline_alignment = align_sequences(
+            c_sequence_segment, c_germline_segment, unfold_cigar(c_aln.cigar)
+        )
 
-        self.rearrangement.c_germline_alignment = c_aln.t_seq[c_aln.t_start : c_aln.t_end]
+        self.rearrangement.c_sequence_alignment = c_sequence_alignment
+        self.rearrangement.c_germline_alignment = c_germline_alignment
 
         self.rearrangement.c_score = c_aln.alignment_score
         self.rearrangement.c_cigar = c_aln.cigar
@@ -172,13 +194,21 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         self.rearrangement.d_germline_start = d_aln.t_start + 1
         self.rearrangement.d_germline_end = d_aln.t_end
 
-        self.rearrangement.d_sequence_alignment = self.sequence[d_aln.q_start : d_aln.q_end]
+        d_sequence_segment = self.sequence[d_aln.q_start : d_aln.q_end]
+        d_germline_segment = d_aln.t_seq[d_aln.t_start : d_aln.t_end]
+
+        d_sequence_alignment, d_germline_alignment = align_sequences(
+            d_sequence_segment, d_germline_segment, unfold_cigar(d_aln.cigar)
+        )
+
+        self.rearrangement.d_sequence_alignment = d_sequence_alignment
+        self.rearrangement.d_germline_alignment = d_germline_alignment
 
         assert self.v_gene_alignment is not None
-        self.rearrangement.d_alignment_start = d_aln.q_start + 1 - self.v_gene_alignment.q_start
-        self.rearrangement.d_alignment_end = d_aln.q_end - self.v_gene_alignment.q_start
-
-        self.rearrangement.d_germline_alignment = d_aln.t_seq[d_aln.t_start : d_aln.t_end]
+        v_aln_str = unfold_cigar(self.v_gene_alignment.cigar)
+        deletions_on_v = v_aln_str.count("D")
+        self.rearrangement.d_alignment_start = d_aln.q_start + 1 - self.v_gene_alignment.q_start + deletions_on_v
+        self.rearrangement.d_alignment_end = self.rearrangement.d_alignment_start + len(d_sequence_alignment) - 1
 
         self.rearrangement.d_score = d_aln.alignment_score
         self.rearrangement.d_cigar = d_aln.cigar
@@ -191,12 +221,56 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         self.rearrangement.sequence_alignment_aa = aligned_sequence_aa
         return self
 
-    def with_sequence_alignment(self, aligned_sequence: str):
-        self.rearrangement.sequence_alignment = aligned_sequence
-        return self
+    def with_aa_alignments(self, alignments: TranslatedAlignmentsNT):
 
-    def with_reading_frame(self, reading_frame: int):
+        reading_frame = alignments.reading_frame
+
         self.rearrangement.v_frame = reading_frame
+        self.sequence_aa = translate(self.sequence, reading_frame)
+        self.rearrangement.sequence_aa = self.sequence_aa
+
+        v_aln = alignments.aa_alignments.v
+        j_aln = alignments.aa_alignments.j
+
+        aligned_query_segment = alignments.translated_query
+
+        v_sequence_segment = aligned_query_segment[v_aln.q_start : v_aln.q_end]
+        v_germline_segment = v_aln.t_seq[v_aln.t_start : v_aln.t_end]
+
+        v_sequence_alignment, v_germline_alignment = align_sequences(
+            v_sequence_segment, v_germline_segment, unfold_cigar(v_aln.cigar)
+        )
+
+        self.rearrangement.v_sequence_alignment_aa = v_sequence_alignment
+        self.rearrangement.v_germline_alignment_aa = v_germline_alignment
+
+        if j_aln is not None:
+            j_sequence_segment = j_aln.q_seq[j_aln.q_start : j_aln.q_end]
+            j_germline_segment = j_aln.t_seq[j_aln.t_start : j_aln.t_end]
+
+            j_sequence_alignment, j_germline_alignment = align_sequences(
+                j_sequence_segment, j_germline_segment, unfold_cigar(j_aln.cigar)
+            )
+
+            self.rearrangement.j_sequence_alignment_aa = j_sequence_alignment
+            self.rearrangement.j_germline_alignment_aa = j_germline_alignment
+
+        germline_segment = v_germline_segment + j_germline_segment
+
+        v_aln_str = unfold_cigar(v_aln.cigar)
+        j_aln_str = unfold_cigar(j_aln.cigar) if j_aln else ""
+
+        vj_junction_len = j_aln.q_start if j_aln else 0
+        vj_junction_alignment_str = vj_junction_len * "I"
+
+        full_alignment_str = v_aln_str + vj_junction_alignment_str + j_aln_str
+
+        sequence_alignment_aa, germline_alignment_aa = align_sequences(
+            aligned_query_segment, germline_segment, full_alignment_str
+        )
+        self.rearrangement.sequence_alignment_aa = sequence_alignment_aa
+        self.rearrangement.germline_alignment_aa = germline_alignment_aa
+
         return self
 
     def with_nt_region_offsets(self, offsets: RegionOffsetsNT):
@@ -263,20 +337,19 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
             return None
 
         assert self.v_gene_alignment is not None
-        start = start - self.v_gene_alignment.q_start
-        end = end - self.v_gene_alignment.q_start
 
-        if self.rearrangement.sequence_alignment:
-            # subtract 1 because of 1 based indexing
-            return self.rearrangement.sequence_alignment[start - 1 : end]
+        if self.sequence:
+            return self.sequence[start - 1 : end]
+
         return None
 
     def _extract_region_aa(self, start: int, end: int):
         if start is None or end is None or start == -1 or end == -1:
             return None
 
-        if self.rearrangement.sequence_alignment_aa:
-            return self.rearrangement.sequence_alignment_aa[start - 1 : end]
+        sequence_aa_segment = self.rearrangement.sequence_alignment_aa.replace("-", "")
+        if self.sequence_aa:
+            return sequence_aa_segment[start - 1 : end]
         return None
 
     def build(self):  # pylint: disable=too-many-statements
@@ -284,32 +357,54 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
             return self.rearrangement
 
         alignment_end = self.j_gene_alignment.q_end if self.j_gene_alignment else self.v_gene_alignment.q_end
-        self.rearrangement.sequence_alignment = self.sequence[self.v_gene_alignment.q_start : alignment_end]
+        sequence_alignment_segment = self.sequence[self.v_gene_alignment.q_start : alignment_end]
 
-        aln_len = len(self.rearrangement.sequence_alignment)
-        v_germline_alignment = self.rearrangement.v_germline_alignment
-        j_germline_alignment = self.rearrangement.j_germline_alignment or ""
-
-        self.rearrangement.germline_alignment = (
-            v_germline_alignment
-            + ("N" * (aln_len - len(v_germline_alignment) - len(j_germline_alignment)))
-            + j_germline_alignment
+        v_germline_segment = self.v_gene_alignment.t_seq[self.v_gene_alignment.t_start : self.v_gene_alignment.t_end]
+        d_germline_segment = (
+            self.d_gene_alignment.t_seq[self.d_gene_alignment.t_start : self.d_gene_alignment.t_end]
+            if self.d_gene_alignment
+            else ""
+        )
+        j_germline_segment = (
+            self.j_gene_alignment.t_seq[self.j_gene_alignment.t_start : self.j_gene_alignment.t_end]
+            if self.j_gene_alignment
+            else ""
         )
 
+        germline_segment = v_germline_segment + d_germline_segment + j_germline_segment
+
+        v_aln_str = unfold_cigar(self.v_gene_alignment.cigar)
+        d_aln_str = unfold_cigar(self.d_gene_alignment.cigar) if self.d_gene_alignment else ""
+        j_aln_str = unfold_cigar(self.j_gene_alignment.cigar) if self.j_gene_alignment else ""
+
+        if self.d_gene_alignment is None:
+            vj_junction_len = (
+                self.j_gene_alignment.q_start - self.v_gene_alignment.q_end if self.j_gene_alignment else 0
+            )
+            vj_junction_alignment_str = vj_junction_len * "I"
+
+        else:
+            vd_junction_len = (
+                self.d_gene_alignment.q_start - self.v_gene_alignment.q_end if self.d_gene_alignment else 0
+            )
+            vd_junction_alignment_str = vd_junction_len * "I"
+
+            dj_junction_len = (
+                self.j_gene_alignment.q_start - self.d_gene_alignment.q_end if self.j_gene_alignment else 0
+            )
+            dj_junction_alignment_str = dj_junction_len * "I"
+
+            vj_junction_alignment_str = vd_junction_alignment_str + d_aln_str + dj_junction_alignment_str
+
+        full_alignment_str = v_aln_str + vj_junction_alignment_str + j_aln_str
+
+        sequence_alignment, germline_alignment = align_sequences(
+            sequence_alignment_segment, germline_segment, full_alignment_str
+        )
+        self.rearrangement.sequence_alignment = sequence_alignment
+        self.rearrangement.germline_alignment = germline_alignment
+
         if self.rearrangement.sequence_alignment_aa:
-            alignment_offset = self.v_gene_alignment.q_start + self.rearrangement.v_frame
-            v_start_aa = 0
-            v_end_aa = int((self.v_gene_alignment.q_end - alignment_offset) / 3)
-
-            self.rearrangement.v_sequence_alignment_aa = self.rearrangement.sequence_alignment_aa[v_start_aa:v_end_aa]
-
-            if self.j_gene_alignment is not None:
-                j_start_aa = ceil((self.j_gene_alignment.q_start - alignment_offset) / 3)
-                j_end_aa = int(self.j_gene_alignment.q_end - alignment_offset / 3)
-
-                self.rearrangement.j_sequence_alignment_aa = self.rearrangement.sequence_alignment_aa[
-                    j_start_aa:j_end_aa
-                ]
 
             if self.rearrangement.cdr3 is not None:
                 self.rearrangement.junction = self._extract_region(
@@ -326,6 +421,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
 
             # annotate
             self.rearrangement.stop_codon = "*" in self.rearrangement.sequence_alignment_aa
+
         self.rearrangement.complete_vdj = (
             self.rearrangement.fwr1_start
             and self.rearrangement.fwr1_start != -1
