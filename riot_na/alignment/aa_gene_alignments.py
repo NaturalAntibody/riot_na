@@ -165,7 +165,7 @@ class VJAlignmentTranslatorAA:
 
 def create_vj_aligner_aa(allowed_species: Optional[list[Organism]] = None, db_dir: Path = GENE_DB_DIR) -> VJAlignerAA:
     if not allowed_species:
-        allowed_species = list(Organism)
+        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS]
 
     aa_genes_dir = db_dir / "gene_db" / "aa_genes_deduplicated"
     v_aligner = create_aa_v_gene_aligner(allowed_species=allowed_species, aa_genes_dir=aa_genes_dir)
@@ -188,7 +188,7 @@ def create_vj_alignment_translator_aa(
     allowed_species: Optional[list[Organism]] = None, db_dir: Path = GENE_DB_DIR
 ) -> VJAlignmentTranslatorAA:
     if not allowed_species:
-        allowed_species = list(Organism)
+        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS]
 
     aa_genes_dir = db_dir / "gene_db" / "aa_genes"
     v_aligner = create_aa_v_gene_aligner(allowed_species=allowed_species, aa_genes_dir=aa_genes_dir)

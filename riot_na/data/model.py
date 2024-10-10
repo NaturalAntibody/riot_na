@@ -30,7 +30,7 @@ class InternalAlignmentEntry:  # pylint: disable=too-many-instance-attributes
     t_start: int
     t_end: int
     t_len: int
-    cigar: str
+    cigar: Cigar
     query: str
     rev_comp: bool
 
@@ -108,6 +108,7 @@ class Scheme(str, Enum):
 class Organism(str, Enum):
     HOMO_SAPIENS = "human"
     MUS_MUSCULUS = "mouse"
+    CUSTOM = "custom"
 
 
 class ShortRegion(str, Enum):
@@ -146,24 +147,26 @@ class AirrRearrangementEntryNT:  # pylint: disable=too-many-instance-attributes
     j_frame: Optional[int] = None
     sequence_alignment: Optional[str] = None
     germline_alignment: Optional[str] = None
+    sequence_aa: Optional[str] = None
     sequence_alignment_aa: Optional[str] = None
+    germline_alignment_aa: Optional[str] = None
     v_alignment_start: Optional[int] = None
     v_alignment_end: Optional[int] = None
     d_alignment_start: Optional[int] = None
     d_alignment_end: Optional[int] = None
     j_alignment_start: Optional[int] = None
     j_alignment_end: Optional[int] = None
-    c_alignment_start: Optional[int] = None
-    c_alignment_end: Optional[int] = None
     v_sequence_alignment: Optional[str] = None
     v_sequence_alignment_aa: Optional[str] = None
     v_germline_alignment: Optional[str] = None
+    v_germline_alignment_aa: Optional[str] = None
     d_sequence_alignment: Optional[str] = None
 
     d_germline_alignment: Optional[str] = None
     j_sequence_alignment: Optional[str] = None
     j_sequence_alignment_aa: Optional[str] = None
     j_germline_alignment: Optional[str] = None
+    j_germline_alignment_aa: Optional[str] = None
     c_sequence_alignment: Optional[str] = None
     c_germline_alignment: Optional[str] = None
     fwr1: Optional[str] = None
@@ -426,7 +429,7 @@ class AlignmentEntryNT:  # pylint: disable=too-many-instance-attributes
     t_start: int
     t_end: int
     t_len: int
-    cigar: str
+    cigar: Cigar
     rev_comp: bool
 
     species: Organism

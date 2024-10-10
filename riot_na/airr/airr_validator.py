@@ -116,7 +116,7 @@ def validate_regions_in_aligned_sequence(
             continue
         concatenated_regions += _getattr(rearrangement, region, seq_type)
 
-    sequence_alignment = _getattr(rearrangement, "sequence_alignment", seq_type)
+    sequence_alignment = _getattr(rearrangement, "sequence_alignment", seq_type).replace("-", "")
     if (not sequence_alignment) or (not concatenated_regions):
         return None
     return concatenated_regions in sequence_alignment
@@ -134,7 +134,7 @@ def validate_translated_regions_in_aligned_sequence_aa(rearrangement: AirrRearra
     if (not sequence_alignment) or (not concatenated_regions) or (v_frame is None):
         return None
     translated_regions = translate(concatenated_regions, 0)
-    return translated_regions in sequence_alignment
+    return translated_regions in sequence_alignment.replace("-", "")
 
 
 def validate_consecutive_offsets(
@@ -282,7 +282,7 @@ def validate_gene_alignment(
     sequence = _getattr(rearrangement, "sequence", seq_type)
     sequence_start = _getattr(rearrangement, "sequence_start", seq_type, gene)
     sequence_end = _getattr(rearrangement, "sequence_end", seq_type, gene)
-    sequence_alignment = _getattr(rearrangement, "sequence_alignment", seq_type, gene)
+    sequence_alignment = _getattr(rearrangement, "sequence_alignment", seq_type, gene).replace("-", "")
 
     if (not sequence_start) or (not sequence_end) or (not sequence_alignment):
         return None
@@ -304,7 +304,7 @@ def validate_no_empty_regions_in_gene_alignment(
         if start_end_gene["start"] == start_end_gene["end"] == gene
     ]
     validation_results: EntryValidationResults = {region: None for region in gene_full_regions}
-    gene_sequence_alignment = _getattr(rearrangement, "sequence_alignment", seq_type, gene)
+    gene_sequence_alignment = _getattr(rearrangement, "sequence_alignment", seq_type, gene).replace("-", "")
     if gene_sequence_alignment is None:
         return _set_validator_names(validation_results)
     for region in gene_full_regions:
@@ -356,7 +356,9 @@ def validate_conserved_residues_present(rearrangement: AirrRearrangementEntry_co
 def validate_primary_sequence_in_sequence_alignment_aa(rearrangement: AirrRearrangementEntry_co) -> Optional[bool]:
     if rearrangement.sequence_alignment_aa is None or rearrangement.scheme_residue_mapping is None:
         return None
-    return "".join(rearrangement.scheme_residue_mapping.values()) in rearrangement.sequence_alignment_aa
+    return "".join(rearrangement.scheme_residue_mapping.values()) in rearrangement.sequence_alignment_aa.replace(
+        "-", ""
+    )
 
 
 def validate_no_insertion_next_to_deletion_aa(rearrangement: AirrRearrangementEntry_co) -> Optional[bool]:
