@@ -5,7 +5,7 @@ authors = ["NaturalAntibody"]
 description = ""
 include = [{ path = "riot_na/riot_na.*.so", format = "wheel" }]
 name = "riot_na"
-version = "1.1.0"
+version = "1.2.0"
 
 [tool.poetry.dependencies]
 blosum = "^2.0"
@@ -68,7 +68,7 @@ dependencies = [
 name = "riot_na"
 description = "Antibody numbering software"
 requires-python = ">=3.10"
-version = "1.1.0"
+version = "1.2.0"
 
 [project.urls]
 Homepage = "https://github.com/NaturalAntibody/riot_na"
