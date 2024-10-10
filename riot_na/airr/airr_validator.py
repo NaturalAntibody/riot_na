@@ -129,12 +129,12 @@ def validate_translated_regions_in_aligned_sequence_aa(rearrangement: AirrRearra
             continue
         concatenated_regions += _getattr(rearrangement, region)
 
-    sequence_alignment = rearrangement.sequence_alignment_aa.replace("-", "")
+    sequence_alignment = rearrangement.sequence_alignment_aa
     v_frame = rearrangement.v_frame
     if (not sequence_alignment) or (not concatenated_regions) or (v_frame is None):
         return None
     translated_regions = translate(concatenated_regions, 0)
-    return translated_regions in sequence_alignment
+    return translated_regions in sequence_alignment.replace("-", "")
 
 
 def validate_consecutive_offsets(
@@ -356,7 +356,9 @@ def validate_conserved_residues_present(rearrangement: AirrRearrangementEntry_co
 def validate_primary_sequence_in_sequence_alignment_aa(rearrangement: AirrRearrangementEntry_co) -> Optional[bool]:
     if rearrangement.sequence_alignment_aa is None or rearrangement.scheme_residue_mapping is None:
         return None
-    return "".join(rearrangement.scheme_residue_mapping.values()) in rearrangement.sequence_alignment_aa.replace("-", "")
+    return "".join(rearrangement.scheme_residue_mapping.values()) in rearrangement.sequence_alignment_aa.replace(
+        "-", ""
+    )
 
 
 def validate_no_insertion_next_to_deletion_aa(rearrangement: AirrRearrangementEntry_co) -> Optional[bool]:

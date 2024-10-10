@@ -429,7 +429,7 @@ class AlignmentEntryNT:  # pylint: disable=too-many-instance-attributes
     t_start: int
     t_end: int
     t_len: int
-    cigar: str
+    cigar: Cigar
     rev_comp: bool
 
     species: Organism

@@ -72,3 +72,25 @@ def infer_reading_frame(t_start: int, t_frame: int) -> int:
 
 def offset_alignments(offset: int, aln: AlignmentEntry) -> AlignmentEntry:
     return replace(aln, q_start=aln.q_start + offset, q_end=aln.q_end + offset)
+
+
+def align_sequences(query: str, target: str, alignment: AlignmentString) -> tuple[str, str]:
+    query_aln = []
+    target_aln = []
+
+    for op in alignment:
+        if op == "M":
+            query_aln.append(query[0])
+            target_aln.append(target[0])
+            query = query[1:]
+            target = target[1:]
+        elif op == "I":
+            query_aln.append(query[0])
+            target_aln.append("-")
+            query = query[1:]
+        elif op == "D":
+            query_aln.append("-")
+            target_aln.append(target[0])
+            target = target[1:]
+
+    return "".join(query_aln), "".join(target_aln)

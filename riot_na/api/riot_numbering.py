@@ -70,7 +70,6 @@ class RiotNumberingNT:
         aa_offsets = None
         sch_alignment = None
         positional_scheme_mapping = None
-        aligned_sequence = None
         numbering = None
         scheme_alignment_exc = None
 
@@ -114,19 +113,13 @@ class RiotNumberingNT:
 
         # produce airr result
         # this is separated on purpose to enable other output formats
-
         airr_builder = AirrBuilder(header, query_sequence, scheme)
 
         if alignments.v:
             airr_builder.with_v_gene_alignment(alignments.v)
-            alignment_start = alignments.v.q_start
-            alignment_end = alignments.j.q_end if alignments.j else alignments.v.q_end
-            aligned_sequence = query_sequence[alignment_start:alignment_end]
-            airr_builder.with_sequence_alignment(aligned_sequence)
 
         if translated_alignments:
-            airr_builder.with_reading_frame(translated_alignments.reading_frame)
-            airr_builder.with_sequence_alignment_aa(translated_alignments.translated_query)
+            airr_builder.with_aa_alignments(translated_alignments)
 
         if alignments.j:
             airr_builder.with_j_gene_alignment(alignments.j)

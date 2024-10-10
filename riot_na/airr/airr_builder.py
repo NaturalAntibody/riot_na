@@ -1,11 +1,17 @@
 from typing import Optional
 
 from riot_na.airr.airr_validator import validate_airr_entry
-from riot_na.alignment.alignment_utils import fold_cigar, has_frameshift, unfold_cigar, align_sequences, translate
+from riot_na.alignment.alignment_utils import (
+    align_sequences,
+    fold_cigar,
+    has_frameshift,
+    translate,
+    unfold_cigar,
+)
 from riot_na.data.model import (
     AirrRearrangementEntryNT,
-    AlignmentEntryNT,
     AlignmentEntryAA,
+    AlignmentEntryNT,
     AlignmentString,
     RegionOffsetsAA,
     RegionOffsetsNT,
@@ -20,6 +26,8 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         self.sequence_header = sequence_header
         self.sequence = sequence
         self.scheme = scheme
+
+        self.sequence_aa: Optional[str] = None
 
         self.rearrangement = AirrRearrangementEntryNT(
             sequence_header=sequence_header, sequence=sequence, numbering_scheme=scheme.value
@@ -118,10 +126,8 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
             # 1 based, hence need to add 1
             assert self.rearrangement.v_sequence_start is not None
 
-            d_aligned = self.d_gene_alignment is not None
-
             v_alignment_str = unfold_cigar(self.v_gene_alignment.cigar)
-            d_alignment_str = unfold_cigar(self.d_gene_alignment.cigar) if d_aligned else ""
+            d_alignment_str = unfold_cigar(self.d_gene_alignment.cigar) if self.d_gene_alignment else ""
             deletions_vd = v_alignment_str.count("D") + d_alignment_str.count("D")
 
             self.rearrangement.j_alignment_start = j_aln.q_start + 1 - self.v_gene_alignment.q_start + deletions_vd
@@ -222,7 +228,6 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         return self
 
     def with_aa_alignments(self, alignments: TranslatedAlignmentsNT):
-
         reading_frame = alignments.reading_frame
 
         self.rearrangement.v_frame = reading_frame
@@ -234,6 +239,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
 
         aligned_query_segment = alignments.translated_query
 
+        assert v_aln is not None
         v_sequence_segment = aligned_query_segment[v_aln.q_start : v_aln.q_end]
         v_germline_segment = v_aln.t_seq[v_aln.t_start : v_aln.t_end]
 
@@ -263,7 +269,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         vj_junction_len = j_aln.q_start if j_aln else 0
         vj_junction_alignment_str = vj_junction_len * "I"
 
-        full_alignment_str = v_aln_str + vj_junction_alignment_str + j_aln_str
+        full_alignment_str = AlignmentString(v_aln_str + vj_junction_alignment_str + j_aln_str)
 
         sequence_alignment_aa, germline_alignment_aa = align_sequences(
             aligned_query_segment, germline_segment, full_alignment_str
@@ -347,6 +353,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         if start is None or end is None or start == -1 or end == -1:
             return None
 
+        assert self.rearrangement.sequence_alignment_aa is not None
         sequence_aa_segment = self.rearrangement.sequence_alignment_aa.replace("-", "")
         if self.sequence_aa:
             return sequence_aa_segment[start - 1 : end]
@@ -405,7 +412,6 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         self.rearrangement.germline_alignment = germline_alignment
 
         if self.rearrangement.sequence_alignment_aa:
-
             if self.rearrangement.cdr3 is not None:
                 self.rearrangement.junction = self._extract_region(
                     self.rearrangement.cdr3_start - 3, self.rearrangement.cdr3_end + 3
