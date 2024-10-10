@@ -47,7 +47,7 @@ def align(
         t_start=t_start,
         t_end=t_end,
         t_len=t_end - t_start,
-        cigar=res["cigar"],
+        cigar=Cigar(res["cigar"]),
         query=query,
         rev_comp=rev_comp,
     )

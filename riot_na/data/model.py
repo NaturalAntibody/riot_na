@@ -30,7 +30,7 @@ class InternalAlignmentEntry:  # pylint: disable=too-many-instance-attributes
     t_start: int
     t_end: int
     t_len: int
-    cigar: str
+    cigar: Cigar
     query: str
     rev_comp: bool
 
