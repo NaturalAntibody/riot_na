@@ -117,10 +117,10 @@ class VJAlignmentTranslatorAA:
             )
 
             if j_aa_alignment is not None and (
-                j_aa_alignment.q_start != -1
-                or j_aa_alignment.q_end != -1
-                or j_aa_alignment.t_start != -1
-                or j_aa_alignment.t_end != -1
+                j_aa_alignment.q_start == -1
+                or j_aa_alignment.q_end == -1
+                or j_aa_alignment.t_start == -1
+                or j_aa_alignment.t_end == -1
             ):
                 j_aa_alignment = None
 

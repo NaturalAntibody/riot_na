@@ -231,7 +231,13 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         reading_frame = alignments.reading_frame
 
         self.rearrangement.v_frame = reading_frame
-        self.sequence_aa = translate(self.sequence, reading_frame)
+
+        # reading frame is calculated for the aligned sequence, need to adjust for the original sequence
+        assert self.v_gene_alignment is not None
+        distance_to_reading_frame = self.v_gene_alignment.q_start + reading_frame
+        sequence_aa_reading_frame = distance_to_reading_frame % 3
+
+        self.sequence_aa = translate(self.sequence, sequence_aa_reading_frame)
         self.rearrangement.sequence_aa = self.sequence_aa
 
         v_aln = alignments.aa_alignments.v
