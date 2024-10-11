@@ -116,6 +116,14 @@ class VJAlignmentTranslatorAA:
                 else None
             )
 
+            if j_aa_alignment is not None and (
+                j_aa_alignment.q_start == -1
+                or j_aa_alignment.q_end == -1
+                or j_aa_alignment.t_start == -1
+                or j_aa_alignment.t_end == -1
+            ):
+                j_aa_alignment = None
+
             extended_v_aa_alignment = AlignmentEntryAA(
                 target_id=v_alignment.target_id,
                 alignment_score=v_aa_alignment.alignment_score,

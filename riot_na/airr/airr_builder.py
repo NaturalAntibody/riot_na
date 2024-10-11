@@ -231,7 +231,13 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         reading_frame = alignments.reading_frame
 
         self.rearrangement.v_frame = reading_frame
-        self.sequence_aa = translate(self.sequence, reading_frame)
+
+        # reading frame is calculated for the aligned sequence, need to adjust for the original sequence
+        assert self.v_gene_alignment is not None
+        distance_to_reading_frame = self.v_gene_alignment.q_start + reading_frame
+        sequence_aa_reading_frame = distance_to_reading_frame % 3
+
+        self.sequence_aa = translate(self.sequence, sequence_aa_reading_frame)
         self.rearrangement.sequence_aa = self.sequence_aa
 
         v_aln = alignments.aa_alignments.v
@@ -250,6 +256,8 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         self.rearrangement.v_sequence_alignment_aa = v_sequence_alignment
         self.rearrangement.v_germline_alignment_aa = v_germline_alignment
 
+        germline_segment = v_germline_segment
+
         if j_aln is not None:
             j_sequence_segment = j_aln.q_seq[j_aln.q_start : j_aln.q_end]
             j_germline_segment = j_aln.t_seq[j_aln.t_start : j_aln.t_end]
@@ -261,7 +269,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
             self.rearrangement.j_sequence_alignment_aa = j_sequence_alignment
             self.rearrangement.j_germline_alignment_aa = j_germline_alignment
 
-        germline_segment = v_germline_segment + j_germline_segment
+            germline_segment = v_germline_segment + j_germline_segment
 
         v_aln_str = unfold_cigar(v_aln.cigar)
         j_aln_str = unfold_cigar(j_aln.cigar) if j_aln else ""
