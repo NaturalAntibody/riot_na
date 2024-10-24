@@ -101,3 +101,19 @@ version_toml = [
     "pyproject.toml:project.version",
 ]
 version_variables = ["riot_na/__init__.py:__version__"]
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = [
+    "build",
+    "chore",
+    "ci",
+    "docs",
+    "feat",
+    "fix",
+    "perf",
+    "style",
+    "refactor",
+    "test",
+]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf", "docs"]
