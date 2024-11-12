@@ -38,4 +38,5 @@ disable=missing-module-docstring,
         use-dict-literal,
         too-many-return-statements,
         line-too-long,
-        too-many-locals
+        too-many-locals,
+        too-many-positional-arguments
