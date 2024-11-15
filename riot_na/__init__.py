@@ -19,5 +19,6 @@ from riot_na.data.model import (
     ChainType,
     Scheme,
     Organism,
+    Locus,
 )
 from riot_na.api import utils
