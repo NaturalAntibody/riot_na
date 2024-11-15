@@ -1,6 +1,30 @@
 # CHANGELOG
 
 
+## v1.2.4 (2024-11-15)
+
+### Bug Fixes
+
+- Added base-ref and head-ref to dependency review action
+  ([`64bfb89`](https://github.com/NaturalAntibody/riot_na/commit/64bfb89e6c2cdc06d96e9c85a69c5442511723d9))
+
+- Importing Locus in __init__.py
+  ([`4717fcd`](https://github.com/NaturalAntibody/riot_na/commit/4717fcdedd24182a40b79dd37e2178803784d6ae))
+
+### Build System
+
+- Bump dependencies
+  ([`3f8b8e7`](https://github.com/NaturalAntibody/riot_na/commit/3f8b8e75194874f7a1c00dfc58c174e31dc298cf))
+
+### Continuous Integration
+
+- Add base-ref to dependency-review actions
+  ([`7768fcd`](https://github.com/NaturalAntibody/riot_na/commit/7768fcda50e1661c5279ae4ae34abd880888575c))
+
+- Added dependency review action
+  ([`0007352`](https://github.com/NaturalAntibody/riot_na/commit/0007352e95dc7e549b49cc88af1ea8c9d596ea7e))
+
+
 ## v1.2.3 (2024-11-13)
 
 ### Bug Fixes
