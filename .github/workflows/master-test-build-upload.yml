@@ -16,6 +16,9 @@ jobs:
         uses: actions/checkout@v4
       - name: Dependency review
         uses: actions/dependency-review-action@v4.4.0
+        with:
+            head-ref: ${{ github.ref }}
+            base-ref: ${{ github.event.before }}
       - name: Setup python
         uses: actions/setup-python@v5
         id: setup-python
