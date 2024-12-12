@@ -15,6 +15,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
       - name: Dependency review
+        if: ${{ github.ref != 'refs/heads/master' }}
+        uses: actions/dependency-review-action@v4.4.0
+      - name: Dependency review - master
+        if: ${{ github.ref == 'refs/heads/master' }}
         uses: actions/dependency-review-action@v4.4.0
         with:
             head-ref: ${{ github.ref }}
