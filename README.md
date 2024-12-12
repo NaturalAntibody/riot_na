@@ -119,6 +119,81 @@ airr_result: AirrRearrangementEntryAA = riot_aa.run_on_sequence(
                     extend_alignment = True
                 )
 ```
+### Multiprocessing
+Riot uses precompiled Rust module for prefiltering. This means the RiotNumberingNT/AA objects are unpickable, so you cannot pass it as a worker's parameter in eg. `mp.Pool()` or use it in Spark's UDF functions. There is however a simple way of achieving it, by using caching mechanism from `cachetools` package. Below you can find working and not working examples.
+
+The following will not work:
+
+```
+import functools
+import multiprocessing as mp
+from riot_na import create_riot_aa, AirrRearrangementEntryNT, RiotNumberingAA
+
+seqs = ["EVQLVESGGGLVQPGGSLRLSCAASGFNIKDTYIHWVRQAPGKGLEWVARIYPTNGYTRYADSVKGRFTISADTSKNTAYLQMNSLRAEDTAVYYCARGGSFYYYYMDVWGQGTLVTVSSASTKGPSVFPLAPSSKSTSGGTAALGCLVKDYFPEPVTVSWNSGALTSGVHTFPAVLQSSGLYSLSSVVTVPSSSLGTQTYICNVNHKPSNTKVDKKVEPKSCDKTGHHHHHHHHG"] * 10
+
+def worker(riot: RiotNumberingAA, seq: str) -> AirrRearrangementEntryNT:
+    airr = riot.run_on_sequence("-", seq)
+    return airr
+
+riot = create_riot_aa()
+
+worker_partial = functools.partial(worker, riot)
+
+with mp.Pool() as pool:
+    res = pool.map(worker_partial, seqs)
+
+# Output: TypeError: cannot pickle 'builtins.Prefiltering' object
+```
+The proper way:
+```
+import multiprocessing as mp
+from cachetools import cached
+from riot_na import create_riot_aa, AirrRearrangementEntryNT
+
+seqs = ["EVQLVESGGGLVQPGGSLRLSCAASGFNIKDTYIHWVRQAPGKGLEWVARIYPTNGYTRYADSVKGRFTISADTSKNTAYLQMNSLRAEDTAVYYCARGGSFYYYYMDVWGQGTLVTVSSASTKGPSVFPLAPSSKSTSGGTAALGCLVKDYFPEPVTVSWNSGALTSGVHTFPAVLQSSGLYSLSSVVTVPSSSLGTQTYICNVNHKPSNTKVDKKVEPKSCDKTGHHHHHHHHG"] * 10
+
+@cached(cache={})
+def get_riot():
+    return create_riot_aa()
+
+def worker(seq: str) -> AirrRearrangementEntryNT:
+    riot = get_riot()
+    airr = riot.run_on_sequence("-", seq)
+    return airr
+
+with mp.Pool() as pool:
+    res = pool.map(worker, seqs)
+```
+
+Spark UDF example:
+
+```
+import json
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import udf
+from cachetools import cached
+from riot_na import create_riot_aa, RiotNumberingAA
+
+spark = SparkSession.builder.appName("Riot on Spark").getOrCreate()
+
+seq = "EVQLVESGGGLVQPGGSLRLSCAASGFNIKDTYIHWVRQAPGKGLEWVARIYPTNGYTRYADSVKGRFTISADTSKNTAYLQMNSLRAEDTAVYYCARGGSFYYYYMDVWGQGTLVTVSSASTKGPSVFPLAPSSKSTSGGTAALGCLVKDYFPEPVTVSWNSGALTSGVHTFPAVLQSSGLYSLSSVVTVPSSSLGTQTYICNVNHKPSNTKVDKKVEPKSCDKTGHHHHHHHHG"
+
+df = spark.createDataFrame([{"seq":  seq}]*10)
+
+@cached(cache={})
+def get_riot() -> RiotNumberingAA:
+    return create_riot_aa()
+
+@udf
+def number_sequence(seq: str)-> str:
+    riot = get_riot()
+    airr = riot.run_on_sequence("-", seq)
+    return json.dumps(airr.__dict__)
+
+df.select(number_sequence("seq")).collect()
+```
+
+For a pure Python solution you can check `riot_na/api/api_mp.py` file. We are using this because we want to keep Riot's dependencies to a minimum.
 
 ## Germline database
 RIOT uses OGRDB as a primary source of germline alleles. Database version as of 22.01.2024 was used.
