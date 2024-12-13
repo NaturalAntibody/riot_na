@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v1.2.5 (2024-12-13)
+
+### Continuous Integration
+
+- Update depenendency review workflow
+  ([`79f844b`](https://github.com/NaturalAntibody/riot_na/commit/79f844bce6ebea827d7e6b9ae973b8160f56f915))
+
+### Documentation
+
+- Add multiprocessing and Spark usage examples to README
+  ([`3b0c708`](https://github.com/NaturalAntibody/riot_na/commit/3b0c70880fbef73707203192815e2e6243cce67a))
+
+
 ## v1.2.4 (2024-11-15)
 
 ### Bug Fixes
@@ -79,11 +92,11 @@
 
 ### Features
 
-- Gapped alignments
-  ([`b91953a`](https://github.com/NaturalAntibody/riot_na/commit/b91953ad287d9e14b0f77461fb986a08612ee7d1))
-
 - Custom databases support
   ([`02e9dd8`](https://github.com/NaturalAntibody/riot_na/commit/02e9dd89cc64a49ed223a1e3d979f0fb9779a6ef))
+
+- Gapped alignments
+  ([`b91953a`](https://github.com/NaturalAntibody/riot_na/commit/b91953ad287d9e14b0f77461fb986a08612ee7d1))
 
 ### Refactoring
 
@@ -140,14 +153,14 @@
 
 ### Refactoring
 
+- Added citing section
+  ([`40551ee`](https://github.com/NaturalAntibody/riot_na/commit/40551eef5844eaf40587dadabaff0751441ca1e8))
+
 - Fix workflow
   ([`a8cb445`](https://github.com/NaturalAntibody/riot_na/commit/a8cb4459f9151e98b7d203e0c94ba607d0b58feb))
 
 - Refactored citing section
   ([`52d9c7c`](https://github.com/NaturalAntibody/riot_na/commit/52d9c7c1d6526c9458089ae27184df78867f0591))
-
-- Added citing section
-  ([`40551ee`](https://github.com/NaturalAntibody/riot_na/commit/40551eef5844eaf40587dadabaff0751441ca1e8))
 
 - Stylistic change
   ([`a2f9b40`](https://github.com/NaturalAntibody/riot_na/commit/a2f9b403e3d788f368d85ac85e4f742719281798))
