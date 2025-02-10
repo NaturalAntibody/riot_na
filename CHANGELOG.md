@@ -1,6 +1,25 @@
 # CHANGELOG
 
 
+## v1.3.0 (2025-02-10)
+
+### Build System
+
+- Add missing maturin
+  ([`445505b`](https://github.com/NaturalAntibody/riot_na/commit/445505bd1783e4b630d335e7d9388f2716f88762))
+
+- Bump dependencies
+  ([`ba5e451`](https://github.com/NaturalAntibody/riot_na/commit/ba5e45174a44d5433766a12c296f71edc43004e7))
+
+- Migrate pyproject to poetry 2.0
+  ([`8276ba6`](https://github.com/NaturalAntibody/riot_na/commit/8276ba60f4217db11efcc497486b720c84da1843))
+
+### Features
+
+- Add get_region() method to api
+  ([`362d0b1`](https://github.com/NaturalAntibody/riot_na/commit/362d0b18ae9c758609e4c12ec4a985fb0bc3c104))
+
+
 ## v1.2.5 (2024-12-13)
 
 ### Continuous Integration
