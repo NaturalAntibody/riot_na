@@ -1,23 +1,33 @@
-# Poetry setup: for local development amd NaturalAntibody projects using riot_na as dependency
-
-[tool.poetry]
-authors = ["NaturalAntibody"]
-description = ""
-include = [{ path = "riot_na/riot_na.*.so", format = "wheel" }]
+[project]
+authors = [{ name = "NaturalAntibody" }]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+]
+dependencies = [
+    "biopython == 1.84",    # pinned because biopython does not comply with semantic versioning
+    "blosum ~= 2.0",
+    "click ~=8.1",
+    "psutil ~=5.9",
+    "python-dotenv ~= 1.0",
+    "scikit-bio == 0.6.2",  # pinned because of the danger of deprecating SSW https://github.com/scikit-bio/scikit-bio/issues/1814
+    "scipy ~=1.9",
+    "tqdm ~= 4.66",
+]
+description = "Antibody numbering software"
 name = "riot_na"
+requires-python = ">=3.10, <4.0"
 version = "1.2.5"
 
-[tool.poetry.dependencies]
-biopython = "1.84"     # pinned because biopython does not comply with semantic versioning
-blosum = "^2.0"
-click = "^8.1"
-maturin = "^1.3"
-psutil = "^5.9"
-python = "^3.10"
-python-dotenv = "^1.0"
-scikit-bio = "0.6.2"   # pinned because of the danger of deprecating SSW https://github.com/scikit-bio/scikit-bio/issues/1814
-scipy = "^1.9"
-tqdm = "^4.66"
+[project.urls]
+Homepage = "https://github.com/NaturalAntibody/riot_na"
+
+[project.scripts]
+riot_na = "riot_na.cli:run_riot"
+
+# Poetry setup: for local development
+[tool.poetry]
+include = [{ path = "riot_na/riot_na.*.so", format = ["sdist", "wheel"] }]
 
 [tool.poetry.group.dev.dependencies]
 black = "^24.0"
@@ -27,6 +37,7 @@ flake8 = "^7.0"
 fsspec = "^2023.9.2"
 ipykernel = "^6.25.2"
 isort = "^5.12"
+maturin = "^1.8.2"
 mypy = "^1.7"
 pre-commit = "^3.5.0"
 presto = "^0.7.1"
@@ -49,33 +60,6 @@ build-backend = "maturin"
 requires = ["maturin>=1,<2"]
 
 # Maturin setup: for wheel building
-
-[project]
-classifiers = [
-    "Programming Language :: Rust",
-    "Programming Language :: Python :: Implementation :: CPython",
-]
-dependencies = [
-    "biopython == 1.84",    # pinned because biopython does not comply with semantic versioning
-    "blosum ~= 2.0",
-    "click ~=8.1",
-    "psutil ~=5.9",
-    "python-dotenv ~= 1.0",
-    "scikit-bio == 0.6.2",  # pinned because of the danger of deprecating SSW https://github.com/scikit-bio/scikit-bio/issues/1814
-    "scipy ~=1.9",
-    "tqdm ~= 4.66",
-]
-description = "Antibody numbering software"
-name = "riot_na"
-requires-python = ">=3.10"
-version = "1.2.5"
-
-[project.urls]
-Homepage = "https://github.com/NaturalAntibody/riot_na"
-
-[project.scripts]
-riot_na = "riot_na.cli:run_riot"
-
 [tool.maturin]
 include = [{ path = "riot", format = "wheel" }]
 
@@ -96,10 +80,7 @@ commit_version_number = true
 hvcs = "github"
 tag_format = "v{version}"
 upload_to_pypi = false
-version_toml = [
-    "pyproject.toml:tool.poetry.version",
-    "pyproject.toml:project.version",
-]
+version_toml = ["pyproject.toml:project.version"]
 version_variables = ["riot_na/__init__.py:__version__"]
 
 [tool.semantic_release.commit_parser_options]
