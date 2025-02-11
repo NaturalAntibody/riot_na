@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v2.0.0 (2025-02-11)
+
+### Features
+
+- Add e2e tests
+  ([`dbfb2d2`](https://github.com/NaturalAntibody/riot_na/commit/dbfb2d296c8f1f14645a6ffed9c549bbfff27b84))
+
+BREAKING CHANGE: change get_region() argument from Locus to ChainType
+
+### BREAKING CHANGES
+
+- Change get_region() argument from Locus to ChainType
+
+
 ## v1.3.0 (2025-02-10)
 
 ### Build System
