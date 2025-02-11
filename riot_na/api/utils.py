@@ -1,3 +1,5 @@
+from functools import cache
+
 from riot_na.data.model import AirrRearrangementEntryAA, ShortRegion
 
 
@@ -42,3 +44,29 @@ def scheme_positions_to_index(airr: AirrRearrangementEntryAA, scheme_positions: 
 def get_primary_seq(airr: AirrRearrangementEntryAA) -> str:
     assert airr.scheme_residue_mapping is not None
     return "".join(airr.scheme_residue_mapping.values())
+
+
+@cache
+def _int_to_str_insertion(n: int) -> str:
+    """
+    Converts an integer (1-based) to an IMGT-style insertion letter.
+    Example:
+      1 -> 'A', 26 -> 'Z', 27 -> 'AA', 28 -> 'AB', ..., 52 -> 'AZ', 53 -> 'BA'
+    """
+    if n < 1:
+        raise ValueError("Input must be a positive integer.")
+
+    result = ""
+    while n > 0:
+        n -= 1  # Adjust for 1-based indexing
+        result = chr(ord("A") + (n % 26)) + result
+        n //= 26
+    return result
+
+
+def map_insertion_number_to_letter(position: str) -> str:
+    # Translates 111.1, 111.2 to 111A, 111B ETC
+    if "." not in position:
+        return position
+    position_number, insertion_number = position.split(".")
+    return f"{position_number}{_int_to_str_insertion(int(insertion_number))}"
