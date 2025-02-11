@@ -16,6 +16,7 @@ from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
     AirrRearrangementEntryAA,
     AirrRearrangementEntryNT,
+    ChainType,
     Organism,
     Scheme,
 )
@@ -88,9 +89,9 @@ class RiotNumberingNT:
                 # calculate aa offsets based on the numbering (iterate over cigar to produce positional-> imgt mapping)
                 assert sch_alignment
                 assert alignments.v
-                locus = alignments.v.locus
+                chain_type = ChainType.from_locus(alignments.v.locus)
 
-                region_offsets = infer_region_offsets(sch_alignment, scheme, locus)
+                region_offsets = infer_region_offsets(sch_alignment, scheme, chain_type)
                 aa_offsets = infer_aa_region_offsets(region_offsets)
 
                 alignment_start = alignments.v.q_start
@@ -200,9 +201,9 @@ class RiotNumberingAA:
 
                 # calculate aa offsets based on the numbering (iterate over cigar to produce positional-> imgt mapping)
                 assert sch_alignment
-                locus = alignments.v.locus
+                chain_type = ChainType.from_locus(alignments.v.locus)
 
-                region_offsets = infer_region_offsets(sch_alignment, scheme, locus)
+                region_offsets = infer_region_offsets(sch_alignment, scheme, chain_type)
                 aa_offsets = infer_aa_region_offsets(region_offsets)
 
                 alignment_start = sch_alignment.q_start

@@ -1,7 +1,7 @@
 from typing import Optional
 
 from riot_na.data.model import (
-    Locus,
+    ChainType,
     RegionOffsetsAA,
     RegionOffsetsNT,
     Scheme,
@@ -12,7 +12,7 @@ from riot_na.data.scheme_regions import get_region
 
 
 def infer_region_offsets(
-    scheme_alignment: SchemeAlignment, scheme: Scheme, locus: Locus
+    scheme_alignment: SchemeAlignment, scheme: Scheme, chain_type: ChainType
 ) -> dict[ShortRegion, list[int]]:
     result: dict[ShortRegion, list[int]] = {}
 
@@ -28,7 +28,7 @@ def infer_region_offsets(
             insertion_counter = 0
             query_position = query_position + 1
             scheme_position = scheme_position + 1
-            region_id = get_region(scheme_position, scheme, locus)
+            region_id = get_region(scheme_position, scheme, chain_type)
 
             residues = result.get(region_id, [])
             residues.append(query_position)
@@ -37,7 +37,7 @@ def infer_region_offsets(
         elif op in {"D", "N"}:
             insertion_counter = 0
             scheme_position = scheme_position + 1
-            region_id = get_region(scheme_position, scheme, locus)
+            region_id = get_region(scheme_position, scheme, chain_type)
         elif op == "I":
             insertion_counter = insertion_counter + 1
             query_position = query_position + 1
