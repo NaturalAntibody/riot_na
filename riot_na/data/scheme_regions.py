@@ -2,7 +2,7 @@ from functools import cache
 from typing import Optional
 
 from riot_na.common.assert_never import assert_never
-from riot_na.data.model import ChainType, Locus, Scheme, ShortRegion
+from riot_na.data.model import ChainType, Scheme, ShortRegion
 from riot_na.data.scheme_definitions import (
     CHOTHIA_REGIONS,
     IMGT_REGIONS,
@@ -73,12 +73,10 @@ def position_to_region(regions: ChainRegions, position: int) -> Optional[ShortRe
     return None
 
 
-def get_region(scheme_position: int, scheme: Scheme, locus: Locus) -> ShortRegion:
+def get_region(scheme_position: int, scheme: Scheme, chain_type: ChainType) -> ShortRegion:
     """
     Based on scheme position, get the region
     """
-    chain_type = ChainType.from_locus(locus)
-
     region_mapping = get_regions_by_scheme_and_chain(scheme, chain_type)
 
     region = position_to_region(region_mapping, scheme_position)
