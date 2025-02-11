@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v2.1.0 (2025-02-11)
+
+### Features
+
+- Add map insertion to number function to utils
+  ([`3839e92`](https://github.com/NaturalAntibody/riot_na/commit/3839e92b514dcb09e05f5440b041ab789ef06931))
+
+
 ## v2.0.0 (2025-02-11)
 
 ### Features
