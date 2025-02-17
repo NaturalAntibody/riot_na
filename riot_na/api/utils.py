@@ -47,7 +47,7 @@ def get_primary_seq(airr: AirrRearrangementEntryAA) -> str:
 
 
 @cache
-def _int_to_str_insertion(n: int) -> str:
+def int_to_str_insertion(n: int) -> str:
     """
     Converts an integer (1-based) to an IMGT-style insertion letter.
     Example:
@@ -69,4 +69,4 @@ def map_insertion_number_to_letter(position: str) -> str:
     if "." not in position:
         return position
     position_number, insertion_number = position.split(".")
-    return f"{position_number}{_int_to_str_insertion(int(insertion_number))}"
+    return f"{position_number}{int_to_str_insertion(int(insertion_number))}"
