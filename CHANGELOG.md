@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v2.1.1 (2025-02-17)
+
+### Bug Fixes
+
+- Make int_to_str_insertion() utils method public
+  ([`7b3cb9a`](https://github.com/NaturalAntibody/riot_na/commit/7b3cb9a7661389c61ad898b2433c6c3f2fa77cb7))
+
+
 ## v2.1.0 (2025-02-11)
 
 ### Features
