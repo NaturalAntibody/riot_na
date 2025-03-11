@@ -3,6 +3,8 @@
 from pathlib import Path
 from typing import Optional
 
+from cachetools import cached
+
 from riot_na.airr.airr_builder import AirrBuilder
 from riot_na.airr.airr_builder_aa import AirrBuilderAA
 from riot_na.alignment.aa_gene_alignments import (
@@ -297,6 +299,16 @@ def create_riot_aa(
     )
     scheme_aligner = SchemeAligner(allowed_species=allowed_species, db_dir=db_dir)
     return RiotNumberingAA(vj_aligner_aa, scheme_aligner)
+
+
+@cached({})
+def get_or_create_riot_nt(**riot_kwargs) -> RiotNumberingNT:
+    return create_riot_nt(**riot_kwargs)
+
+
+@cached({})
+def get_or_create_riot_aa(**riot_kwargs) -> RiotNumberingAA:
+    return create_riot_aa(**riot_kwargs)
 
 
 if __name__ == "__main__":

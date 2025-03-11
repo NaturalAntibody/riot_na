@@ -13,6 +13,7 @@ dependencies = [
     "scikit-bio == 0.6.2",  # pinned because of the danger of deprecating SSW https://github.com/scikit-bio/scikit-bio/issues/1814
     "scipy ~=1.9",
     "tqdm ~= 4.66",
+    "cachetools (>=5.5.2,<6.0.0)",
 ]
 description = "Antibody numbering software"
 name = "riot_na"
