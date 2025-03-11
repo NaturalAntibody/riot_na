@@ -1,6 +1,28 @@
 # CHANGELOG
 
 
+## v2.2.0 (2025-03-11)
+
+### Chores
+
+- Added examplary Dockerfile
+  ([`219675f`](https://github.com/NaturalAntibody/riot_na/commit/219675f5ac80917a5604f20d66e79f29b2314d54))
+
+### Documentation
+
+- Corrected requirements
+  ([`8741c1d`](https://github.com/NaturalAntibody/riot_na/commit/8741c1dd6c96250760b99391df68e3789bc63400))
+
+- Update README
+  ([`67f47b9`](https://github.com/NaturalAntibody/riot_na/commit/67f47b9cf8767d0683c6a794e45501301c8aca2c))
+
+### Features
+
+- Add get_or_create_riot_nt/aa() - cached versions of create_riot_nt/aa() with support to use in
+  multiprocessing pool
+  ([`e7f41a2`](https://github.com/NaturalAntibody/riot_na/commit/e7f41a278d18e63d0887bfa89a8ecd76ca67d1c1))
+
+
 ## v2.1.1 (2025-02-17)
 
 ### Bug Fixes
