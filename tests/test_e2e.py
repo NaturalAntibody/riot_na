@@ -4,9 +4,8 @@ from riot_na import (
     ChainType,
     Locus,
     Scheme,
-    create_riot_aa,
-    create_riot_nt,
 )
+from riot_na.api.riot_numbering import get_or_create_riot_aa, get_or_create_riot_nt
 
 SEQUENCES_NT = {
     "H": "AACAACACATGTCCAATGTCCTCTCCACAGACACTGAACACACTGACTCTAACCATGGGAAGGAGCTGGATCTTTCTCTTCCTCCTGTCAGGAACTGCAGGTGTCCACTCTGAGGTCCAGCTGCAACAGTCTGGACCTGTGCTGGTGAAGCCTGGGGCTTCAGTGAAGATGTCCTGTAAGGCTTCTGGATACACATTCACTGACTACTATATGAACTGGGTGAAGCAGAGCCATGGAAAGAGACTTGAGTGGATTGGAGTTATTAATCCTTACAACGGTGGTACTAACTATAACCAGAAGTTCAAGGGCAAGGCCACATTGACTGTTGACAAGTCCTCCAGCACAGCCTACATGGAGCTCAACAGCCTGACATCTGAGGACTCTGCAGTCTATTACTGTGCAGATGGGATTATTACGAATTGGTATTTCGATGTCTGGGGCACAGGGACCACGGTCACCGTCTCCTCAGCCAAAACGACACCCCCATCTGTCTATCCACTGGCCCCTGGATCTGCTGCCCAAACTAACTCCATGGTGACCCTGGGATGCCTGGTCAAGGGCTATTTCCCTGAGCCAGTGACAGTGACCTGGAACTCTGGATCCCTGTCCAGCGGTGTGCACACCTTCCCAGCTGTCCTGCAGTCTGACCTCTACACTCTGAGCAGCTCAGTGACTGTCCCCTCCAGCACCTGGCCCAGCCAGACCGTCACCTGCAACGTTGCCCACCCGGCCAGCAGCACCAAGGTGGACAAGAAAATTGTGCCCAGGGATTGTGGTTGTAAGCCTTGCATATGTACAGTCCCAGAAGT",
@@ -15,7 +14,7 @@ SEQUENCES_NT = {
 
 
 def test_e2e_nucleotides():
-    riot_numbering_nt = create_riot_nt()
+    riot_numbering_nt = get_or_create_riot_nt()
 
     for scheme in Scheme:
         airr_heavy: AirrRearrangementEntryNT = riot_numbering_nt.run_on_sequence("", SEQUENCES_NT["H"], scheme=scheme)
@@ -36,7 +35,7 @@ SEQUENCES_AA = {
 
 
 def test_e2e_amino_acids():
-    riot_numbering_aa = create_riot_aa()
+    riot_numbering_aa = get_or_create_riot_aa()
 
     for scheme in Scheme:
         airr_heavy: AirrRearrangementEntryAA = riot_numbering_aa.run_on_sequence("", SEQUENCES_AA["H"], scheme=scheme)
@@ -48,3 +47,9 @@ def test_e2e_amino_acids():
         assert airr_light.v_call
         assert airr_light.j_call
         assert ChainType.from_locus(Locus(airr_light.locus)) == ChainType.LIGHT
+
+
+if __name__ == "__main__":
+    test_e2e_nucleotides()
+    test_e2e_amino_acids()
+    print("All tests passed!")
