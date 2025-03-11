@@ -1,6 +1,19 @@
 # CHANGELOG
 
 
+## v2.2.1 (2025-03-11)
+
+### Bug Fixes
+
+- Added get_or_create_riot_nt/aa() to __init__.py
+  ([`5ab41ee`](https://github.com/NaturalAntibody/riot_na/commit/5ab41ee22e62dd0875a78b6478d7df984115ceb1))
+
+### Chores
+
+- Updated commitizen
+  ([`49526aa`](https://github.com/NaturalAntibody/riot_na/commit/49526aa30559e08fa9c1f653bcaffa85bd793516))
+
+
 ## v2.2.0 (2025-03-11)
 
 ### Chores
