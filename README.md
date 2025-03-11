@@ -18,6 +18,7 @@ Antibodies are a cornerstone of the immune system, playing a pivotal role in ide
 
 ## Requirements
  - Python ^3.10
+ - C compiler (reason: `scikit-bio`)
 
 ## Quickstart
 ```
@@ -203,6 +204,7 @@ df.select(number_sequence("seq")).collect()
 ```
 
 For a pure Python solution (without the use of `cachetools` package) you can check `riot_na/api/api_mp.py` file.
+
 
 ## Germline database
 RIOT uses OGRDB as a primary source of germline alleles. Database version as of 22.01.2024 was used.
