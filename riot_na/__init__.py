@@ -8,6 +8,8 @@ from riot_na.api.riot_numbering import (
     RiotNumberingNT,
     create_riot_aa,
     create_riot_nt,
+    get_or_create_riot_aa,
+    get_or_create_riot_nt,
 )
 from riot_na.api.api_mp import run_on_file_mp
 from riot_na.data.scheme_regions import get_regions_definitions, get_region
