@@ -84,6 +84,23 @@ jobs:
       - name: Fail on too low coverage
         if: ${{ github.ref != 'refs/heads/master' }}
         run: poetry run coverage report --fail-under=${{ env.min-test-coverage-percent }}
+  linux-arm-test:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: master
+      - uses: PyO3/maturin-action@v1
+        with:
+          manylinux: auto
+          command: build
+          args: --release --sdist -o dist --find-interpreter
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels_linux_arm
+          path: dist
   release:
     needs: test
     if: ${{ github.ref == 'refs/heads/master' }}
@@ -131,6 +148,24 @@ jobs:
         with:
           name: wheels_linux
           path: dist
+  linux-arm:
+    needs: release
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: master
+      - uses: PyO3/maturin-action@v1
+        with:
+          manylinux: auto
+          command: build
+          args: --release --sdist -o dist --find-interpreter
+      - name: Upload wheels
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheels_linux_arm
+          path: dist
   windows:
     needs: release
     runs-on: windows-latest
@@ -168,6 +203,7 @@ jobs:
         with:
           name: wheels_macos
           path: dist
+
   publish:
     needs: [linux, windows, macos]
     if: ${{ github.ref == 'refs/heads/master' }}
