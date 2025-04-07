@@ -122,7 +122,7 @@ jobs:
           cache: "poetry"
       - name: Install dependencies
         if: steps.cache-poetry.outputs.cache-hit != 'true'
-        run: poetry install
+        run: poetry install --only release
       - name: Create release
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
@@ -234,7 +234,7 @@ jobs:
           cache: "poetry"
       - name: Install dependencies
         if: steps.cache-poetry.outputs.cache-hit != 'true'
-        run: poetry install
+        run: poetry install --only release
       - name: Publish artifacts
         env:
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
