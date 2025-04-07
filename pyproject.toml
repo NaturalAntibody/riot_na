@@ -18,7 +18,7 @@ dependencies = [
 description = "Antibody numbering software"
 name = "riot_na"
 requires-python = ">=3.10, <4.0"
-version = "2.2.1"
+version = "2.2.2"
 
 [project.urls]
 Homepage = "https://github.com/NaturalAntibody/riot_na"

@@ -1,6 +1,28 @@
 # CHANGELOG
 
 
+## v2.2.2 (2025-04-07)
+
+### Bug Fixes
+
+- Added wheel building on linux-arm runner
+  ([`541cd82`](https://github.com/NaturalAntibody/riot_na/commit/541cd8212ff052985f28a91994b80219ee7ad22f))
+
+- Fixed workflow
+  ([`a960b7b`](https://github.com/NaturalAntibody/riot_na/commit/a960b7bb3a5dc4196c73e30eb88ac172423989cd))
+
+- Setup python3.10 on macos runner
+  ([`3a3bba2`](https://github.com/NaturalAntibody/riot_na/commit/3a3bba2cfb407227b0b69b2f9a041805c93d8e59))
+
+### Continuous Integration
+
+- Optimize release workflow by extracting python-semantic-release to separate dependency group
+  ([`a689743`](https://github.com/NaturalAntibody/riot_na/commit/a6897431604a2ae606373d9315623c938e74982b))
+
+- Removed linux-arm test job
+  ([`a240d1f`](https://github.com/NaturalAntibody/riot_na/commit/a240d1f22e273317c4a5041da068c943bfbdb6fc))
+
+
 ## v2.2.1 (2025-03-11)
 
 ### Bug Fixes
