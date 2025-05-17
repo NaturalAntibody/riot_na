@@ -5,7 +5,7 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
 ]
 dependencies = [
-    "biopython == 1.84",    # pinned because biopython does not comply with semantic versioning
+    "biopython == 1.85",   # pinned because biopython does not comply with semantic versioning
     "blosum ~= 2.0",
     "click ~=8.1",
     "psutil ~=5.9",
