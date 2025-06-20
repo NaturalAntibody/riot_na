@@ -33,7 +33,9 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
         self.j_gene_alignment_aa: Optional[AlignmentEntryAA] = None
         self.j_gene_sequence_aa: Optional[str] = None
 
-        self.scheme_alingment: Optional[SchemeAlignment] = None
+        self.c_gene_alignment_aa: Optional[AlignmentEntryAA] = None
+        self.c_gene_sequence_aa: Optional[str] = None
+
         self.aa_offsets: Optional[RegionOffsetsAA] = None
 
     def with_v_gene_alignment_aa(self, v_aln: AlignmentEntryAA):
@@ -116,6 +118,72 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
             self.rearrangement.j_cigar_aa = j_gene_alignment_aa.cigar
             self.rearrangement.j_support_aa = j_gene_alignment_aa.e_value
             self.rearrangement.j_identity_aa = j_gene_alignment_aa.seq_identity
+
+        return self
+
+    def with_c_gene_alignment_aa(self, c_aln: AlignmentEntryAA):
+
+        self.c_gene_sequence_aa = c_aln.t_seq
+
+        if c_aln is not None:
+            assert self.v_gene_alignment_aa is not None
+            assert self.j_gene_alignment_aa is not None
+            assert self.j_gene_alignment_aa.q_end is not None
+            assert self.j_gene_alignment_aa.q_start is not None
+            assert self.j_gene_alignment_aa.t_start is not None
+            assert self.j_gene_alignment_aa.t_end is not None
+            assert self.j_gene_alignment_aa.target_id is not None
+            assert self.j_gene_alignment_aa.cigar is not None
+            assert self.j_gene_alignment_aa.e_value is not None
+            assert self.j_gene_alignment_aa.seq_identity is not None
+            assert self.j_gene_alignment_aa.alignment_score is not None
+            assert self.v_gene_alignment_aa.q_end is not None
+            assert self.v_gene_alignment_aa.q_start is not None
+            assert self.v_gene_alignment_aa.t_start is not None
+            assert self.v_gene_alignment_aa.t_end is not None
+            assert self.v_gene_alignment_aa.target_id is not None
+            assert self.v_gene_alignment_aa.cigar is not None
+            assert self.v_gene_alignment_aa.e_value is not None
+            assert self.v_gene_alignment_aa.seq_identity is not None
+            assert self.v_gene_alignment_aa.alignment_score is not None
+            # offset c_aln by the end of j_gene_alignment_aa
+
+            c_gene_alignment_aa = offset_alignments(self.j_gene_alignment_aa.q_end, c_aln)
+            self.c_gene_alignment_aa = c_gene_alignment_aa
+
+            self.rearrangement.c_call = c_gene_alignment_aa.target_id
+            # alignment positions are 0-indexed, add 1 to start index to convert to 1-based
+            self.rearrangement.c_sequence_start_aa = c_gene_alignment_aa.q_start + 1
+            self.rearrangement.c_sequence_end_aa = c_gene_alignment_aa.q_end
+
+            self.rearrangement.c_germline_start_aa = c_gene_alignment_aa.t_start + 1
+            self.rearrangement.c_germline_end_aa = c_gene_alignment_aa.t_end
+
+            c_sequence_segment = self.sequence_aa[c_gene_alignment_aa.q_start : c_gene_alignment_aa.q_end]
+            c_germline_segment = c_aln.t_seq[c_aln.t_start : c_aln.t_end]
+
+            c_sequence_alignment, c_germline_alignment = align_sequences(
+                c_sequence_segment, c_germline_segment, unfold_cigar(c_aln.cigar)
+            )
+
+            self.rearrangement.c_sequence_alignment_aa = c_sequence_alignment
+            self.rearrangement.c_germline_alignment_aa = c_germline_alignment
+
+            # 1 based, hence need to add 1
+            assert self.rearrangement.v_sequence_start_aa is not None
+            v_alignment_str = unfold_cigar(self.v_gene_alignment_aa.cigar)
+            deletions_on_v = v_alignment_str.count("D")
+            self.rearrangement.c_alignment_start_aa = (
+                c_gene_alignment_aa.q_start + 1 - self.v_gene_alignment_aa.q_start + deletions_on_v
+            )
+            self.rearrangement.c_alignment_end_aa = (
+                c_gene_alignment_aa.q_end - self.v_gene_alignment_aa.q_start + deletions_on_v
+            )
+
+            self.rearrangement.c_score_aa = c_gene_alignment_aa.alignment_score
+            self.rearrangement.c_cigar_aa = c_gene_alignment_aa.cigar
+            self.rearrangement.c_support_aa = c_gene_alignment_aa.e_value
+            self.rearrangement.c_identity_aa = c_gene_alignment_aa.seq_identity
 
         return self
 

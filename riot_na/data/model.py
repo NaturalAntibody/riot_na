@@ -168,7 +168,9 @@ class AirrRearrangementEntryNT:  # pylint: disable=too-many-instance-attributes
     j_germline_alignment: Optional[str] = None
     j_germline_alignment_aa: Optional[str] = None
     c_sequence_alignment: Optional[str] = None
+    c_sequence_alignment_aa: Optional[str] = None
     c_germline_alignment: Optional[str] = None
+    c_germline_alignment_aa: Optional[str] = None
     fwr1: Optional[str] = None
     fwr1_aa: Optional[str] = None
     cdr1: Optional[str] = None
@@ -258,6 +260,7 @@ class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
     complete_vdj: Optional[bool] = None
     v_call: Optional[str] = None
     j_call: Optional[str] = None
+    c_call: Optional[str] = None
 
     germline_alignment_aa: Optional[str] = None
     sequence_alignment_aa: Optional[str] = None
@@ -265,10 +268,14 @@ class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
     v_alignment_end_aa: Optional[int] = None
     j_alignment_start_aa: Optional[int] = None
     j_alignment_end_aa: Optional[int] = None
+    c_alignment_start_aa: Optional[int] = None
+    c_alignment_end_aa: Optional[int] = None
     v_sequence_alignment_aa: Optional[str] = None
     v_germline_alignment_aa: Optional[str] = None
     j_sequence_alignment_aa: Optional[str] = None
     j_germline_alignment_aa: Optional[str] = None
+    c_sequence_alignment_aa: Optional[str] = None
+    c_germline_alignment_aa: Optional[str] = None
 
     fwr1_aa: Optional[str] = None
     cdr1_aa: Optional[str] = None
@@ -282,24 +289,32 @@ class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
 
     v_score_aa: Optional[float] = None
     j_score_aa: Optional[float] = None
+    c_score_aa: Optional[float] = None
 
     v_cigar_aa: Optional[str] = None
     j_cigar_aa: Optional[str] = None
+    c_cigar_aa: Optional[str] = None
 
     v_support_aa: Optional[float] = None
     j_support_aa: Optional[float] = None
+    c_support_aa: Optional[float] = None
     v_identity_aa: Optional[float] = None
     j_identity_aa: Optional[float] = None
+    c_identity_aa: Optional[float] = None
 
     v_sequence_start_aa: Optional[int] = None
     v_sequence_end_aa: Optional[int] = None
     j_sequence_start_aa: Optional[int] = None
     j_sequence_end_aa: Optional[int] = None
+    c_sequence_start_aa: Optional[int] = None
+    c_sequence_end_aa: Optional[int] = None
 
     v_germline_start_aa: Optional[int] = None
     v_germline_end_aa: Optional[int] = None
     j_germline_start_aa: Optional[int] = None
     j_germline_end_aa: Optional[int] = None
+    c_germline_start_aa: Optional[int] = None
+    c_germline_end_aa: Optional[int] = None
 
     fwr1_start_aa: Optional[int] = None
     fwr1_end_aa: Optional[int] = None
@@ -508,6 +523,7 @@ class AlignmentsNT:
 class AlignmentsAA:
     v: Optional[AlignmentEntryAA] = None
     j: Optional[AlignmentEntryAA] = None
+    c: Optional[AlignmentEntryAA] = None
 
 
 @dataclass
