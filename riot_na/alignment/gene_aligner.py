@@ -308,6 +308,13 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 "alignment_length_threshold": 7,
                 "max_cdr3_length": 60,
             }
+        case GermlineGene.C:
+            return {
+                "kmer_size": 3,
+                "distance_threshold": 3,
+                "top_n": int(os.environ.get("TOP_N", 5)),
+                "modulo_n": 2,
+            }
         case _:
             raise ValueError("AA aligner not supported for gene type")
 
@@ -433,6 +440,18 @@ def create_aa_j_gene_aligner(organism: Organism, locus: Locus, aa_genes_dir: Pat
     genes = read_genes(input_path, partial(parse_gene_aa, species=organism))
 
     aligner_params = get_aa_aligner_params(GermlineGene.J)
+    genes_aligner = GeneAlignerAA(genes, **aligner_params)
+
+    return genes_aligner
+
+
+def create_aa_c_gene_aligner(organism: Organism, locus: Locus, aa_genes_dir: Path) -> GeneAlignerAA:
+    input_path = aa_genes_dir / "c_genes" / organism.value / f"{locus.value}.fasta"
+    assert input_path.exists(), f"Input germline file: {str(input_path)} does not exists"
+
+    genes = read_genes(input_path, partial(parse_gene_aa, species=organism))
+
+    aligner_params = get_aa_aligner_params(GermlineGene.C)
     genes_aligner = GeneAlignerAA(genes, **aligner_params)
 
     return genes_aligner

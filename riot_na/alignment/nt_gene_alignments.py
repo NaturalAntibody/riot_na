@@ -66,7 +66,7 @@ class VDJCAlignerNT:
         # mask d input (query_db_clean -> valn_end + jaln_end)
         query_d = query_v[best_v_alignment.q_end : best_j_alignment.q_start]
 
-        # align c genes
+        # align d genes
         d_aligner = self.d_aligners[species]
         best_d_alignment = d_aligner.align(query_d, both_strains=False)
 
