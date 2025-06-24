@@ -1,6 +1,25 @@
 # CHANGELOG
 
 
+## v3.0.0 (2025-06-24)
+
+### Features
+
+- C genes support for aa
+  ([`dfaefab`](https://github.com/NaturalAntibody/riot_na/commit/dfaefab7a25b5a303d7a1c69bea768072a221b06))
+
+BREAKING CHANGE: new columns related to c genes
+
+### Refactoring
+
+- Testing alignments for nt and aa
+  ([`1acc82b`](https://github.com/NaturalAntibody/riot_na/commit/1acc82bddad55d8a6b0226f17d2d03edabd3c65f))
+
+### BREAKING CHANGES
+
+- New columns related to c genes
+
+
 ## v2.2.2 (2025-04-07)
 
 ### Bug Fixes
