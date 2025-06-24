@@ -8,10 +8,10 @@ from cachetools import cached
 from riot_na.airr.airr_builder import AirrBuilder
 from riot_na.airr.airr_builder_aa import AirrBuilderAA
 from riot_na.alignment.aa_gene_alignments import (
-    VJAlignerAA,
-    VJAlignmentTranslatorAA,
-    create_vj_aligner_aa,
-    create_vj_alignment_translator_aa,
+    VJCAlignerAA,
+    VJCAlignmentTranslatorAA,
+    create_vjc_aligner_aa,
+    create_vjc_alignment_translator_aa,
 )
 from riot_na.alignment.nt_gene_alignments import VDJCAlignerNT, create_vdjc_aligner_nt
 from riot_na.config import GENE_DB_DIR
@@ -41,7 +41,7 @@ class RiotNumberingNT:
     def __init__(
         self,
         vdjc_aligner_nt: VDJCAlignerNT,
-        vj_alignment_translator_aa: VJAlignmentTranslatorAA,
+        vj_alignment_translator_aa: VJCAlignmentTranslatorAA,
         scheme_aligner: SchemeAligner,
     ):
         self.vdjc_aligner = vdjc_aligner_nt
@@ -155,7 +155,7 @@ class RiotNumberingNT:
 
 
 class RiotNumberingAA:
-    def __init__(self, vj_aligner_aa: VJAlignerAA, scheme_aligner: SchemeAligner):
+    def __init__(self, vj_aligner_aa: VJCAlignerAA, scheme_aligner: SchemeAligner):
         self.vj_aligner_aa = vj_aligner_aa
         self.scheme_aligner = scheme_aligner
 
@@ -234,6 +234,9 @@ class RiotNumberingAA:
         if alignments.j:
             airr_builder.with_j_gene_alignment_aa(alignments.j)
 
+        if alignments.c:
+            airr_builder.with_c_gene_alignment_aa(alignments.c)
+
         if sch_alignment:
             assert aa_offsets
             airr_builder.with_aa_region_offsets(aa_offsets)
@@ -271,7 +274,7 @@ def create_riot_nt(
     RiotNumberingNT object used for performing alignment and numbering.
     """
     vdjc_aligner_nt = create_vdjc_aligner_nt(allowed_species=allowed_species, db_dir=db_dir)
-    vj_alignment_translator_aa = create_vj_alignment_translator_aa(allowed_species=allowed_species, db_dir=db_dir)
+    vj_alignment_translator_aa = create_vjc_alignment_translator_aa(allowed_species=allowed_species, db_dir=db_dir)
     scheme_aligner = SchemeAligner(allowed_species=allowed_species, db_dir=db_dir)
     return RiotNumberingNT(vdjc_aligner_nt, vj_alignment_translator_aa, scheme_aligner)
 
@@ -293,7 +296,7 @@ def create_riot_aa(
     -----------
     RiotNumberingAA object used for performing alignment and numbering.
     """
-    vj_aligner_aa = create_vj_aligner_aa(
+    vj_aligner_aa = create_vjc_aligner_aa(
         allowed_species=allowed_species,
         db_dir=db_dir,
     )
@@ -316,19 +319,18 @@ if __name__ == "__main__":
     from dataclasses import asdict
 
     vdj_alnr = create_vdjc_aligner_nt()
-    vdj_aa_translator = create_vj_alignment_translator_aa()
+    vdj_aa_translator = create_vjc_alignment_translator_aa()
     scheme_alnr = SchemeAligner()
 
-    # riot_numbering = RiotNumberingNT(vdj_alnr, vdj_aa_translator, scheme_alnr)
-    # # given query
-    # QUERY = "CAGGTGCAGCTACAGCAGTGGGGCGCAGGACTGTTGAAGCCTTCGGAGACCCTGTCCCTCACCTGCGCTGTCTATGGTGGGTCCTTCAGTGGTTACTACTGGAGCTGGATCCGCCAGCCCCCAGGGAAGGGGCTGGAGTGGATTGGGGAAATCAATCATAGTGGAAGCACCAACTACAACCCGTCCCTCAAGAGTCGAGTCACCATATCAGTAGACACGTCCAAGAACCAGTTCTCCCTGAAGCTGAGCTCTGTGACCGCCGCGGACACGGCTGTGTATTACTGTGCGAGAGAAAGGCGAGGTTGTAGTAGTACCAGCTGCTTTTGGATTACTCAACGTGGATACAGCTATGGAGGCTCCTACTACTACTACTACATGGACGTCTGGGGCAAAGGGACCACGGTCACCGTCTCCTCA"
-    # sample_result = riot_numbering.run_on_sequence("header", QUERY, Scheme.IMGT)
-    # print(json.dumps(asdict(sample_result), indent=4))
+    riot_numbering = RiotNumberingNT(vdj_alnr, vdj_aa_translator, scheme_alnr)
+    # given query
+    QUERY = "5"
+    sample_result = riot_numbering.run_on_sequence("header", QUERY, Scheme.IMGT)
+    print(json.dumps(asdict(sample_result), indent=4))
 
-    vdj_aa_alnr = create_vj_aligner_aa()
-    aa_numbering = RiotNumberingAA(vdj_aa_alnr, scheme_alnr)
+    # vdj_aa_alnr = create_vj_aligner_aa()
+    # aa_numbering = RiotNumberingAA(vdj_aa_alnr, scheme_alnr)
 
-    AA_QUERY = "QLQLQESGPGLVKPSETLSLTCTVSGDSISSGDYYWGWIRQPPGKGLEWIGHIYYSGATYYNPSLENRVTISVDTSKNQFSLKLSSVTAADTAVYYCTRDDSSNWRSRGQGTLVTVSS"
-
-    aa_sample_result = aa_numbering.run_on_sequence("header", AA_QUERY, Scheme.IMGT)
-    print(json.dumps(asdict(aa_sample_result), indent=4))
+    # AA_QUERY = "QVQLQQWGAGLLKPSETLSLTCAVFGGSFSGYYWSWIRQPPGKGLEWIGEINHRGNTNDNPSLKSRVTISVDTSKNQFALKLSSVTAADTAVYYCARERGYTYGNFDHWGQGTLVTVSSASTKGPSVFPLAPSSKSTSGGTAALGCLVKDYFPEPVTVSWNSGALTSGVHTFPAVLQSSGLYSLSSVVTVPSSSLGTQTYICNVNHKPSNTKVDKKVEPKSCDKTHTCPPCPAPELLGGPSVFLFPPKPKDTLMISRTPEVTCVVVDVSHEDPEVKFNWYVDGVEVHNAKTKPREEQYNSTYRVVSVLTVLHQDWLNGKEYKCKVSNKALPAPIEKTISKAKGQPREPQVYTLPPSRDELTKNQVSLTCLVKGFYPSDIAVEWESNGQPENNYKTTPPVLDSDGSFFLYSKLTVDKSRWQQGNVFSCSVMHEALHNHYTQKSLSLSPGK"
+    # aa_sample_result = aa_numbering.run_on_sequence("header", AA_QUERY, Scheme.IMGT)
+    # print(json.dumps(asdict(aa_sample_result), indent=4))
