@@ -8,6 +8,7 @@ from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
 from skbio.alignment import StripedSmithWaterman  # type: ignore
 
+from riot_na.alignment.gene_match_utils import create_gene_lookup
 from riot_na.alignment.skbio_alignment import (
     align_aa,  # type: ignore  # pylint: disable=import-error
 )
@@ -31,7 +32,7 @@ ALIGNER_PARAMS = {"match_score": 1, "mismatch_score": -1, "gap_open_penalty": 4,
 class GeneAligner:
     def __init__(
         self,
-        genes: list[Gene],
+        genes: Sequence[Gene],
         kmer_size: int,
         distance_threshold: int,
         top_n: int,
@@ -39,46 +40,50 @@ class GeneAligner:
         e_value_threshold: Optional[float] = None,
         alignment_length_threshold: Optional[int] = None,
     ) -> None:
+
         self.prefiltering = MultiSpeciesPrefiltering(genes, kmer_size, distance_threshold, top_n, modulo_n)
 
-        self.gene_lookup = dict(map(lambda gene: (gene.species + "|" + gene.name, gene), genes))
+        self.gene_lookup = create_gene_lookup(genes)
         self.db_length = sum(len(gene.sequence) for gene in genes)
 
         self.e_value_threshold = e_value_threshold
         self.alignment_length_threshold = alignment_length_threshold
 
     def _prefilter(self, query: str, both_strains: bool) -> SpeciesPrefilteringResult:
+        """Prefilter genes and return species-aware gene matches."""
+
         if both_strains:
             return self.prefiltering.calculate_top_matches_with_rev_comp(query)
+
         return self.prefiltering.calculate_top_matches(query)
 
     def _align_sequences(self, query: str, prefiltering_result: SpeciesPrefilteringResult) -> list[AlignmentEntryNT]:
         aligner = StripedSmithWaterman(query, **ALIGNER_PARAMS)
-        rev_comp_aligner = StripedSmithWaterman(prefiltering_result.rev_comp_query, **ALIGNER_PARAMS)
+        rev_comp_aligner = (
+            StripedSmithWaterman(prefiltering_result.rev_comp_query, **ALIGNER_PARAMS)
+            if prefiltering_result.rev_comp_query
+            else None
+        )
 
         result = []
 
         for gene_match in prefiltering_result.top_matches:
-            current_species = gene_match.species
-            match gene_match.rev_comp:
-                case False:
-                    alignment = align(
-                        aligner=aligner,
-                        target_id=gene_match.gene_id,
-                        target=self.gene_lookup[gene_match.species + "|" + gene_match.gene_id].sequence,
-                        query=query,
-                        db_length=self.db_length,
-                        rev_comp=gene_match.rev_comp,
-                    )
-                case True:
-                    alignment = align(
-                        aligner=rev_comp_aligner,
-                        target_id=gene_match.gene_id,
-                        target=self.gene_lookup[gene_match.species + "|" + gene_match.gene_id].sequence,
-                        query=prefiltering_result.rev_comp_query,
-                        db_length=self.db_length,
-                        rev_comp=gene_match.rev_comp,
-                    )
+            target_gene = self.gene_lookup[gene_match.species_gene_id]
+            current_query = (
+                prefiltering_result.rev_comp_query
+                if gene_match.rev_comp and prefiltering_result.rev_comp_query
+                else query
+            )
+            current_aligner = rev_comp_aligner if gene_match.rev_comp and rev_comp_aligner else aligner
+
+            alignment = align(
+                aligner=current_aligner,
+                target_id=gene_match.gene_id,
+                target=target_gene.sequence,
+                query=current_query,
+                db_length=self.db_length,
+                rev_comp=gene_match.rev_comp,
+            )
 
             alignment_length = alignment.t_end - alignment.t_start
 
@@ -89,8 +94,6 @@ class GeneAligner:
             if self.alignment_length_threshold is not None:
                 if alignment_length < self.alignment_length_threshold:
                     continue
-
-            target_gene: Gene = self.gene_lookup[gene_match.species + "|" + gene_match.gene_id]
 
             result.append(
                 AlignmentEntryNT(
@@ -106,11 +109,11 @@ class GeneAligner:
                     t_len=alignment.t_len,
                     cigar=alignment.cigar,
                     rev_comp=alignment.rev_comp,
-                    species=current_species,
+                    species=gene_match.species,
                     locus=gene_match.locus,
-                    q_seq=alignment.query,
+                    q_seq=current_query,
                     t_seq=target_gene.sequence,
-                    reading_frame=target_gene.reading_frame,
+                    reading_frame=target_gene.reading_frame if isinstance(target_gene, Gene) else None,
                 )
             )
 
@@ -119,7 +122,6 @@ class GeneAligner:
     def align(self, query: str, both_strains: bool) -> Optional[AlignmentEntryNT]:
         prefiltering_result = self._prefilter(query, both_strains)
         alignments = self._align_sequences(query, prefiltering_result)
-
         alignments.sort()
 
         return alignments[0] if len(alignments) > 0 else None
@@ -136,7 +138,7 @@ AA_ALIGNER_PARAMS = {
 class GeneAlignerAA:
     def __init__(
         self,
-        genes: list[Gene],
+        genes: Sequence[GeneAA],
         kmer_size: int,
         distance_threshold: int,
         top_n: int,
@@ -145,9 +147,10 @@ class GeneAlignerAA:
         alignment_length_threshold: Optional[int] = None,
         max_cdr3_length: Optional[int] = None,
     ) -> None:
+        # Initialize the base prefiltering directly with species-aware keys
         self.prefiltering = MultiSpeciesPrefiltering(genes, kmer_size, distance_threshold, top_n, modulo_n)
 
-        self.gene_lookup: dict[str, Gene] = dict(map(lambda gene: (gene.species + "|" + gene.name, gene), genes))
+        self.gene_lookup = create_gene_lookup(genes)
         self.db_length = sum(len(gene.sequence) for gene in genes)
 
         self.e_value_threshold = e_value_threshold
@@ -155,6 +158,7 @@ class GeneAlignerAA:
         self.max_cdr3_length = max_cdr3_length
 
     def _prefilter(self, query: str) -> SpeciesPrefilteringResult:
+        """Prefilter genes and return species-aware gene matches."""
         return self.prefiltering.calculate_top_matches(query)
 
     def _align_sequences(self, query: str, prefiltering_result: SpeciesPrefilteringResult) -> list[AlignmentEntryAA]:
@@ -163,11 +167,12 @@ class GeneAlignerAA:
         result = []
 
         for gene_match in prefiltering_result.top_matches:
-            current_species = gene_match.species
+            target_gene = self.gene_lookup[gene_match.species_gene_id]
+
             alignment = align_aa(
                 aligner=aligner,
                 target_id=gene_match.gene_id,
-                target=self.gene_lookup[gene_match.species + "|" + gene_match.gene_id].sequence,
+                target=target_gene.sequence,
                 query=query,
                 db_length=self.db_length,
             )
@@ -185,8 +190,6 @@ class GeneAlignerAA:
                 if alignment.q_start > self.max_cdr3_length:
                     continue
 
-            target_gene: Gene = self.gene_lookup[gene_match.species + "|" + gene_match.gene_id]
-
             result.append(
                 AlignmentEntryAA(
                     target_id=alignment.target_id,
@@ -198,7 +201,7 @@ class GeneAlignerAA:
                     t_start=alignment.t_start,
                     t_end=alignment.t_end,
                     cigar=alignment.cigar,
-                    species=current_species,
+                    species=gene_match.species,
                     locus=gene_match.locus,
                     q_seq=query,
                     t_seq=target_gene.sequence,

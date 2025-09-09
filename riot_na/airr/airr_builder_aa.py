@@ -18,13 +18,17 @@ from riot_na.data.model import (
 
 
 class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
-    def __init__(self, sequence_header: str, sequence: str, scheme: Scheme):
+    def __init__(self, sequence_header: str, sequence: str, scheme: Scheme, query_sequence: str):
         self.sequence_header = sequence_header
         self.sequence_aa = sequence
         self.scheme = scheme
+        self.query_sequence = query_sequence
 
         self.rearrangement = AirrRearrangementEntryAA(
-            sequence_header=sequence_header, sequence_aa=sequence, numbering_scheme=scheme.value
+            sequence_header=sequence_header,
+            sequence_aa=sequence,
+            numbering_scheme=scheme.value,
+            query_sequence_aa=query_sequence,
         )
 
         self.v_gene_sequence_aa: Optional[str] = None
@@ -36,6 +40,7 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
         self.c_gene_alignment_aa: Optional[AlignmentEntryAA] = None
         self.c_gene_sequence_aa: Optional[str] = None
 
+        self.scheme_alingment: Optional[SchemeAlignment] = None
         self.aa_offsets: Optional[RegionOffsetsAA] = None
 
     def with_v_gene_alignment_aa(self, v_aln: AlignmentEntryAA):
@@ -45,7 +50,7 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
         if v_aln is None:
             return self
 
-        self.rearrangement.v_call = v_aln.target_id
+        self.rearrangement.v_call = v_aln.target_id.split("|")[-1] if "|" in v_aln.target_id else v_aln.target_id
         self.rearrangement.locus = v_aln.locus.value
 
         # alignment positions are 0-indexed, add 1 to start index to convert to 1-based
@@ -82,18 +87,19 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
         if j_aln is not None:
             assert self.v_gene_alignment_aa is not None
 
-            j_gene_alignment_aa = offset_alignments(self.v_gene_alignment_aa.q_end, j_aln)
-            self.j_gene_alignment_aa = j_gene_alignment_aa
+            j_aln = offset_alignments(self.v_gene_alignment_aa.q_end, j_aln)
 
-            self.rearrangement.j_call = j_gene_alignment_aa.target_id
+            self.j_gene_alignment_aa = j_aln
+
+            self.rearrangement.j_call = j_aln.target_id.split("|")[-1] if "|" in j_aln.target_id else j_aln.target_id
             # alignment positions are 0-indexed, add 1 to start index to convert to 1-based
-            self.rearrangement.j_sequence_start_aa = j_gene_alignment_aa.q_start + 1
-            self.rearrangement.j_sequence_end_aa = j_gene_alignment_aa.q_end
+            self.rearrangement.j_sequence_start_aa = j_aln.q_start + 1
+            self.rearrangement.j_sequence_end_aa = j_aln.q_end
 
-            self.rearrangement.j_germline_start_aa = j_gene_alignment_aa.t_start + 1
-            self.rearrangement.j_germline_end_aa = j_gene_alignment_aa.t_end
+            self.rearrangement.j_germline_start_aa = j_aln.t_start + 1
+            self.rearrangement.j_germline_end_aa = j_aln.t_end
 
-            j_sequence_segment = self.sequence_aa[j_gene_alignment_aa.q_start : j_gene_alignment_aa.q_end]
+            j_sequence_segment = self.sequence_aa[j_aln.q_start : j_aln.q_end]
             j_germline_segment = j_aln.t_seq[j_aln.t_start : j_aln.t_end]
 
             j_sequence_alignment, j_germline_alignment = align_sequences(
@@ -107,17 +113,13 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
             assert self.rearrangement.v_sequence_start_aa is not None
             v_alignment_str = unfold_cigar(self.v_gene_alignment_aa.cigar)
             deletions_on_v = v_alignment_str.count("D")
-            self.rearrangement.j_alignment_start_aa = (
-                j_gene_alignment_aa.q_start + 1 - self.v_gene_alignment_aa.q_start + deletions_on_v
-            )
-            self.rearrangement.j_alignment_end_aa = (
-                j_gene_alignment_aa.q_end - self.v_gene_alignment_aa.q_start + deletions_on_v
-            )
+            self.rearrangement.j_alignment_start_aa = j_aln.q_start + 1 + deletions_on_v
+            self.rearrangement.j_alignment_end_aa = j_aln.q_end + deletions_on_v
 
-            self.rearrangement.j_score_aa = j_gene_alignment_aa.alignment_score
-            self.rearrangement.j_cigar_aa = j_gene_alignment_aa.cigar
-            self.rearrangement.j_support_aa = j_gene_alignment_aa.e_value
-            self.rearrangement.j_identity_aa = j_gene_alignment_aa.seq_identity
+            self.rearrangement.j_score_aa = j_aln.alignment_score
+            self.rearrangement.j_cigar_aa = j_aln.cigar
+            self.rearrangement.j_support_aa = j_aln.e_value
+            self.rearrangement.j_identity_aa = j_aln.seq_identity
 
         return self
 
@@ -150,8 +152,11 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
 
             c_gene_alignment_aa = offset_alignments(self.j_gene_alignment_aa.q_end, c_aln)
             self.c_gene_alignment_aa = c_gene_alignment_aa
-
-            self.rearrangement.c_call = c_gene_alignment_aa.target_id
+            self.rearrangement.c_call = (
+                c_gene_alignment_aa.target_id.split("|")[-1]
+                if "|" in c_gene_alignment_aa.target_id
+                else c_gene_alignment_aa.target_id
+            )
             # alignment positions are 0-indexed, add 1 to start index to convert to 1-based
             self.rearrangement.c_sequence_start_aa = c_gene_alignment_aa.q_start + 1
             self.rearrangement.c_sequence_end_aa = c_gene_alignment_aa.q_end
@@ -239,6 +244,11 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
 
     def with_scheme_alignment_exc(self, exc: str):
         self.rearrangement.exc = exc
+        return self
+
+    def with_segment_start_end(self, segment_start: int, segment_end: int):
+        self.rearrangement.segment_start = segment_start + 1
+        self.rearrangement.segment_end = segment_end
         return self
 
     def build(self):  # pylint: disable=too-many-statements

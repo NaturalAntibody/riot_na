@@ -24,6 +24,7 @@ class SchemeMappingFacade:
                     self.mappings[species.value + "|" + row["gene_id"]] = AlignmentString(row["scheme_cigar"])
 
     def get_mapping(self, organism: Organism, gene_id: str) -> AlignmentString:
+        gene_id = gene_id.split("|")[-1]
         return AlignmentString(self.mappings[organism.value + "|" + gene_id])
 
 

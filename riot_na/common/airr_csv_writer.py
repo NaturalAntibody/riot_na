@@ -27,5 +27,10 @@ class AirrRearrangementEntryWriter:
             self._writer.writeheader()
 
         for item in data:
-            row = serialize_airr_entry(item)
-            self._writer.writerow(row)
+            if isinstance(item, list):
+                for subitem in item:
+                    row = serialize_airr_entry(subitem)
+                    self._writer.writerow(row)
+            else:
+                row = serialize_airr_entry(item)
+                self._writer.writerow(row)

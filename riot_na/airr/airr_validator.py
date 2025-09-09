@@ -356,9 +356,7 @@ def validate_conserved_residues_present(rearrangement: AirrRearrangementEntry_co
 def validate_primary_sequence_in_sequence_alignment_aa(rearrangement: AirrRearrangementEntry_co) -> Optional[bool]:
     if rearrangement.sequence_alignment_aa is None or rearrangement.scheme_residue_mapping is None:
         return None
-    return "".join(rearrangement.scheme_residue_mapping.values()) in rearrangement.sequence_alignment_aa.replace(
-        "-", ""
-    )
+    return rearrangement.primary_sequence_aa in rearrangement.sequence_alignment_aa.replace("-", "")
 
 
 def validate_no_insertion_next_to_deletion_aa(rearrangement: AirrRearrangementEntry_co) -> Optional[bool]:

@@ -25,16 +25,19 @@ class _WorkerNT:
         allowed_species: Optional[list[Organism]] = None,
         scheme: Scheme = Scheme.IMGT,
         db_dir: Path = GENE_DB_DIR,
+        return_all_domains: bool = False,
     ) -> None:
         self.numbering = create_riot_nt(allowed_species=allowed_species, db_dir=db_dir)
         self.scheme = scheme
+        self.return_all_domains = return_all_domains
 
-    def __call__(self, fasta_record: SeqIO.SeqRecord) -> AirrRearrangementEntryNT:
+    def __call__(self, fasta_record: SeqIO.SeqRecord) -> AirrRearrangementEntryNT | list[AirrRearrangementEntryNT]:
         try:
             res = self.numbering.run_on_sequence(
                 fasta_record.description,
                 str(fasta_record.seq),
                 self.scheme,
+                return_all_domains=self.return_all_domains,
             )
         except Exception as exc:
             print(fasta_record.description)
@@ -51,16 +54,22 @@ class _WorkerAA:
         allowed_species: Optional[list[Organism]] = None,
         scheme: Scheme = Scheme.IMGT,
         db_dir: Path = GENE_DB_DIR,
+        return_all_domains: bool = False,
+        extend_alignment: bool = False,
     ) -> None:
         self.numbering = create_riot_aa(allowed_species=allowed_species, db_dir=db_dir)
         self.scheme = scheme
+        self.return_all_domains = return_all_domains
+        self.extend_alignment = extend_alignment
 
-    def __call__(self, fasta_record: SeqIO.SeqRecord) -> AirrRearrangementEntryAA:
+    def __call__(self, fasta_record: SeqIO.SeqRecord) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]:
         try:
             res = self.numbering.run_on_sequence(
                 fasta_record.description,
                 str(fasta_record.seq),
                 self.scheme,
+                return_all_domains=self.return_all_domains,
+                extend_alignment=self.extend_alignment,
             )
         except Exception as exc:
             print(fasta_record.description)
@@ -76,19 +85,21 @@ def _worker_initializer(
     scheme: Scheme = Scheme.IMGT,
     db_dir: Path = GENE_DB_DIR,
     input_type: InputType = InputType.NT,
+    return_all_domains: bool = False,
+    extend_alignment: bool = False,
 ):
     global worker  # pylint: disable=global-statement,global-variable-undefined
     if input_type == InputType.NT:
-        worker = _WorkerNT(allowed_species, scheme, db_dir)  # type: ignore
+        worker = _WorkerNT(allowed_species, scheme, db_dir, return_all_domains)  # type: ignore
     else:
-        worker = _WorkerAA(allowed_species, scheme, db_dir)  # type: ignore
+        worker = _WorkerAA(allowed_species, scheme, db_dir, return_all_domains, extend_alignment)  # type: ignore
 
 
 def _worker_call(*args, **kwds):
     return worker(*args, **kwds)  # type: ignore
 
 
-def run_on_file_mp(
+def run_on_file_mp(  # pylint: disable=too-many-arguments
     db_dir: Path,
     input_fasta_path: Path,
     result_path: Path,
@@ -98,9 +109,13 @@ def run_on_file_mp(
     allowed_species: Optional[list[Organism]] = None,
     input_type: InputType = InputType.NT,
     limit: Optional[int] = None,
+    return_all_domains: bool = False,
+    extend_alignment: bool = False,
 ):
     with mp.Pool(
-        processes=n_processes, initializer=_worker_initializer, initargs=(allowed_species, scheme, db_dir, input_type)
+        processes=n_processes,
+        initializer=_worker_initializer,
+        initargs=(allowed_species, scheme, db_dir, input_type, return_all_domains, extend_alignment),
     ) as pool:
         result_iter = tqdm(
             pool.imap(_worker_call, itertools.islice(SeqIO.parse(input_fasta_path, input_format), limit)),
