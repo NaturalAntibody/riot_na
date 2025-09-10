@@ -97,7 +97,7 @@ def run_riot(
                 numbering_aa = create_riot_aa(allowed_species=species_list, db_dir=GENE_DB_DIR)
                 record_type = AirrRearrangementEntryAA
                 result = numbering_aa.run_on_sequence(
-                    header="-", query_sequence=sequence, scheme=scheme, extend_alignment=extend_alignment
+                    header="-", sequence_aa=sequence, scheme=scheme, extend_alignment=extend_alignment
                 )
 
         if output_file:
