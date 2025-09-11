@@ -439,7 +439,7 @@ impl Prefiltering {
         final_segments
     }
 
-    fn filter_segments_by_coverage(&self, segments: Vec<SegmentMatch>) -> Vec<SegmentMatch> {
+    fn filter_segments_by_length(&self, segments: Vec<SegmentMatch>) -> Vec<SegmentMatch> {
         segments.into_iter().filter(|segment| self.has_enough_length_segment(segment)).collect()
     }
 
@@ -454,7 +454,7 @@ impl Prefiltering {
         let single_gene_segments = self.populate_single_gene_segments(&gene_segments, rev_comp);
 
         let merged_segments = self.merge_overlapping_segments(single_gene_segments);
-        self.filter_segments_by_coverage(merged_segments)
+        self.filter_segments_by_length(merged_segments)
     }
 
     /// Combine segments from forward and reverse complement orientations
@@ -469,7 +469,7 @@ impl Prefiltering {
 
         // Use simple segment extension to capture wider coverage
         let merged_segments = self.merge_overlapping_segments(all_segments);
-        self.filter_segments_by_coverage(merged_segments)
+        self.filter_segments_by_length(merged_segments)
     }
 
 

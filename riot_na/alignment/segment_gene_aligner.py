@@ -15,15 +15,22 @@ import os
 from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import Callable, List, Optional, Sequence
+from typing import List, Optional, Sequence
 
-import blosum  # type: ignore
-from Bio import SeqIO
-from Bio.SeqRecord import SeqRecord
 from skbio.alignment import StripedSmithWaterman  # type: ignore
 
-from riot_na.alignment.gene_match_utils import create_gene_lookup
+from riot_na.alignment.gene_aligner import AA_ALIGNER_PARAMS, ALIGNER_PARAMS
+from riot_na.alignment.gene_aligner import (
+    get_aa_aligner_params as gene_aa_aligner_params,
+)
+from riot_na.alignment.gene_aligner import get_aligner_params as gene_aligner_params
+from riot_na.alignment.gene_aligner import (
+    get_gene_parsing_function,
+    parse_gene_aa,
+    read_genes,
+)
 from riot_na.alignment.skbio_alignment import align, align_aa
+from riot_na.common.gene_match_utils import create_gene_lookup
 from riot_na.common.multi_species_segment_prefiltering import (
     MultiSpeciesSegmentPrefiltering,
 )
@@ -39,16 +46,6 @@ from riot_na.data.model import (
     SegmentMatch,
     SpeciesPrefilteringSegmentResult,
 )
-
-# Standard alignment parameters
-ALIGNER_PARAMS = {"match_score": 1, "mismatch_score": -1, "gap_open_penalty": 4, "gap_extend_penalty": 1}
-
-AA_ALIGNER_PARAMS = {
-    "gap_open_penalty": 11,
-    "gap_extend_penalty": 1,
-    "protein": True,
-    "substitution_matrix": blosum.BLOSUM(62),
-}
 
 
 @dataclass
@@ -492,9 +489,6 @@ class SegmentGeneAlignerAA:
         )
 
 
-# Factory methods and helper functions for compatibility with gene_aligner.py
-
-
 def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> dict:
     """Get aligner parameters for different germline gene types"""
     # ideally this should be read from a file or env
@@ -511,61 +505,8 @@ def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> d
                 "min_prefiltering_coverage": 60,
                 "min_segment_length": 120,
             }
-        case GermlineGene.D:
-            return {
-                "kmer_size": 5,
-                "distance_threshold": 3,
-                "top_n": int(os.environ.get("TOP_N", 5)),
-                "modulo_n": 1,
-            }
-        case GermlineGene.J:
-            assert locus is not None
-            match locus:
-                case Locus.IGH:
-                    return {
-                        "kmer_size": 5,
-                        "distance_threshold": 3,
-                        "top_n": int(os.environ.get("TOP_N", 5)),
-                        "modulo_n": 2,
-                    }
-                case Locus.IGK:
-                    return {
-                        "kmer_size": 5,
-                        "distance_threshold": 5,
-                        "top_n": int(os.environ.get("TOP_N", 5)),
-                        "modulo_n": 1,
-                    }
-                case Locus.IGL:
-                    return {
-                        "kmer_size": 5,
-                        "distance_threshold": 7,
-                        "top_n": int(os.environ.get("TOP_N", 5)),
-                        "modulo_n": 2,
-                    }
-        case GermlineGene.C:
-            assert locus is not None
-            match locus:
-                case Locus.IGH:
-                    return {
-                        "kmer_size": 5,
-                        "distance_threshold": 5,
-                        "top_n": int(os.environ.get("TOP_N", 5)),
-                        "modulo_n": 2,
-                    }
-                case Locus.IGK:
-                    return {
-                        "kmer_size": 3,
-                        "distance_threshold": 5,
-                        "top_n": int(os.environ.get("TOP_N", 3)),
-                        "modulo_n": 1,
-                    }
-                case Locus.IGL:
-                    return {
-                        "kmer_size": 3,
-                        "distance_threshold": 5,
-                        "top_n": int(os.environ.get("TOP_N", 3)),
-                        "modulo_n": 1,
-                    }
+        case _:
+            return gene_aligner_params(germline_gene, locus)
 
 
 def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
@@ -584,69 +525,8 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 "min_prefiltering_coverage": 20,
                 "min_segment_length": 60,
             }
-        case GermlineGene.J:
-            return {
-                "kmer_size": 3,
-                "distance_threshold": 3,
-                "top_n": int(os.environ.get("TOP_N", 5)),
-                "modulo_n": 1,
-                "alignment_length_threshold": 7,
-                "max_cdr3_length": 60,
-            }
         case _:
-            raise ValueError("AA aligner not supported for gene type")
-
-
-def get_gene_parsing_function(gene_type: GermlineGene) -> Callable[[str, SeqRecord], Gene]:
-    """Get gene parsing function for different germline gene types"""
-    match gene_type:
-        case GermlineGene.V:
-            return lambda description, record: Gene(
-                name=description[0],
-                locus=Locus[description[1]],
-                reading_frame=int(description[2]),
-                species=Organism[description[3]],
-                sequence=str(record.seq),
-            )
-        case GermlineGene.D:
-            return lambda description, record: Gene(
-                name=description[0],
-                locus=Locus.IGH,
-                reading_frame=None,
-                species=Organism[description[1]],
-                sequence=str(record.seq),
-            )
-        case GermlineGene.J:
-            return lambda description, record: Gene(
-                name=description[0],
-                locus=Locus[description[1]],
-                reading_frame=int(description[2]),
-                species=Organism[description[3]],
-                sequence=str(record.seq),
-            )
-        case GermlineGene.C:
-            return lambda description, record: Gene(
-                name=description[0],
-                locus=Locus[description[1]],
-                reading_frame=None,
-                species=Organism.HOMO_SAPIENS,
-                sequence=str(record.seq),
-            )
-
-
-def parse_gene_aa(description: Sequence[str], record: SeqRecord, species: Organism):
-    """Parse amino acid gene from FASTA record"""
-    return GeneAA(name=description[0], locus=Locus[description[1]], species=species, sequence=str(record.seq))
-
-
-def read_genes(path: Path, parsing_fn):
-    """Read genes from FASTA file using provided parsing function"""
-    result = []
-    for record in SeqIO.parse(path, "fasta"):
-        description = record.description.split("\t")
-        gene = parsing_fn(description, record)
-        result.append(gene)
-    return result
+            return gene_aa_aligner_params(germline_gene)
 
 
 def create_v_gene_aligner(allowed_species: List[Organism], db_dir: Path = GENE_DB_DIR) -> SegmentGeneAligner:
@@ -668,29 +548,6 @@ def create_v_gene_aligner(allowed_species: List[Organism], db_dir: Path = GENE_D
     return genes_aligner
 
 
-def create_aligner(
-    allowed_species: Organism, germline_gene: GermlineGene, locus: Locus, db_dir: Path = GENE_DB_DIR
-) -> SegmentGeneAligner:
-    """Create segment gene aligner for specific germline gene type"""
-    assert germline_gene != GermlineGene.V
-
-    gene_parsing_function = get_gene_parsing_function(germline_gene)
-
-    gene_path = (
-        Path(db_dir)
-        / "gene_db"
-        / f"{germline_gene.value.lower()}_genes"
-        / allowed_species.value
-        / f"{locus.value}.fasta"
-    )
-    genes = read_genes(gene_path, gene_parsing_function)
-
-    aligner_params = get_aligner_params(germline_gene, locus)
-
-    genes_aligner = SegmentGeneAligner(genes, **aligner_params)
-    return genes_aligner
-
-
 def create_aa_v_gene_aligner(allowed_species: List[Organism], aa_genes_dir: Path) -> SegmentGeneAlignerAA:
     """Create amino acid V gene segment aligner"""
     genes = []
@@ -707,17 +564,5 @@ def create_aa_v_gene_aligner(allowed_species: List[Organism], aa_genes_dir: Path
         genes.extend(species_genes)
 
     aligner_params = get_aa_aligner_params(GermlineGene.V)
-    genes_aligner = SegmentGeneAlignerAA(genes, **aligner_params)
-    return genes_aligner
-
-
-def create_aa_j_gene_aligner(organism: Organism, locus: Locus, aa_genes_dir: Path) -> SegmentGeneAlignerAA:
-    """Create amino acid J gene segment aligner"""
-    input_path = aa_genes_dir / "j_genes" / organism.value / f"{locus.value}.fasta"
-    assert input_path.exists(), f"Input germline file: {str(input_path)} does not exists"
-
-    genes = read_genes(input_path, partial(parse_gene_aa, species=organism))
-
-    aligner_params = get_aa_aligner_params(GermlineGene.J)
     genes_aligner = SegmentGeneAlignerAA(genes, **aligner_params)
     return genes_aligner
