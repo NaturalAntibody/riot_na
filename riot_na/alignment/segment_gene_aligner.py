@@ -141,6 +141,7 @@ class SegmentGeneAligner:
         e_value_threshold: Optional[float] = None,
         alignment_length_threshold: Optional[int] = None,
         min_prefiltering_coverage: int = 30,
+        min_segment_length: int = 30,
     ) -> None:
         # Initialize the Rust-based prefiltering
         self.prefiltering = MultiSpeciesSegmentPrefiltering(
@@ -149,12 +150,13 @@ class SegmentGeneAligner:
             distance_threshold=distance_threshold,
             top_n=top_n,
             modulo_n=modulo_n,
-            min_segment_length=min_prefiltering_coverage,
+            min_segment_length=min_segment_length,
+            min_coverage=min_prefiltering_coverage,
         )
 
         # Store gene sequences for alignment
         self.gene_lookup = create_gene_lookup(genes)
-        self.db_length = len(genes)
+        self.db_length = sum(len(gene.sequence) for gene in genes)
 
         # Alignment parameters
         self.e_value_threshold = e_value_threshold
@@ -320,7 +322,7 @@ class SegmentGeneAlignerAA:
     Compatible with GeneAlignerAA interface for easy replacement.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         genes: Sequence[GeneAA],  # gene_id -> AA sequence mapping
         kmer_size: int = 3,  # Smaller k-mer for amino acids
@@ -330,10 +332,17 @@ class SegmentGeneAlignerAA:
         e_value_threshold: Optional[float] = None,
         alignment_length_threshold: Optional[int] = None,
         max_cdr3_length: Optional[int] = None,  # Added for compatibility with GeneAlignerAA
-        min_prefiltering_coverage: int = 30,
+        min_prefiltering_coverage: int = 20,
+        min_segment_length: int = 60,
     ) -> None:
         self.prefiltering = MultiSpeciesSegmentPrefiltering(
-            genes, kmer_size, distance_threshold, top_n, modulo_n, min_prefiltering_coverage
+            genes,
+            kmer_size,
+            distance_threshold,
+            top_n,
+            modulo_n,
+            min_segment_length=min_segment_length,
+            min_coverage=min_prefiltering_coverage,
         )
 
         # Store gene sequences for alignment
@@ -500,6 +509,7 @@ def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> d
                 "e_value_threshold": 0.001,
                 "alignment_length_threshold": 80,
                 "min_prefiltering_coverage": 60,
+                "min_segment_length": 120,
             }
         case GermlineGene.D:
             return {
@@ -571,7 +581,8 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 "modulo_n": 1,
                 "e_value_threshold": 1e-55,
                 "alignment_length_threshold": 80,
-                "min_prefiltering_coverage": 40,
+                "min_prefiltering_coverage": 20,
+                "min_segment_length": 60,
             }
         case GermlineGene.J:
             return {

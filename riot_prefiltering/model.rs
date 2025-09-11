@@ -169,6 +169,7 @@ impl SegmentMatch {
             self.min_target_start = 0;
             self.max_target_start = 0;
             self.segment_start = 0;
+            self.match_count = 0;
             return;
         }
 
@@ -176,6 +177,7 @@ impl SegmentMatch {
         // The segment bounds should already be set correctly when the segment is created
         let max_cov = self.matching_genes.iter().map(|gene| gene.coverage).max().unwrap_or(0);
         self.coverage = max_cov;
+        self.match_count = self.matching_genes.len();
     }
 
 }

@@ -50,7 +50,7 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
         if v_aln is None:
             return self
 
-        self.rearrangement.v_call = v_aln.target_id.split("|")[-1] if "|" in v_aln.target_id else v_aln.target_id
+        self.rearrangement.v_call = v_aln.target_id
         self.rearrangement.locus = v_aln.locus.value
 
         # alignment positions are 0-indexed, add 1 to start index to convert to 1-based
@@ -91,7 +91,7 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
 
             self.j_gene_alignment_aa = j_aln
 
-            self.rearrangement.j_call = j_aln.target_id.split("|")[-1] if "|" in j_aln.target_id else j_aln.target_id
+            self.rearrangement.j_call = j_aln.target_id
             # alignment positions are 0-indexed, add 1 to start index to convert to 1-based
             self.rearrangement.j_sequence_start_aa = j_aln.q_start + 1
             self.rearrangement.j_sequence_end_aa = j_aln.q_end
@@ -152,11 +152,8 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
 
             c_gene_alignment_aa = offset_alignments(self.j_gene_alignment_aa.q_end, c_aln)
             self.c_gene_alignment_aa = c_gene_alignment_aa
-            self.rearrangement.c_call = (
-                c_gene_alignment_aa.target_id.split("|")[-1]
-                if "|" in c_gene_alignment_aa.target_id
-                else c_gene_alignment_aa.target_id
-            )
+            self.rearrangement.c_call = c_gene_alignment_aa.target_id
+
             # alignment positions are 0-indexed, add 1 to start index to convert to 1-based
             self.rearrangement.c_sequence_start_aa = c_gene_alignment_aa.q_start + 1
             self.rearrangement.c_sequence_end_aa = c_gene_alignment_aa.q_end
@@ -173,17 +170,6 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
 
             self.rearrangement.c_sequence_alignment_aa = c_sequence_alignment
             self.rearrangement.c_germline_alignment_aa = c_germline_alignment
-
-            # 1 based, hence need to add 1
-            assert self.rearrangement.v_sequence_start_aa is not None
-            v_alignment_str = unfold_cigar(self.v_gene_alignment_aa.cigar)
-            deletions_on_v = v_alignment_str.count("D")
-            self.rearrangement.c_alignment_start_aa = (
-                c_gene_alignment_aa.q_start + 1 - self.v_gene_alignment_aa.q_start + deletions_on_v
-            )
-            self.rearrangement.c_alignment_end_aa = (
-                c_gene_alignment_aa.q_end - self.v_gene_alignment_aa.q_start + deletions_on_v
-            )
 
             self.rearrangement.c_score_aa = c_gene_alignment_aa.alignment_score
             self.rearrangement.c_cigar_aa = c_gene_alignment_aa.cigar

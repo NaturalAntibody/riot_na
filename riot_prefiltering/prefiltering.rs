@@ -19,13 +19,14 @@ pub struct Prefiltering {
     top_n: usize,
     modulo_n: usize,
     min_coverage: usize,
+    min_segment_length: usize,
     kmer_genes_lookup: AHashMap<Kmer, Vec<KmerGeneIndexEntry>>,
 }
 
 #[pymethods]
 impl Prefiltering {
     #[new]
-    #[pyo3(signature = (genes, kmer_size, distance_threshold, top_n, modulo_n, min_segment_length=None))]
+    #[pyo3(signature = (genes, kmer_size, distance_threshold, top_n, modulo_n, min_segment_length=None, min_coverage=None))]
     pub fn new(
         genes: HashMap<String, String>,
         kmer_size: usize,
@@ -33,8 +34,10 @@ impl Prefiltering {
         top_n: usize,
         modulo_n: usize,
         min_segment_length: Option<usize>,
+        min_coverage: Option<usize>,
     ) -> Self {
         let resolved_min_segment_length = min_segment_length.unwrap_or(0);
+        let resolved_min_coverage = min_coverage.unwrap_or(20);
 
         let mut prefiltering: Prefiltering = Self {
             kmer_size,
@@ -42,7 +45,8 @@ impl Prefiltering {
             kmer_genes_lookup: AHashMap::with_hasher(RandomState::with_seed(RANDOM_SEED)),
             top_n,
             modulo_n,
-            min_coverage: resolved_min_segment_length,
+            min_coverage: resolved_min_coverage,
+            min_segment_length: resolved_min_segment_length,
         };
 
         for (gene_id, gene_sequence) in genes {
@@ -436,11 +440,11 @@ impl Prefiltering {
     }
 
     fn filter_segments_by_coverage(&self, segments: Vec<SegmentMatch>) -> Vec<SegmentMatch> {
-        segments.into_iter().filter(|segment| self.has_enough_coverage_segment(segment)).collect()
+        segments.into_iter().filter(|segment| self.has_enough_length_segment(segment)).collect()
     }
 
-    fn has_enough_coverage_segment(&self, segment: &SegmentMatch) -> bool {
-        segment.coverage >= self.min_coverage as i32
+    fn has_enough_length_segment(&self, segment: &SegmentMatch) -> bool {
+        (segment.query_end - segment.query_start) >= self.min_segment_length as usize
     }
 
     /// Find non-overlapping segments with gene mappings
@@ -516,7 +520,6 @@ impl Prefiltering {
         // Extend the query boundaries to cover both segments
         let query_start = seg1.query_start.min(seg2.query_start);
         let query_end = seg1.query_end.max(seg2.query_end);
-        let match_count = seg1.match_count.max(seg2.match_count);
         let coverage = seg1.coverage.max(seg2.coverage);
         let min_target_start = seg1.min_target_start.min(seg2.min_target_start);
         let max_target_start = seg1.max_target_start.max(seg2.max_target_start);
@@ -532,7 +535,7 @@ impl Prefiltering {
             query_start: query_start,
             query_end: query_end,
             coverage: coverage,
-            match_count: match_count,
+            match_count: all_genes.len(),
             matching_genes: all_genes,
             min_target_start: min_target_start,
             max_target_start: max_target_start,

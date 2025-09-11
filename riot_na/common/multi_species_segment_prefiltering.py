@@ -24,6 +24,7 @@ class MultiSpeciesSegmentPrefiltering:
         top_n: int,
         modulo_n: int,
         min_segment_length: int = 30,
+        min_coverage: int = 20,
     ):
         self.all_genes = dict(
             map(lambda gene: (gene.species + "|" + gene.locus + "|" + gene.name, gene.sequence), all_genes)
@@ -36,6 +37,7 @@ class MultiSpeciesSegmentPrefiltering:
             distance_threshold=distance_threshold,
             modulo_n=modulo_n,
             min_segment_length=min_segment_length,
+            min_coverage=min_coverage,
         )
 
     def calculate_segment_matches_with_rev_comp(self, query: str) -> SpeciesPrefilteringSegmentResult:

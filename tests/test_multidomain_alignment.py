@@ -2,10 +2,11 @@ from typing import Dict, Optional
 
 import pytest
 
-from riot_na import Locus, Scheme
+from riot_na import Locus, Organism, Scheme
 from riot_na.api.riot_numbering import (
     RiotNumberingAA,
     RiotNumberingNT,
+    create_riot_aa,
     get_or_create_riot_aa,
     get_or_create_riot_nt,
 )
@@ -13,6 +14,11 @@ from riot_na.api.riot_numbering import (
 
 class TestMultiDomainAlignments:
     """Test real-world multi-domain therapeutic antibody scenarios."""
+
+    @pytest.fixture
+    def human_riot_aa(self) -> RiotNumberingAA:
+        """Get amino acid numbering API."""
+        return create_riot_aa(allowed_species=[Organism.HOMO_SAPIENS])
 
     @pytest.fixture
     def riot_aa(self) -> RiotNumberingAA:
@@ -23,6 +29,47 @@ class TestMultiDomainAlignments:
     def riot_nt(self) -> RiotNumberingNT:
         """Get nucleotide numbering API."""
         return get_or_create_riot_nt()
+
+    def test_devextinetug_amino_acid(self, human_riot_aa: RiotNumberingAA):
+        """Test Devextinetug construct (amino acid)."""
+        devextinetug_sequence = (
+            "EIQLQQSGPELGKPGASVKVSCRASGFSFADYYIYWVKQSHGKSLELIGYIDPFNGGDTYNQIFKGKATLTVDKSSSTAFMYLNSLTSEDSAVYYCAAFRNPSFDFWGQGTTLTVSS"
+            "GGGGGGGGSGGGGGGGGG"
+            "QIVLIQSPPIMSASPGEKVTLTCSASSSVSSRYLYWYQQKPGSSPKLWIYGTSNLASGVPARFSGSGSGTSFSLTISSMEAEDAASYFCHQWSSFPFTFGSGTKLEIK"
+        )
+
+        expected_genes: Dict[str, Dict[str, Optional[str]]] = {
+            "domain_1": {
+                "v_call": "IGHV1-69-2*01",
+                "j_call": "IGHJ4*02",
+                "c_call": "IGHG1",
+                "locus": Locus.IGH.value,
+            },
+            "domain_2": {
+                "v_call": "IGKV3-7*04",
+                "j_call": "IGKJ2*01",
+                "c_call": None,
+                "locus": Locus.IGK.value,
+            },
+        }
+
+        results = human_riot_aa.run_on_sequence(
+            "devextinetug", devextinetug_sequence, scheme=Scheme.IMGT, return_all_domains=True
+        )
+
+        assert isinstance(results, list), "Should return list when return_all_domains=True"
+        assert len(results) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
+        for i, domain in enumerate(results):
+            assert (
+                domain.locus == expected_genes[f"domain_{i+1}"]["locus"]
+            ), f"Expected locus {expected_genes[f'domain_{i+1}']['locus']}, got {domain.locus}"
+
+            assert (
+                domain.v_call == expected_genes[f"domain_{i+1}"]["v_call"]
+            ), f"Expected V call {expected_genes[f'domain_{i+1}']['v_call']}, got {domain.v_call}"
+            assert (
+                domain.j_call == expected_genes[f"domain_{i+1}"]["j_call"]
+            ), f"Expected J call {expected_genes[f'domain_{i+1}']['j_call']}, got {domain.j_call}"
 
     def test_scfv_anti_cd19_amino_acid(self, riot_aa: RiotNumberingAA):
         """Test scFv construct (anti-CD19) - VH-linker-VL format (amino acid)."""
@@ -235,7 +282,7 @@ class TestMultiDomainAlignments:
             # VH domain
             "EVQLLESGGGLVQPGGSLRLSCAASGFTFSSYAMSWVRQAPGKGLEWVSAISGSGGSTYYADSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYCAK"
             # Short linker (5 amino acids - forces inter-chain pairing)
-            "GGGGS"
+            "GGGGGGGS"
             # VL domain
             "DIQMTQSPSSLSASVGDRVTITCRASQSISSYLNWYQQKPGKAPKLLIYAASSLQSGVPSRFSGSGSGTDFTLTISSLQPEDFATYYCQQSYSTPLT"
         )
