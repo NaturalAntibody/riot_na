@@ -1,10 +1,3 @@
-"""
-Comprehensive Python API tests for the prefiltering module.
-
-These tests cover all API usage scenarios for the riot_na prefiltering functionality,
-separated by sequence type (nucleotide vs amino acid).
-"""
-
 from typing import Dict
 
 import pytest
