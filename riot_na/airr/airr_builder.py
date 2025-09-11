@@ -245,6 +245,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
 
         v_aln = alignments.aa_alignments.v
         j_aln = alignments.aa_alignments.j
+        c_aln = alignments.aa_alignments.c
 
         aligned_query_segment = alignments.translated_query
 
@@ -273,6 +274,17 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
             self.rearrangement.j_germline_alignment_aa = j_germline_alignment
 
             germline_segment = v_germline_segment + j_germline_segment
+
+        if c_aln is not None:
+            c_sequence_segment = c_aln.q_seq[c_aln.q_start : c_aln.q_end]
+            c_germline_segment = c_aln.t_seq[c_aln.t_start : c_aln.t_end]
+
+            c_sequence_alignment, c_germline_alignment = align_sequences(
+                c_sequence_segment, c_germline_segment, unfold_cigar(c_aln.cigar)
+            )
+
+            self.rearrangement.c_sequence_alignment_aa = c_sequence_alignment
+            self.rearrangement.c_germline_alignment_aa = c_germline_alignment
 
         v_aln_str = unfold_cigar(v_aln.cigar)
         j_aln_str = unfold_cigar(j_aln.cigar) if j_aln else ""
@@ -379,11 +391,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         if self.v_gene_alignment is None:
             return self.rearrangement
 
-        alignment_end = (
-            self.c_gene_alignment.q_end
-            if self.c_gene_alignment
-            else self.j_gene_alignment.q_end if self.j_gene_alignment else self.v_gene_alignment.q_end
-        )
+        alignment_end = self.j_gene_alignment.q_end if self.j_gene_alignment else self.v_gene_alignment.q_end
         sequence_alignment_segment = self.sequence[self.v_gene_alignment.q_start : alignment_end]
 
         v_germline_segment = self.v_gene_alignment.t_seq[self.v_gene_alignment.t_start : self.v_gene_alignment.t_end]

@@ -40,7 +40,6 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
         self.c_gene_alignment_aa: Optional[AlignmentEntryAA] = None
         self.c_gene_sequence_aa: Optional[str] = None
 
-        self.scheme_alingment: Optional[SchemeAlignment] = None
         self.aa_offsets: Optional[RegionOffsetsAA] = None
 
     def with_v_gene_alignment_aa(self, v_aln: AlignmentEntryAA):

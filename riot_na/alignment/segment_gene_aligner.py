@@ -1,16 +1,3 @@
-#!/usr/bin/env python3
-"""
-Segment-based Gene Aligner
-
-This module provides segment-centric alignment functionality that leverages the new
-segment-centric prefiltering to return alignments for each domain/segment separately.
-This is particularly useful for:
-- scFv sequences (separate VL and VH alignments)
-- Fusion proteins (individual domain alignments)
-- Multi-domain constructs
-- Domain-specific alignment quality assessment
-"""
-
 import os
 from dataclasses import dataclass
 from functools import partial
