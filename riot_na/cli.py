@@ -57,6 +57,12 @@ from riot_na.data.model import (
         "This option impacts only amino acid sequences."
     ),
 )
+@click.option(
+    "--multiple-domains",
+    type=bool,
+    default=False,
+    help=("Return all domains of multiple domain proteins."),
+)
 def run_riot(
     input_file: Optional[Path],
     sequence: Optional[str],
@@ -66,6 +72,7 @@ def run_riot(
     input_type: InputType,
     ncpu: int,
     extend_alignment: bool,
+    multiple_domains: bool,
 ):
     species_list = [species] if species else None
     if input_file and input_file.exists():
@@ -81,6 +88,7 @@ def run_riot(
             allowed_species=species_list,
             n_processes=ncpu,
             input_type=input_type,
+            return_all_domains=multiple_domains,
         )
         end = time.perf_counter()
         elapsed_time = end - start
@@ -92,18 +100,28 @@ def run_riot(
             case InputType.NT:
                 numbering_nt = create_riot_nt(allowed_species=species_list, db_dir=GENE_DB_DIR)
                 record_type = AirrRearrangementEntryNT
-                result = numbering_nt.run_on_sequence(header="-", query_sequence=sequence, scheme=scheme)
+                result = numbering_nt.run_on_sequence(
+                    header="-", query_sequence=sequence, scheme=scheme, return_all_domains=multiple_domains
+                )
             case InputType.AA:
                 numbering_aa = create_riot_aa(allowed_species=species_list, db_dir=GENE_DB_DIR)
                 record_type = AirrRearrangementEntryAA
                 result = numbering_aa.run_on_sequence(
-                    header="-", sequence_aa=sequence, scheme=scheme, extend_alignment=extend_alignment
+                    header="-",
+                    sequence_aa=sequence,
+                    scheme=scheme,
+                    extend_alignment=extend_alignment,
+                    return_all_domains=multiple_domains,
                 )
 
         if output_file:
             write_airr_iter_to_csv(output_file, record_type, [result])
         else:
-            print(result.__dict__)
+            if not multiple_domains:
+                print(result.__dict__)
+            else:
+                for single_result in result:
+                    print(single_result.__dict__)
 
     else:
         print("Need to specify input sequence or FASTA file!")
