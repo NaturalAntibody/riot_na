@@ -219,7 +219,9 @@ class TestPrefilteringAminoAcidAPI:
         return {
             # Heavy chain V genes (amino acid)
             "IGHV1-2*01": "QVQLVQSGAEVKKPGSSVKVSCKASGYTFTSYAISWVRQAPGQGLEWMGRIIPILGIANYAQKFQGRVTITADKSTSTAYMELSSLRSEDTAVYYCAR",
+            "IGHV1-69-2*01": "EVQLVQSGAEVKKPGATVKISCKVSGYTFTDYYMHWVQQAPGKGLEWMGLVDPEDGETIYAEKFQGRVTITADTSTDTAYMELSSLRSEDTAVYYCAT",
             "IGHV3-33*01": "EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMHWVRQAPGKGLEWVAVIYHGSNKYYANPVKGRFTISRDNAKNSLYLQMNSLRAEDTAVYYCAR",
+            "IGHV1-3*01": "QVQLVQSGAEVKKPGASVKVSCKASGYTFTSYAMHWVRQAPGQRLEWMGWINAGNGNTKYSQKFQGRVTITRDTSASTAYMELSSLRSEDTAVYYCAR",
             "IGHV4-39*01": "QVQLQESGPGLVKPSETLSLTCAVYGGSFSGYYWSWIRQPPGKGLEWIGEINHSGSTNYPDSLKSRVISIVDTSKNQFSLKLSSVTAADTAVYYCAR",
             # Kappa light chain V genes (amino acid)
             "IGKV1-39*01": "DIQMTQSPSSLSASVGDRVTITCRASQGISSWLAWYQQKPGKAPKLLIYAASSLQSGVPSRFSGSGSGTDFTLTISSLQPEDFATYYCQQANSFPYT",
@@ -250,17 +252,6 @@ class TestPrefilteringAminoAcidAPI:
             # Lambda light chain V domain (amino acid)
             "QSALTQPASVSGSPGQSITISCTGTSSDVGGYNYVSWYQQHPGKAPKLMIYDVSNRPSGVSNRFSGSKSGNTASLTISGLQAEDEADYYCSSYTSSSTLV"
         )
-
-    def test_prefiltering_instantiation_basic(self, basic_amino_acid_genes):
-        """Test basic Prefiltering instantiation with amino acid genes."""
-        prefiltering = riot_na.Prefiltering(
-            genes=basic_amino_acid_genes,
-            kmer_size=3,  # Smaller kmer size for amino acids
-            distance_threshold=1,
-            top_n=5,
-            modulo_n=1,
-        )
-        assert prefiltering is not None
 
     def test_calculate_top_matches_basic(self, basic_amino_acid_genes):
         """Test basic top matches calculation with amino acid sequences."""
@@ -297,14 +288,14 @@ class TestPrefilteringAminoAcidAPI:
         prefiltering = riot_na.Prefiltering(
             genes=amino_acid_immunoglobulin_genes,
             kmer_size=3,  # Appropriate for amino acids
-            distance_threshold=1,
+            distance_threshold=3,
             top_n=10,
             modulo_n=1,
-            min_segment_length=10,  # Shorter for amino acids
+            min_segment_length=60,  # Shorter for amino acids
         )
 
         # Use an amino acid sequence that should match multiple genes
-        query = "EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMHWVRQAPGKGLEWVAVIYHGSNKYYANPVKGRFTISRDNAKNSLYLQMNSLRAEDTAVYYCAR"
+        query = "EIQLQQSGPELGKPGASVKVSCRASGFSFADYYIYWVKQSHGKSLELIGYIDPFNGGDTYNQIFKGKATLTVDKSSSTAFMYLNSLTSEDSAVYYCAAFRNPSFDFWGQGTTLTVSSGGGGGGGGSGGGGGGGGGQIVLIQSPPIMSASPGEKVTLTCSASSSVSSRYLYWYQQKPGSSPKLWIYGTSNLASGVPARFSGSGSGTSFSLTISSMEAEDAASYFCHQWSSFPFTFGSGTKLEIK"
 
         result = prefiltering.calculate_segment_matches(query)
 
@@ -313,6 +304,7 @@ class TestPrefilteringAminoAcidAPI:
         assert result.query == query
         assert result.rev_comp_query == "-"  # No reverse complement in this method
         assert isinstance(result.segments, list)
+        assert len(result.segments) >= 1 and len(result.segments) <= 2
 
         # Check segment structure if any found
         if len(result.segments) > 0:
@@ -337,7 +329,7 @@ class TestPrefilteringAminoAcidAPI:
             distance_threshold=1,
             top_n=10,
             modulo_n=1,
-            min_segment_length=8,  # Shorter for amino acids
+            min_segment_length=8,
         )
 
         result = prefiltering.calculate_segment_matches_with_rev_comp(multi_domain_amino_acid_sequence)
@@ -349,6 +341,28 @@ class TestPrefilteringAminoAcidAPI:
         segments = sorted(result.segments, key=lambda s: s.query_start)
         for i in range(len(segments) - 1):
             assert segments[i].query_end <= segments[i + 1].query_start, "Segments should not overlap"
+
+    def test_therapeutic_scenarios(self, amino_acid_immunoglobulin_genes):
+        """Test therapeutic scenarios with amino acid sequences."""
+        prefiltering = riot_na.Prefiltering(
+            genes=amino_acid_immunoglobulin_genes,
+            kmer_size=3,  # Appropriate for amino acids
+            distance_threshold=4,
+            top_n=10,
+            modulo_n=1,
+            min_segment_length=60,
+            min_coverage=20,
+        )
+
+        query = "EIQLQQSGPELGKPGASVKVSCRASGFSFADYYIYWVKQSHGKSLELIGYIDPFNGGDTYNQIFKGKATLTVDKSSSTAFMYLNSLTSEDSAVYYCAAFRNPSFDFWGQGTTLTVSS"
+        result = prefiltering.calculate_segment_matches(query)
+        assert len(result.segments) > 0
+        assert result.segments[0].query_start == 5
+        assert result.segments[0].query_end == 97
+        assert result.segments[0].coverage == 30
+        assert result.segments[0].matching_genes[0].gene_id == "IGHV1-2*01"
+        assert result.segments[0].matching_genes[1].gene_id == "IGHV1-3*01"
+        assert result.segments[0].matching_genes[2].gene_id == "IGHV1-69-2*01"
 
     def test_query_length_handling(self, basic_amino_acid_genes):
         """Test behavior with amino acid queries of different lengths."""

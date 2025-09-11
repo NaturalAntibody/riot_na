@@ -67,7 +67,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         if v_aln is None:
             return self
 
-        self.rearrangement.v_call = v_aln.target_id.split("|")[-1] if "|" in v_aln.target_id else v_aln.target_id
+        self.rearrangement.v_call = v_aln.target_id
         self.rearrangement.locus = v_aln.locus.value
 
         self.rearrangement.v_sequence_start = v_aln.q_start + 1
@@ -108,7 +108,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
 
             self.j_gene_alignment = j_aln
 
-            self.rearrangement.j_call = j_aln.target_id.split("|")[-1] if "|" in j_aln.target_id else j_aln.target_id
+            self.rearrangement.j_call = j_aln.target_id
             # alignment positions are 0-indexed, add 1 to start index to convert to 1-based
             self.rearrangement.j_sequence_start = j_aln.q_start + 1
             self.rearrangement.j_sequence_end = j_aln.q_end
@@ -158,7 +158,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
 
         self.c_gene_alignment = c_aln
 
-        self.rearrangement.c_call = c_aln.target_id.split("|")[-1] if "|" in c_aln.target_id else c_aln.target_id
+        self.rearrangement.c_call = c_aln.target_id
         # alignment positions are 0-indexed
         self.rearrangement.c_sequence_start = c_aln.q_start + 1
         self.rearrangement.c_sequence_end = c_aln.q_end
@@ -195,7 +195,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
 
         self.d_gene_alignment = d_aln
 
-        self.rearrangement.d_call = d_aln.target_id.split("|")[-1] if "|" in d_aln.target_id else d_aln.target_id
+        self.rearrangement.d_call = d_aln.target_id
         # alignment positions are 0-indexed
         self.rearrangement.d_sequence_start = d_aln.q_start + 1
         self.rearrangement.d_sequence_end = d_aln.q_end

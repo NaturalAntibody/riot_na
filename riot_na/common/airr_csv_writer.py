@@ -22,7 +22,11 @@ class AirrRearrangementEntryWriter:
         self._fieldnames = [x.name for x in fields(cls)]
         self._writer = csv.DictWriter(file_handle, dialect=dialect, fieldnames=self._fieldnames, **fmtparams)
 
-    def write(self, data: Iterable[AirrRearrangementEntry_co], skip_header: bool = False):
+    def write(
+        self,
+        data: Iterable[AirrRearrangementEntry_co] | Iterable[list[AirrRearrangementEntry_co]],
+        skip_header: bool = False,
+    ):
         if not skip_header:
             self._writer.writeheader()
 

@@ -18,6 +18,7 @@ mod prefiltering_tests {
             5,  // top_n
             1,  // modulo_n
             None, // min_segment_length
+            None, // min_coverage
         );
 
         let query_bytes = "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGT".as_bytes().to_vec();
@@ -25,6 +26,28 @@ mod prefiltering_tests {
 
         assert!(!matches.is_empty());
         assert!(matches.iter().any(|(gene_id, _)| gene_id == "TEST_GENE"));
+    }
+
+    #[test]
+    fn test_amino_acids_segment_matching() {
+        // Test basic kmer matching functionality
+        let mut genes = HashMap::new();
+        genes.insert("TEST_GENE".to_string(), "QVQLVQSGAEVKKPGASVKVSCKASGYTFTSYAMHWVRQAPGQRLEWMGWINAGNGNTKYSQKFQGRVTITRDTSASTAYMELSSLRSEDTAVYYCAR".to_string());
+
+        let prefiltering = Prefiltering::new(
+            genes,
+            3,  // kmer_size
+            3,  // distance_threshold
+            5,  // top_n
+            1,  // modulo_n
+            Some(60), // min_segment_length
+            Some(20), // min_coverage
+        );
+
+        let query_bytes = "EIQLQQSGPELGKPGASVKVSCRASGFSFADYYIYWVKQSHGKSLELIGYIDPFNGGDTYNQIFKGKATLTVDKSSSTAFMYLNSLTSEDSAVYYCAAFRNPSFDFWGQGTTLTVSS".as_bytes().to_vec();
+        let matches = prefiltering.find_non_overlapping_segments(&query_bytes, false);
+
+        assert!(!matches.is_empty());
     }
 
     #[test]
@@ -40,6 +63,7 @@ mod prefiltering_tests {
             5,  // top_n
             1,  // modulo_n
             None, // min_segment_length
+            None, // min_coverage
         );
 
         let query_bytes = "ACGT".as_bytes().to_vec();
@@ -60,6 +84,7 @@ mod prefiltering_tests {
             1,  // distance_threshold
             5,  // top_n
             1,  // modulo_n
+            None,
             None,
         );
 
@@ -87,6 +112,7 @@ mod prefiltering_tests {
             5,  // top_n
             1,  // modulo_n
             None,
+            None,
         );
 
         // Test with minimal query
@@ -111,6 +137,7 @@ mod prefiltering_tests {
             1,  // distance_threshold
             10,  // top_n
             1,  // modulo_n
+            None,
             None,
         );
 
@@ -138,6 +165,7 @@ mod prefiltering_tests {
             5,  // top_n
             1,  // modulo_n
             Some(10), // min_segment_length
+            None,
         );
 
         let query = "ACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTACGTTGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCATGCA";
@@ -171,6 +199,7 @@ mod prefiltering_tests {
             5,  // top_n
             2,  // modulo_n
             Some(60), // min_segment_length
+            None,
         );
 
         let query = "CTTCCGATCTATTTCCCTTAGACTCTCCTGTGCAGCGTCTGGATTCAGAGACAACGCCAAGAACTCCCTGTATCTGGAAATGAACAGTCTGAGACCTGAGGACACGGCCCTCTATTACTGTGTGAAAGATCGGGGTGGTGCGGGGAATTCGCCCACGTACTACTTTGACTACTGGGGCCAGGGAACCCTGGTCACCGTCTCCTCAGCCTCCACCAAGGGCCCATCGGTCTTCCCCCTGGCGCGTACGTCCGAGATCGG";
@@ -204,6 +233,7 @@ mod prefiltering_tests {
             5,  // top_n
             1,  // modulo_n
             None,
+            None,
         );
 
         // Basic functionality test
@@ -227,6 +257,7 @@ mod prefiltering_tests {
             10, // top_n
             1,  // modulo_n = 1 (check every position)
             None,
+            None,
         );
 
         let prefiltering_mod3 = Prefiltering::new(
@@ -235,6 +266,7 @@ mod prefiltering_tests {
             1,  // distance_threshold
             10, // top_n
             3,  // modulo_n = 3 (check every 3rd position)
+            None,
             None,
         );
 

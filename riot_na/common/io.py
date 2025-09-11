@@ -33,10 +33,4 @@ def write_airr_iter_to_csv(
 ):
     output_file_path.parent.mkdir(exist_ok=True, parents=True)
     with open(output_file_path, "w") as output:
-        # Flatten airr_iter if it contains lists of entries
-        for entry in airr_iter:
-            if isinstance(entry, list):
-                for sub_entry in entry:
-                    AirrRearrangementEntryWriter(output, cls).write([sub_entry])
-            else:
-                AirrRearrangementEntryWriter(output, cls).write([entry])
+        AirrRearrangementEntryWriter(output, cls).write(airr_iter)
