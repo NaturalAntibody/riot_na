@@ -8,11 +8,11 @@ from Bio import SeqIO
 from Bio.SeqRecord import SeqRecord
 from skbio.alignment import StripedSmithWaterman  # type: ignore
 
-from riot_na.alignment.gene_match_utils import create_gene_lookup
 from riot_na.alignment.skbio_alignment import (
     align_aa,  # type: ignore  # pylint: disable=import-error
 )
 from riot_na.alignment.skbio_alignment import align
+from riot_na.common.gene_match_utils import create_gene_lookup
 from riot_na.common.multi_species_prefiltering import MultiSpeciesPrefiltering
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
