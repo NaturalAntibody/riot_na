@@ -2,7 +2,7 @@ import json
 import logging
 from dataclasses import asdict
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Sequence
 
 from skbio.alignment import StripedSmithWaterman  # type: ignore
 
@@ -11,18 +11,21 @@ from riot_na.alignment.gene_aligner import (
     GeneAlignerAA,
     create_aa_c_gene_aligner,
     create_aa_j_gene_aligner,
+    create_aa_v_gene_aligner,
 )
 from riot_na.alignment.segment_gene_aligner import (
     AA_ALIGNER_PARAMS,
-    SegmentAlignmentResultAA,
     SegmentGeneAlignerAA,
-    create_aa_v_gene_aligner,
+)
+from riot_na.alignment.segment_gene_aligner import (
+    create_aa_v_gene_aligner as create_segment_aa_v_gene_aligner,
 )
 from riot_na.alignment.skbio_alignment import align_aa
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
     AlignmentEntryAA,
     AlignmentsAA,
+    AlignmentSegment,
     AlignmentsNT,
     InternalAlignmentEntryAA,
     Locus,
@@ -36,7 +39,7 @@ logger = logging.getLogger(__name__)
 class VJCAlignerAA:
     def __init__(
         self,
-        v_aligner: SegmentGeneAlignerAA,
+        v_aligner: SegmentGeneAlignerAA | GeneAlignerAA,
         j_aligners: dict[Organism, dict[Locus, GeneAlignerAA]],
         c_aligners: Optional[dict[Organism, dict[Locus, GeneAlignerAA]]] = None,
     ) -> None:
@@ -47,62 +50,66 @@ class VJCAlignerAA:
     def produce_aa_alignments(self, query: str) -> list[AlignmentsAA]:
         results = []
 
-        segment_alignment_result: SegmentAlignmentResultAA = self.v_aligner.align_segments(query)
-        v_segment_alignments = segment_alignment_result.segment_alignments
+        v_segment_alignments: Sequence[AlignmentSegment] = self.v_aligner.align(query)
 
         for v_aa_segment_alignment in v_segment_alignments:  # pylint: disable=too-many-nested-blocks
-            result = AlignmentsAA()
             try:
-                result.segment_start = v_aa_segment_alignment.segment_start
-                result.segment_end = v_aa_segment_alignment.segment_end
-
-                v_aa_alignment = v_aa_segment_alignment.best_alignment
-                if v_aa_alignment is None:
-                    continue
-
-                result.v = v_aa_alignment
-                query_j = v_aa_alignment.q_seq[v_aa_alignment.q_end :]
-                if query_j:
-                    # align j genes
-                    species = v_aa_alignment.species
-                    locus = v_aa_alignment.locus
-
-                    j_aligner = self.j_aligners[species][locus]
-                    j_aa_alignment = j_aligner.align(query_j)
-
-                    if j_aa_alignment is None:
-                        continue
-
-                    result.j = j_aa_alignment
-
-                    if self.c_aligners:
-                        query_c = query_j[j_aa_alignment.q_end :]
-                        if query_c:
-                            c_organism = species if species == Organism.CUSTOM else Organism.HOMO_SAPIENS
-                            c_aligner = self.c_aligners[c_organism][locus]
-                            assert c_aligner is not None
-                            c_aa_alignment = c_aligner.align(query_c)
-                            if c_aa_alignment is not None:
-                                result.c = c_aa_alignment
+                result = self._produce_vjc_aa_alignment(v_aa_segment_alignment)
+                results.append(result)
             except ValueError as e:
                 logger.error(
-                    "Error aligning segment %s:%s: %s",
-                    v_aa_segment_alignment.segment_start,
-                    v_aa_segment_alignment.segment_end,
+                    "Error aligning segment %s due to %s",
+                    (
+                        v_aa_segment_alignment.best_alignment.q_seq
+                        if v_aa_segment_alignment.best_alignment
+                        else "unknown sequence"
+                    ),
                     e,
                 )
-                continue
-            finally:
-                if result.v or result.j or result.c:
-                    results.append(result)
-
         return results
+
+    def _produce_vjc_aa_alignment(self, v_aa_segment_alignment: AlignmentSegment) -> AlignmentsAA:
+        result = AlignmentsAA()
+        result.segment_start = v_aa_segment_alignment.segment_start
+        result.segment_end = v_aa_segment_alignment.segment_end
+
+        v_aa_alignment = v_aa_segment_alignment.best_alignment
+        if v_aa_alignment is None:
+            return result
+
+        result.v = v_aa_alignment
+
+        query_j = v_aa_alignment.q_seq[v_aa_alignment.q_end :]
+        if query_j:
+            # align j genes
+            species = v_aa_alignment.species
+            locus = v_aa_alignment.locus
+
+            j_aligner = self.j_aligners[species][locus]
+            j_aa_alignment = j_aligner.align(query_j)[0].best_alignment
+
+            if j_aa_alignment is None:
+                return result
+
+            result.j = j_aa_alignment
+
+            if self.c_aligners:
+                query_c = query_j[j_aa_alignment.q_end :]
+                if query_c:
+                    c_organism = species if species == Organism.CUSTOM else Organism.HOMO_SAPIENS
+                    c_aligner = self.c_aligners[c_organism][locus]
+                    assert c_aligner is not None
+                    c_aa_alignment = c_aligner.align(query_c)[0].best_alignment
+                    if c_aa_alignment is not None:
+                        result.c = c_aa_alignment
+
+        return result
 
 
 class VJCAlignmentTranslatorAA:
     def __init__(
         self,
-        v_aligner: SegmentGeneAlignerAA,
+        v_aligner: GeneAlignerAA,
         j_aligners: dict[Organism, dict[Locus, GeneAlignerAA]],
         c_aligners: Optional[dict[Organism, dict[Locus, GeneAlignerAA]]] = None,
     ) -> None:
@@ -322,12 +329,18 @@ class VJCAlignmentTranslatorAA:
         return masked_aa_for_c, c_gene_id, c_gene_aa, c_aa_alignment
 
 
-def create_vjc_aligner_aa(allowed_species: Optional[list[Organism]] = None, db_dir: Path = GENE_DB_DIR) -> VJCAlignerAA:
+def create_vjc_aligner_aa(
+    allowed_species: Optional[list[Organism]] = None, db_dir: Path = GENE_DB_DIR, use_segment_aligner: bool = False
+) -> VJCAlignerAA:
     if not allowed_species:
         allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS]
 
     aa_genes_dir = db_dir / "gene_db" / "aa_genes_deduplicated"
-    v_aligner = create_aa_v_gene_aligner(allowed_species=allowed_species, aa_genes_dir=aa_genes_dir)
+    v_aligner = (
+        create_segment_aa_v_gene_aligner(allowed_species=allowed_species, aa_genes_dir=aa_genes_dir)
+        if use_segment_aligner
+        else create_aa_v_gene_aligner(allowed_species=allowed_species, aa_genes_dir=aa_genes_dir)
+    )
 
     j_aligners: dict[Organism, dict[Locus, GeneAlignerAA]] = {}
 

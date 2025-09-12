@@ -18,6 +18,7 @@ from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
     AlignmentEntryAA,
     AlignmentEntryNT,
+    AlignmentSegment,
     Gene,
     GeneAA,
     GermlineGene,
@@ -119,12 +120,10 @@ class GeneAligner:
 
         return result
 
-    def align(self, query: str, both_strains: bool) -> Optional[AlignmentEntryNT]:
+    def align(self, query: str, both_strains: bool) -> Sequence[AlignmentSegment]:
         prefiltering_result = self._prefilter(query, both_strains)
         alignments = self._align_sequences(query, prefiltering_result)
-        alignments.sort()
-
-        return alignments[0] if len(alignments) > 0 else None
+        return [AlignmentSegment(alignments)]
 
 
 AA_ALIGNER_PARAMS = {
@@ -161,7 +160,9 @@ class GeneAlignerAA:
         """Prefilter genes and return species-aware gene matches."""
         return self.prefiltering.calculate_top_matches(query)
 
-    def _align_sequences(self, query: str, prefiltering_result: SpeciesPrefilteringResult) -> list[AlignmentEntryAA]:
+    def _align_sequences(
+        self, query: str, prefiltering_result: SpeciesPrefilteringResult
+    ) -> Sequence[AlignmentEntryAA]:
         aligner = StripedSmithWaterman(query, **AA_ALIGNER_PARAMS)
 
         result = []
@@ -210,13 +211,10 @@ class GeneAlignerAA:
 
         return result
 
-    def align(self, query: str) -> Optional[AlignmentEntryAA]:
+    def align(self, query: str) -> Sequence[AlignmentSegment]:
         prefiltering_result = self._prefilter(query)
         alignments = self._align_sequences(query, prefiltering_result)
-
-        alignments.sort()
-
-        return alignments[0] if len(alignments) > 0 else None
+        return [AlignmentSegment(alignments)]
 
 
 def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> dict:
@@ -373,7 +371,7 @@ def read_genes(path: Path, parsing_fn):
     return result
 
 
-def create_v_gene_aligner(allowed_species: list[Organism], db_dir: Path = GENE_DB_DIR) -> GeneAligner:
+def create_v_gene_aligner(allowed_species: Sequence[Organism], db_dir: Path = GENE_DB_DIR) -> GeneAligner:
     genes = []
 
     if not allowed_species:
@@ -415,7 +413,7 @@ def create_aligner(
     return genes_aligner
 
 
-def create_aa_v_gene_aligner(allowed_species: list[Organism], aa_genes_dir: Path) -> GeneAlignerAA:
+def create_aa_v_gene_aligner(allowed_species: Sequence[Organism], aa_genes_dir: Path) -> GeneAlignerAA:
     genes = []
 
     if not allowed_species:

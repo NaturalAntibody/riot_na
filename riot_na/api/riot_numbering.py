@@ -5,8 +5,8 @@ from typing import Optional
 
 from cachetools import cached
 
-from riot_na.airr.airr_builder import AirrBuilder
-from riot_na.airr.airr_builder_aa import AirrBuilderAA
+from riot_na.airr.airr_builder import AirrBuilder, SegmentedAirrBuilder
+from riot_na.airr.airr_builder_aa import AirrBuilderAA, SegmentedAirrBuilderAA
 from riot_na.alignment.aa_gene_alignments import (
     VJCAlignerAA,
     VJCAlignmentTranslatorAA,
@@ -43,17 +43,18 @@ class RiotNumberingNT:
         vdjc_aligner_nt: VDJCAlignerNT,
         vjc_alignment_translator_aa: VJCAlignmentTranslatorAA,
         scheme_aligner: SchemeAligner,
+        return_all_domains: bool = False,
     ):
         self.vdjc_aligner = vdjc_aligner_nt
         self.vjc_alignment_translator_aa = vjc_alignment_translator_aa
         self.scheme_aligner = scheme_aligner
+        self.return_all_domains = return_all_domains
 
     def run_on_sequence(
         self,
         header: str,
         query_sequence: str,
         scheme: Scheme = Scheme.IMGT,
-        return_all_domains: bool = False,
         extend_alignment: bool = True,
     ) -> AirrRearrangementEntryNT | list[AirrRearrangementEntryNT]:  # pylint: disable=too-many-statements
         """
@@ -134,8 +135,10 @@ class RiotNumberingNT:
 
             # produce airr result
             # this is separated on purpose to enable other output formats
-            airr_builder = AirrBuilder(header, sequence, scheme, query_sequence)
-            airr_builder.with_segment_start_end(segment_start, segment_end)
+            airr_builder = AirrBuilder(header, sequence, scheme)
+            if self.return_all_domains:
+                airr_builder = SegmentedAirrBuilder(header, sequence, scheme, query_sequence)
+                airr_builder.with_segment_start_end(segment_start, segment_end)
 
             if alignment.v:
                 airr_builder.with_v_gene_alignment(alignment.v)
@@ -173,18 +176,25 @@ class RiotNumberingNT:
             results.append(result)
 
         if not results:
-            results = [AirrBuilder(header, sequence, scheme, query_sequence).build()]
+            results = [
+                (
+                    AirrBuilder(header, sequence, scheme).build()
+                    if not self.return_all_domains
+                    else SegmentedAirrBuilder(header, sequence, scheme, query_sequence).build()
+                )
+            ]
 
-        if return_all_domains:
+        if self.return_all_domains:
             return results
 
         return sorted(results)[-1]
 
 
 class RiotNumberingAA:
-    def __init__(self, vjc_aligner_aa: VJCAlignerAA, scheme_aligner: SchemeAligner):
+    def __init__(self, vjc_aligner_aa: VJCAlignerAA, scheme_aligner: SchemeAligner, return_all_domains: bool = False):
         self.vjc_aligner_aa = vjc_aligner_aa
         self.scheme_aligner = scheme_aligner
+        self.return_all_domains = return_all_domains
 
     def run_on_sequence(
         self,
@@ -192,7 +202,6 @@ class RiotNumberingAA:
         sequence_aa: str,
         scheme: Scheme = Scheme.IMGT,
         extend_alignment: bool = True,
-        return_all_domains: bool = False,
     ) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]:  # pylint: disable=too-many-statements
         """
         Align and number amino acid sequence.
@@ -260,8 +269,10 @@ class RiotNumberingAA:
 
             # produce airr result
             # this is separated on purpose to enable other output formats
-            airr_builder = AirrBuilderAA(header, sequence_aa, scheme, query_sequence)
-            airr_builder.with_segment_start_end(segment_start, segment_end)
+            airr_builder = AirrBuilderAA(header, sequence_aa, scheme)
+            if self.return_all_domains:
+                airr_builder = SegmentedAirrBuilderAA(header, sequence_aa, scheme, query_sequence)
+                airr_builder.with_segment_start_end(segment_start, segment_end)
 
             if alignment.v:
                 airr_builder.with_v_gene_alignment_aa(alignment.v)
@@ -291,9 +302,15 @@ class RiotNumberingAA:
             results.append(result)
 
         if not results:
-            results = [AirrBuilderAA(header, sequence_aa, scheme, query_sequence).build()]
+            results = [
+                (
+                    AirrBuilderAA(header, sequence_aa, scheme).build()
+                    if not self.return_all_domains
+                    else SegmentedAirrBuilderAA(header, sequence_aa, scheme, query_sequence).build()
+                )
+            ]
 
-        if return_all_domains:
+        if self.return_all_domains:
             return results
 
         return sorted(results)[-1]
@@ -301,6 +318,7 @@ class RiotNumberingAA:
 
 def create_riot_nt(
     allowed_species: Optional[list[Organism]] = None,
+    return_all_domains: bool = False,
     db_dir: Path = GENE_DB_DIR,
 ) -> RiotNumberingNT:
     """
@@ -309,20 +327,24 @@ def create_riot_nt(
     Parameters:
     -----------
     - allowed_species : Limit gene database to specified Organism list (default use all species - mouse and human).
+    - return_all_domains: If True, return all domains of multiple domain proteins.
     - db_dir : Path to gene and scheme mappings database directory (default use embeded database).
 
     Returns:
     -----------
     RiotNumberingNT object used for performing alignment and numbering.
     """
-    vdjc_aligner_nt = create_vdjc_aligner_nt(allowed_species=allowed_species, db_dir=db_dir)
+    vdjc_aligner_nt = create_vdjc_aligner_nt(
+        allowed_species=allowed_species, db_dir=db_dir, use_segment_aligner=return_all_domains
+    )
     vjc_alignment_translator_aa = create_vjc_alignment_translator_aa(allowed_species=allowed_species, db_dir=db_dir)
     scheme_aligner = SchemeAligner(allowed_species=allowed_species, db_dir=db_dir)
-    return RiotNumberingNT(vdjc_aligner_nt, vjc_alignment_translator_aa, scheme_aligner)
+    return RiotNumberingNT(vdjc_aligner_nt, vjc_alignment_translator_aa, scheme_aligner, return_all_domains)
 
 
 def create_riot_aa(
     allowed_species: Optional[list[Organism]] = None,
+    return_all_domains: bool = False,
     db_dir: Path = GENE_DB_DIR,
 ) -> RiotNumberingAA:
     """
@@ -331,6 +353,7 @@ def create_riot_aa(
     Parameters:
     -----------
     - allowed_species : Limit gene database to specified Organism list (default use all species - mouse and human).
+    - return_all_domains: If True, return all domains of multiple domain proteins.
     - db_dir : Path to gene and scheme mappings database directory (default use embeded database).
 
     Returns:
@@ -340,9 +363,10 @@ def create_riot_aa(
     vjc_aligner_aa = create_vjc_aligner_aa(
         allowed_species=allowed_species,
         db_dir=db_dir,
+        use_segment_aligner=return_all_domains,
     )
     scheme_aligner = SchemeAligner(allowed_species=allowed_species, db_dir=db_dir)
-    return RiotNumberingAA(vjc_aligner_aa, scheme_aligner)
+    return RiotNumberingAA(vjc_aligner_aa, scheme_aligner, return_all_domains)
 
 
 @cached({})

@@ -14,21 +14,18 @@ from riot_na.data.model import (
     RegionOffsetsAA,
     Scheme,
     SchemeAlignment,
+    SegmentedAirrRearrangementEntryAA,
 )
 
 
 class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
-    def __init__(self, sequence_header: str, sequence: str, scheme: Scheme, query_sequence: str):
+    def __init__(self, sequence_header: str, sequence: str, scheme: Scheme):
         self.sequence_header = sequence_header
         self.sequence_aa = sequence
         self.scheme = scheme
-        self.query_sequence = query_sequence
 
         self.rearrangement = AirrRearrangementEntryAA(
-            sequence_header=sequence_header,
-            sequence_aa=sequence,
-            numbering_scheme=scheme.value,
-            query_sequence_aa=query_sequence,
+            sequence_header=sequence_header, sequence_aa=sequence, numbering_scheme=scheme.value
         )
 
         self.v_gene_sequence_aa: Optional[str] = None
@@ -231,11 +228,6 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
         self.rearrangement.exc = exc
         return self
 
-    def with_segment_start_end(self, segment_start: int, segment_end: int):
-        self.rearrangement.segment_start = segment_start + 1
-        self.rearrangement.segment_end = segment_end
-        return self
-
     def build(self):  # pylint: disable=too-many-statements
         if self.v_gene_alignment_aa is None:  # or self.rearrangement.sequence_alignment_aa is None:
             return self.rearrangement
@@ -294,3 +286,20 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
         self.rearrangement.additional_validation_flags = validate_airr_entry_aa(self.rearrangement, scheme=self.scheme)
 
         return self.rearrangement
+
+
+class SegmentedAirrBuilderAA(AirrBuilderAA):
+    def __init__(self, sequence_header: str, sequence: str, scheme: Scheme, query_sequence: str):
+        super().__init__(sequence_header, sequence, scheme)
+
+        self.rearrangement: SegmentedAirrRearrangementEntryAA = SegmentedAirrRearrangementEntryAA(
+            sequence_header=sequence_header,
+            sequence_aa=sequence,
+            numbering_scheme=scheme.value,
+            query_sequence=query_sequence,
+        )
+
+    def with_segment_start_end(self, segment_start: int, segment_end: int):
+        self.rearrangement.segment_start = segment_start + 1
+        self.rearrangement.segment_end = segment_end
+        return self
