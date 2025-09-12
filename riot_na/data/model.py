@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Optional, TypeVar
+from typing import Generic, Optional, Sequence, TypeVar
 
 from riot_na.common.serialization_utils import base64_encode
 
@@ -130,7 +130,6 @@ class AirrRearrangementEntryNT:  # pylint: disable=too-many-instance-attributes
 
     sequence_header: str
     sequence: str
-    query_sequence: str
     numbering_scheme: str
     locus: Optional[str] = None
     stop_codon: Optional[bool] = None
@@ -151,8 +150,6 @@ class AirrRearrangementEntryNT:  # pylint: disable=too-many-instance-attributes
     sequence_aa: Optional[str] = None
     sequence_alignment_aa: Optional[str] = None
     germline_alignment_aa: Optional[str] = None
-    segment_start: Optional[int] = None
-    segment_end: Optional[int] = None
     v_alignment_start: Optional[int] = None
     v_alignment_end: Optional[int] = None
     d_alignment_start: Optional[int] = None
@@ -269,7 +266,6 @@ class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
 
     sequence_header: str
     sequence_aa: str
-    query_sequence_aa: str
     numbering_scheme: str
     locus: Optional[str] = None
     stop_codon: Optional[bool] = None
@@ -281,8 +277,6 @@ class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
 
     germline_alignment_aa: Optional[str] = None
     sequence_alignment_aa: Optional[str] = None
-    segment_start: Optional[int] = None
-    segment_end: Optional[int] = None
     v_alignment_start_aa: Optional[int] = None
     v_alignment_end_aa: Optional[int] = None
     j_alignment_start_aa: Optional[int] = None
@@ -368,8 +362,27 @@ class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
         return "".join(self.scheme_residue_mapping.values())
 
 
+@dataclass
+class SegmentedAirrRearrangementEntryAA(AirrRearrangementEntryAA):
+    query_sequence: Optional[str] = None
+    segment_start: Optional[int] = None
+    segment_end: Optional[int] = None
+
+
+@dataclass
+class SegmentedAirrRearrangementEntryNT(AirrRearrangementEntryNT):
+    query_sequence: Optional[str] = None
+    segment_start: Optional[int] = None
+    segment_end: Optional[int] = None
+
+
 AirrRearrangementEntry_co = TypeVar(
-    "AirrRearrangementEntry_co", AirrRearrangementEntryNT, AirrRearrangementEntryAA, covariant=True
+    "AirrRearrangementEntry_co",
+    AirrRearrangementEntryNT,
+    AirrRearrangementEntryAA,
+    SegmentedAirrRearrangementEntryNT,
+    SegmentedAirrRearrangementEntryAA,
+    covariant=True,
 )
 
 
@@ -564,6 +577,19 @@ class AlignmentEntryAA:  # pylint: disable=too-many-instance-attributes
 
 
 AlignmentEntry = TypeVar("AlignmentEntry", AlignmentEntryNT, AlignmentEntryAA)
+
+
+@dataclass
+class AlignmentSegment(Generic[AlignmentEntry]):
+    alignments: Sequence[AlignmentEntry]
+    best_alignment: Optional[AlignmentEntry] = None  # Best alignment for this segment
+    segment_start: Optional[int] = None
+    segment_end: Optional[int] = None
+
+    def __post_init__(self):
+        """Set the best alignment after initialization"""
+        if self.alignments:
+            self.best_alignment = min(self.alignments)  # Lowest e-value first
 
 
 @dataclass

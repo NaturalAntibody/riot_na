@@ -27,9 +27,10 @@ class _WorkerNT:
         db_dir: Path = GENE_DB_DIR,
         return_all_domains: bool = False,
     ) -> None:
-        self.numbering = create_riot_nt(allowed_species=allowed_species, db_dir=db_dir)
+        self.numbering = create_riot_nt(
+            allowed_species=allowed_species, db_dir=db_dir, return_all_domains=return_all_domains
+        )
         self.scheme = scheme
-        self.return_all_domains = return_all_domains
 
     def __call__(self, fasta_record: SeqIO.SeqRecord) -> AirrRearrangementEntryNT | list[AirrRearrangementEntryNT]:
         try:
@@ -37,7 +38,6 @@ class _WorkerNT:
                 fasta_record.description,
                 str(fasta_record.seq),
                 self.scheme,
-                return_all_domains=self.return_all_domains,
             )
         except Exception as exc:
             print(fasta_record.description)
@@ -57,9 +57,10 @@ class _WorkerAA:
         return_all_domains: bool = False,
         extend_alignment: bool = False,
     ) -> None:
-        self.numbering = create_riot_aa(allowed_species=allowed_species, db_dir=db_dir)
+        self.numbering = create_riot_aa(
+            allowed_species=allowed_species, db_dir=db_dir, return_all_domains=return_all_domains
+        )
         self.scheme = scheme
-        self.return_all_domains = return_all_domains
         self.extend_alignment = extend_alignment
 
     def __call__(self, fasta_record: SeqIO.SeqRecord) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]:
@@ -68,7 +69,6 @@ class _WorkerAA:
                 fasta_record.description,
                 str(fasta_record.seq),
                 self.scheme,
-                return_all_domains=self.return_all_domains,
                 extend_alignment=self.extend_alignment,
             )
         except Exception as exc:

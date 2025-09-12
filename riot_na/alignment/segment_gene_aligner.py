@@ -1,8 +1,7 @@
 import os
-from dataclasses import dataclass
 from functools import partial
 from pathlib import Path
-from typing import List, Optional, Sequence
+from typing import Optional, Sequence
 
 from skbio.alignment import StripedSmithWaterman  # type: ignore
 
@@ -25,6 +24,7 @@ from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
     AlignmentEntryAA,
     AlignmentEntryNT,
+    AlignmentSegment,
     Gene,
     GeneAA,
     GermlineGene,
@@ -33,75 +33,6 @@ from riot_na.data.model import (
     SegmentMatch,
     SpeciesPrefilteringSegmentResult,
 )
-
-
-@dataclass
-class SegmentAlignment:
-    """Alignment result for a single segment/domain"""
-
-    segment_start: int
-    segment_end: int
-    alignments: List[AlignmentEntryNT]  # Alignments for genes in this segment
-    best_alignment: Optional[AlignmentEntryNT] = None  # Best alignment for this segment
-
-    def __post_init__(self):
-        """Set the best alignment after initialization"""
-        if self.alignments:
-            self.best_alignment = min(self.alignments)  # Lowest e-value first
-
-
-@dataclass
-class SegmentAlignmentAA:
-    """Amino acid alignment result for a single segment/domain"""
-
-    segment_start: int
-    segment_end: int
-    alignments: List[AlignmentEntryAA]  # Alignments for genes in this segment
-    best_alignment: Optional[AlignmentEntryAA] = None  # Best alignment for this segment
-
-    def __post_init__(self):
-        """Set the best alignment after initialization"""
-        if self.alignments:
-            self.best_alignment = min(self.alignments)  # Lowest e-value first
-
-
-@dataclass
-class SegmentAlignmentResult:
-    """Complete segment-based alignment result"""
-
-    query: str
-    rev_comp_query: str
-    segment_alignments: List[SegmentAlignment]
-    prefiltering_result: SpeciesPrefilteringSegmentResult
-
-    @property
-    def total_segments(self) -> int:
-        """Number of segments detected"""
-        return len(self.segment_alignments)
-
-    @property
-    def successful_alignments(self) -> int:
-        """Number of segments with successful alignments"""
-        return sum(1 for seg_align in self.segment_alignments if seg_align.best_alignment)
-
-
-@dataclass
-class SegmentAlignmentResultAA:
-    """Complete segment-based amino acid alignment result"""
-
-    query: str
-    segment_alignments: List[SegmentAlignmentAA]
-    prefiltering_result: SpeciesPrefilteringSegmentResult
-
-    @property
-    def total_segments(self) -> int:
-        """Number of segments detected"""
-        return len(self.segment_alignments)
-
-    @property
-    def successful_alignments(self) -> int:
-        """Number of segments with successful alignments"""
-        return sum(1 for seg_align in self.segment_alignments if seg_align.best_alignment)
 
 
 class SegmentGeneAligner:
@@ -153,7 +84,9 @@ class SegmentGeneAligner:
             return self.prefiltering.calculate_segment_matches_with_rev_comp(query)
         return self.prefiltering.calculate_segment_matches(query)
 
-    def _align_segment_genes(self, segment: SegmentMatch, query: str, rev_comp_query: str) -> List[AlignmentEntryNT]:
+    def _align_segment_genes(
+        self, segment: SegmentMatch, query: str, rev_comp_query: str
+    ) -> Sequence[AlignmentEntryNT]:
         """Align the top genes for a specific segment"""
         alignments = []
 
@@ -216,9 +149,9 @@ class SegmentGeneAligner:
     # Compatibility method to match GeneAligner interface
     def _align_sequences(
         self, query: str, prefiltering_result: SpeciesPrefilteringSegmentResult
-    ) -> List[AlignmentEntryNT]:
+    ) -> Sequence[AlignmentEntryNT]:
         """Align sequences method compatible with GeneAligner interface"""
-        all_alignments = []
+        all_alignments: list[AlignmentEntryNT] = []
 
         # Align each segment separately and collect all alignments
         for segment in prefiltering_result.segments:
@@ -227,30 +160,7 @@ class SegmentGeneAligner:
 
         return all_alignments
 
-    # Compatibility method to match GeneAligner interface
-    def align(self, query: str, both_strains: bool = True) -> Optional[AlignmentEntryNT]:
-        """
-        Compatibility method that returns the best single alignment across all segments.
-        This matches the GeneAligner interface for drop-in replacement.
-
-        Args:
-            query: Query sequence to align
-            both_strains: Whether to consider both forward and reverse complement
-
-        Returns:
-            Best alignment across all segments, or None if no alignments found
-        """
-        prefiltering_result = self._prefilter(query, both_strains)
-        alignments = self._align_sequences(query, prefiltering_result)
-
-        if not alignments:
-            return None
-
-        # Sort alignments and return the best one (lowest e-value)
-        alignments.sort()
-        return alignments[0]
-
-    def align_segments(self, query: str, both_strains: bool = True) -> SegmentAlignmentResult:
+    def align(self, query: str, both_strains: bool = True) -> Sequence[AlignmentSegment]:
         """
         Perform segment-based alignment of the query sequence.
 
@@ -259,7 +169,7 @@ class SegmentGeneAligner:
             both_strains: Whether to consider both forward and reverse complement
 
         Returns:
-            SegmentAlignmentResult containing alignments for each detected segment
+            AlignmentResult containing alignments for each detected segment
         """
         # Get segment-centric prefiltering results
         prefiltering_result = self._prefilter(query, both_strains)
@@ -285,18 +195,12 @@ class SegmentGeneAligner:
             )
 
             if alignments:
-                segment_alignment = SegmentAlignment(
+                segment_alignment = AlignmentSegment(
                     segment_start=current_segment_algn_start, segment_end=next_segment_algn_start, alignments=alignments
                 )
-
                 segment_alignments.append(segment_alignment)
 
-        return SegmentAlignmentResult(
-            query=query,
-            rev_comp_query=prefiltering_result.rev_comp_query,
-            segment_alignments=segment_alignments,
-            prefiltering_result=prefiltering_result,
-        )
+        return segment_alignments
 
 
 class SegmentGeneAlignerAA:
@@ -343,7 +247,7 @@ class SegmentGeneAlignerAA:
         """Prefilter method compatible with GeneAlignerAA interface"""
         return self.prefiltering.calculate_segment_matches(query)
 
-    def _align_segment_genes_aa(self, segment: SegmentMatch, query: str) -> List[AlignmentEntryAA]:
+    def _align_segment_genes_aa(self, segment: SegmentMatch, query: str) -> Sequence[AlignmentEntryAA]:
         """Align the top genes for a specific segment (amino acid version)"""
         alignments = []
 
@@ -407,9 +311,9 @@ class SegmentGeneAlignerAA:
     # Compatibility method to match GeneAlignerAA interface
     def _align_sequences(
         self, query: str, prefiltering_result: SpeciesPrefilteringSegmentResult
-    ) -> List[AlignmentEntryAA]:
+    ) -> Sequence[AlignmentEntryAA]:
         """Align sequences method compatible with GeneAlignerAA interface"""
-        all_alignments = []
+        all_alignments: list[AlignmentEntryAA] = []
 
         # Align each segment separately and collect all alignments
         for segment in prefiltering_result.segments:
@@ -418,29 +322,7 @@ class SegmentGeneAlignerAA:
 
         return all_alignments
 
-    # Compatibility method to match GeneAlignerAA interface
-    def align(self, query: str) -> Optional[AlignmentEntryAA]:
-        """
-        Compatibility method that returns the best single alignment across all segments.
-        This matches the GeneAlignerAA interface for drop-in replacement.
-
-        Args:
-            query: Query AA sequence to align
-
-        Returns:
-            Best alignment across all segments, or None if no alignments found
-        """
-        prefiltering_result = self._prefilter(query)
-        alignments = self._align_sequences(query, prefiltering_result)
-
-        if not alignments:
-            return None
-
-        # Sort alignments and return the best one (lowest e-value)
-        alignments.sort()
-        return alignments[0]
-
-    def align_segments(self, query: str) -> SegmentAlignmentResultAA:
+    def align(self, query: str) -> Sequence[AlignmentSegment]:
         """
         Perform segment-based amino acid alignment of the query sequence.
 
@@ -448,7 +330,7 @@ class SegmentGeneAlignerAA:
             query: Query AA sequence to align
 
         Returns:
-            SegmentAlignmentResultAA containing alignments for each detected segment
+            List[AlignmentSegment] containing alignments for each detected segment
         """
         # Get segment-centric prefiltering results (AA doesn't use rev comp)
         prefiltering_result = self._prefilter(query)
@@ -466,14 +348,12 @@ class SegmentGeneAlignerAA:
                 segment, query[current_segment_algn_start:next_segment_algn_start]
             )
 
-            segment_alignment = SegmentAlignmentAA(
+            segment_alignment = AlignmentSegment(
                 segment_start=current_segment_algn_start, segment_end=next_segment_algn_start, alignments=alignments
             )
             segment_alignments.append(segment_alignment)
 
-        return SegmentAlignmentResultAA(
-            query=query, segment_alignments=segment_alignments, prefiltering_result=prefiltering_result
-        )
+        return segment_alignments
 
 
 def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> dict:
@@ -516,7 +396,7 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
             return gene_aa_aligner_params(germline_gene)
 
 
-def create_v_gene_aligner(allowed_species: List[Organism], db_dir: Path = GENE_DB_DIR) -> SegmentGeneAligner:
+def create_v_gene_aligner(allowed_species: Sequence[Organism], db_dir: Path = GENE_DB_DIR) -> SegmentGeneAligner:
     """Create V gene segment aligner"""
     genes = []
 
@@ -535,7 +415,7 @@ def create_v_gene_aligner(allowed_species: List[Organism], db_dir: Path = GENE_D
     return genes_aligner
 
 
-def create_aa_v_gene_aligner(allowed_species: List[Organism], aa_genes_dir: Path) -> SegmentGeneAlignerAA:
+def create_aa_v_gene_aligner(allowed_species: Sequence[Organism], aa_genes_dir: Path) -> SegmentGeneAlignerAA:
     """Create amino acid V gene segment aligner"""
     genes = []
 
