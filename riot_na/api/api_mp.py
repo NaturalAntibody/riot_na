@@ -1,7 +1,7 @@
 import itertools
 import multiprocessing as mp
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from Bio import SeqIO
 from psutil import cpu_count
@@ -16,6 +16,8 @@ from riot_na.data.model import (
     InputType,
     Organism,
     Scheme,
+    SegmentedAirrRearrangementEntryAA,
+    SegmentedAirrRearrangementEntryNT,
 )
 
 
@@ -121,6 +123,11 @@ def run_on_file_mp(  # pylint: disable=too-many-arguments
             pool.imap(_worker_call, itertools.islice(SeqIO.parse(input_fasta_path, input_format), limit)),
             total=count_fasta_records(input_fasta_path, input_format=input_format),
         )
+        record_type: Any
+        match input_type:
+            case InputType.NT:
+                record_type = AirrRearrangementEntryNT if not return_all_domains else SegmentedAirrRearrangementEntryNT
+            case InputType.AA:
+                record_type = AirrRearrangementEntryAA if not return_all_domains else SegmentedAirrRearrangementEntryAA
 
-        record_type = AirrRearrangementEntryNT if input_type == InputType.NT else AirrRearrangementEntryAA
         write_airr_iter_to_csv(result_path, record_type, result_iter)

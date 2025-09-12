@@ -15,6 +15,8 @@ from riot_na.data.model import (
     InputType,
     Organism,
     Scheme,
+    SegmentedAirrRearrangementEntryAA,
+    SegmentedAirrRearrangementEntryNT,
 )
 
 
@@ -101,19 +103,19 @@ def run_riot(
                 numbering_nt = create_riot_nt(
                     allowed_species=species_list, db_dir=GENE_DB_DIR, return_all_domains=multiple_domains
                 )
-                record_type = AirrRearrangementEntryNT
+                record_type = AirrRearrangementEntryNT if not multiple_domains else SegmentedAirrRearrangementEntryNT
                 result = numbering_nt.run_on_sequence(header="-", query_sequence=sequence, scheme=scheme)
             case InputType.AA:
                 numbering_aa = create_riot_aa(
                     allowed_species=species_list, db_dir=GENE_DB_DIR, return_all_domains=multiple_domains
                 )
-                record_type = AirrRearrangementEntryAA
+                record_type = AirrRearrangementEntryAA if not multiple_domains else SegmentedAirrRearrangementEntryAA
                 result = numbering_aa.run_on_sequence(
                     header="-", sequence_aa=sequence, scheme=scheme, extend_alignment=extend_alignment
                 )
 
         if output_file:
-            write_airr_iter_to_csv(output_file, record_type, [result])
+            write_airr_iter_to_csv(output_file, record_type, result if not multiple_domains else [result])
         else:
             if not multiple_domains:
                 print(result.__dict__)
