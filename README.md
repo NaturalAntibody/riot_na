@@ -72,7 +72,7 @@ Options:
   --species [HOMO_SAPIENS|MUS_MUSCULUS|CUSTOM]
                                   Which species germline sequences should be
                                   used. Default is all species.
-  --input-type [nt|aa]            What kind of sequences are provided on
+  --input-type [NT|AA]            What kind of sequences are provided on
                                   input. Default is nucleotide sequences.
   -p, --ncpu INTEGER              Number of parallel processes to use. Default
                                   is number of physical cores.
