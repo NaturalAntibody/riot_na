@@ -223,29 +223,29 @@ def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> d
     match germline_gene:
         case GermlineGene.V:
             return {
-                "kmer_size": 9,
-                "distance_threshold": 13,
-                "top_n": int(os.environ.get("TOP_N", 12)),
-                "modulo_n": 2,
-                "e_value_threshold": 0.001,
-                "alignment_length_threshold": 100,
+                "kmer_size": int(os.environ.get("KMER_SIZE_V_AA", 9)),
+                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_V_AA", 13)),
+                "top_n": int(os.environ.get("TOP_N_V_AA", 12)),
+                "modulo_n": int(os.environ.get("MODULO_N_V_AA", 2)),
+                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_AA", 0.001)),
+                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_AA", 100)),
             }
         case GermlineGene.D:
             return {
-                "kmer_size": 5,
-                "distance_threshold": 3,
-                "top_n": int(os.environ.get("TOP_N", 5)),
-                "modulo_n": 1,
+                "kmer_size": int(os.environ.get("KMER_SIZE_D_AA", 5)),
+                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_D_AA", 3)),
+                "top_n": int(os.environ.get("TOP_N_D_AA", 5)),
+                "modulo_n": int(os.environ.get("MODULO_N_D_AA", 1)),
             }
         case GermlineGene.J:
             assert locus is not None
             match locus:
                 case Locus.IGH:
                     return {
-                        "kmer_size": 5,
-                        "distance_threshold": 3,
-                        "top_n": int(os.environ.get("TOP_N", 5)),
-                        "modulo_n": 2,
+                        "kmer_size": int(os.environ.get("KMER_SIZE_JH_AA", 5)),
+                        "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_JH_AA", 3)),
+                        "top_n": int(os.environ.get("TOP_N_JH_AA", 5)),
+                        "modulo_n": int(os.environ.get("MODULO_N_JH_AA", 2)),
                     }
                 case Locus.IGK:
                     return {
@@ -293,28 +293,28 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
     match germline_gene:
         case GermlineGene.V:
             return {
-                "kmer_size": 3,
-                "distance_threshold": 3,
-                "top_n": int(os.environ.get("TOP_N", 20)),
-                "modulo_n": 1,
-                "e_value_threshold": 1e-55,
-                "alignment_length_threshold": 80,
+                "kmer_size": int(os.environ.get("KMER_SIZE_V_AA", 3)),
+                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_V_AA", 3)),
+                "top_n": int(os.environ.get("TOP_N_V_AA", 20)),
+                "modulo_n": int(os.environ.get("MODULO_N_V_AA", 1)),
+                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_AA", 1e-45)),
+                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_AA", 50)),
             }
         case GermlineGene.J:
             return {
-                "kmer_size": 3,
-                "distance_threshold": 3,
-                "top_n": int(os.environ.get("TOP_N", 5)),
-                "modulo_n": 1,
-                "alignment_length_threshold": 7,
-                "max_cdr3_length": 60,
+                "kmer_size": int(os.environ.get("KMER_SIZE_J_AA", 3)),
+                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_J_AA", 3)),
+                "top_n": int(os.environ.get("TOP_N_J_AA", 5)),
+                "modulo_n": int(os.environ.get("MODULO_N_J_AA", 1)),
+                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_J_AA", 7)),
+                "max_cdr3_length": int(os.environ.get("MAX_CDR3_LENGTH_J_AA", 60)),
             }
         case GermlineGene.C:
             return {
-                "kmer_size": 3,
-                "distance_threshold": 3,
-                "top_n": int(os.environ.get("TOP_N", 5)),
-                "modulo_n": 2,
+                "kmer_size": int(os.environ.get("KMER_SIZE_C_AA", 3)),
+                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_C_AA", 3)),
+                "top_n": int(os.environ.get("TOP_N_C_AA", 5)),
+                "modulo_n": int(os.environ.get("MODULO_N_C_AA", 2)),
             }
         case _:
             raise ValueError("AA aligner not supported for gene type")
@@ -351,7 +351,7 @@ def get_gene_parsing_function(gene_type: GermlineGene) -> Callable[[str, SeqReco
                 name=description[0],
                 locus=Locus[description[1]],
                 reading_frame=None,
-                species=Organism.HOMO_SAPIENS,
+                species=Organism[description[2]],
                 sequence=str(record.seq),
             )
 
@@ -375,7 +375,7 @@ def create_v_gene_aligner(allowed_species: Sequence[Organism], db_dir: Path = GE
     genes = []
 
     if not allowed_species:
-        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS]
+        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS]
 
     gene_parsing_function = get_gene_parsing_function(GermlineGene.V)
 
@@ -392,18 +392,14 @@ def create_v_gene_aligner(allowed_species: Sequence[Organism], db_dir: Path = GE
 
 
 def create_aligner(
-    allowed_species: Organism, germline_gene: GermlineGene, locus: Locus, db_dir: Path = GENE_DB_DIR
+    organism: Organism, germline_gene: GermlineGene, locus: Locus, db_dir: Path = GENE_DB_DIR
 ) -> GeneAligner:
     assert germline_gene != GermlineGene.V
 
     gene_parsing_function = get_gene_parsing_function(germline_gene)
 
     gene_path = (
-        Path(db_dir)
-        / "gene_db"
-        / f"{germline_gene.value.lower()}_genes"
-        / allowed_species.value
-        / f"{locus.value}.fasta"
+        Path(db_dir) / "gene_db" / f"{germline_gene.value.lower()}_genes" / organism.value / f"{locus.value}.fasta"
     )
     genes = read_genes(gene_path, gene_parsing_function)
 
@@ -417,7 +413,7 @@ def create_aa_v_gene_aligner(allowed_species: Sequence[Organism], aa_genes_dir: 
     genes = []
 
     if not allowed_species:
-        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS]
+        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS]
 
     for species in allowed_species:
         input_path = aa_genes_dir / "v_genes" / f"{species.value}.fasta"

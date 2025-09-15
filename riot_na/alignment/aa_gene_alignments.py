@@ -96,8 +96,7 @@ class VJCAlignerAA:
             if self.c_aligners:
                 query_c = query_j[j_aa_alignment.q_end :]
                 if query_c:
-                    c_organism = species if species == Organism.CUSTOM else Organism.HOMO_SAPIENS
-                    c_aligner = self.c_aligners[c_organism][locus]
+                    c_aligner = self.c_aligners[species][locus]
                     assert c_aligner is not None
                     c_aa_alignment = c_aligner.align(query_c)[0].best_alignment
                     if c_aa_alignment is not None:
@@ -309,12 +308,11 @@ class VJCAlignmentTranslatorAA:
     ) -> tuple[str, str | None, str | None, InternalAlignmentEntryAA | None]:
         if alignments.c and extended_j_aa_alignment:
             masked_aa_for_c = aligned_sequence_aa[extended_j_aa_alignment.q_end :]
-            c_organism = species if species == Organism.CUSTOM else Organism.HOMO_SAPIENS
 
             c_gene_id = alignments.c.target_id
 
             assert self.c_aligners
-            c_gene = self.c_aligners[c_organism][locus].gene_lookup[alignments.c.lookup_gene_id()]
+            c_gene = self.c_aligners[species][locus].gene_lookup[alignments.c.lookup_gene_id()]
             c_gene_aa = c_gene.sequence
 
             c_aligner = StripedSmithWaterman(masked_aa_for_c, **AA_ALIGNER_PARAMS)
@@ -333,7 +331,7 @@ def create_vjc_aligner_aa(
     allowed_species: Optional[list[Organism]] = None, db_dir: Path = GENE_DB_DIR, use_segment_aligner: bool = False
 ) -> VJCAlignerAA:
     if not allowed_species:
-        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS]
+        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS]
 
     aa_genes_dir = db_dir / "gene_db" / "aa_genes_deduplicated"
     v_aligner = (
@@ -346,6 +344,9 @@ def create_vjc_aligner_aa(
 
     for organism in allowed_species:
         for locus in Locus:
+            if organism == Organism.VICUGNA_PACOS and locus != Locus.IGH:
+                continue
+
             j_aligner = create_aa_j_gene_aligner(organism=organism, locus=locus, aa_genes_dir=aa_genes_dir)
             organism_aligners = j_aligners.get(organism, {})
             organism_aligners[locus] = j_aligner
@@ -354,13 +355,22 @@ def create_vjc_aligner_aa(
     c_aligners: dict[Organism, dict[Locus, GeneAlignerAA]] = {}
 
     for organism in allowed_species:
-        c_organism = Organism.HOMO_SAPIENS if organism != Organism.CUSTOM else Organism.CUSTOM
-        c_organism_aligner = c_aligners.get(c_organism, {})
+        if organism not in [Organism.HOMO_SAPIENS, Organism.VICUGNA_PACOS, Organism.CUSTOM]:
+            c_organism = Organism.HOMO_SAPIENS
+        else:
+            c_organism = organism
+
+        c_organism_aligner = c_aligners.get(organism, {})
 
         for locus in Locus:
+
+            # at the moment we only have heavy genes
+            if organism == Organism.VICUGNA_PACOS and locus != Locus.IGH:
+                continue
+
             c_aligner = create_aa_c_gene_aligner(organism=c_organism, locus=locus, aa_genes_dir=aa_genes_dir)
             c_organism_aligner[locus] = c_aligner
-        c_aligners[c_organism] = c_organism_aligner
+        c_aligners[organism] = c_organism_aligner
 
     vjc_aligner = VJCAlignerAA(v_aligner, j_aligners, c_aligners)
 
@@ -371,7 +381,7 @@ def create_vjc_alignment_translator_aa(
     allowed_species: Optional[list[Organism]] = None, db_dir: Path = GENE_DB_DIR
 ) -> VJCAlignmentTranslatorAA:
     if not allowed_species:
-        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS]
+        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS]
 
     aa_genes_dir = db_dir / "gene_db" / "aa_genes"
     v_aligner = create_aa_v_gene_aligner(allowed_species=allowed_species, aa_genes_dir=aa_genes_dir)
@@ -380,6 +390,9 @@ def create_vjc_alignment_translator_aa(
 
     for organism in allowed_species:
         for locus in Locus:
+            if organism == Organism.VICUGNA_PACOS and locus != Locus.IGH:
+                continue
+
             j_aligner = create_aa_j_gene_aligner(organism=organism, locus=locus, aa_genes_dir=aa_genes_dir)
             organism_aligners = j_aligners.get(organism, {})
             organism_aligners[locus] = j_aligner
@@ -388,13 +401,22 @@ def create_vjc_alignment_translator_aa(
     c_aligners: dict[Organism, dict[Locus, GeneAlignerAA]] = {}
 
     for organism in allowed_species:
-        c_organism = Organism.HOMO_SAPIENS if organism != Organism.CUSTOM else Organism.CUSTOM
+        c_organism_aligner = c_aligners.get(organism, {})
 
-        c_organism_aligner = c_aligners.get(c_organism, {})
+        if organism not in [Organism.HOMO_SAPIENS, Organism.VICUGNA_PACOS, Organism.CUSTOM]:
+            c_organism = Organism.HOMO_SAPIENS
+        else:
+            c_organism = organism
+
         for locus in Locus:
+
+            # at the moment we only have heavy genes
+            if organism == Organism.VICUGNA_PACOS and locus != Locus.IGH:
+                continue
+
             c_aligner = create_aa_c_gene_aligner(organism=c_organism, locus=locus, aa_genes_dir=aa_genes_dir)
             c_organism_aligner[locus] = c_aligner
-        c_aligners[c_organism] = c_organism_aligner
+        c_aligners[organism] = c_organism_aligner
 
     vj_aligner = VJCAlignmentTranslatorAA(v_aligner, j_aligners, c_aligners)
 

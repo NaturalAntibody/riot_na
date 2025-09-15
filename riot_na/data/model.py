@@ -108,6 +108,7 @@ class Scheme(str, Enum):
 class Organism(str, Enum):
     HOMO_SAPIENS = "human"
     MUS_MUSCULUS = "mouse"
+    VICUGNA_PACOS = "alpaca"
     CUSTOM = "custom"
 
 
