@@ -133,6 +133,7 @@ class AirrRearrangementEntryNT:  # pylint: disable=too-many-instance-attributes
     sequence: str
     numbering_scheme: str
     locus: Optional[str] = None
+    locus_species: Optional[str] = None
     stop_codon: Optional[bool] = None
     vj_in_frame: Optional[bool] = None
     v_frameshift: Optional[bool] = None
@@ -269,6 +270,7 @@ class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
     sequence_aa: str
     numbering_scheme: str
     locus: Optional[str] = None
+    locus_species: Optional[str] = None
     stop_codon: Optional[bool] = None
     productive: Optional[bool] = None  # V and J aligned and no stop codon
     complete_vdj: Optional[bool] = None
