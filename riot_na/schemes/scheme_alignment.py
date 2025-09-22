@@ -412,7 +412,7 @@ class SchemeAligner:
         self.scheme_mapping_facades: dict[Scheme, SchemeMappingFacade] = {}
 
         if not allowed_species:
-            allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS]
+            allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS]
 
         for scheme in Scheme:
             self.scheme_mapping_facades[scheme] = SchemeMappingFacade(scheme, allowed_species, db_dir)

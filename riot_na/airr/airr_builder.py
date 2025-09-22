@@ -67,6 +67,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
 
         self.rearrangement.v_call = v_aln.target_id
         self.rearrangement.locus = v_aln.locus.value
+        self.rearrangement.locus_species = v_aln.species.value
 
         self.rearrangement.v_sequence_start = v_aln.q_start + 1
         self.rearrangement.v_sequence_end = v_aln.q_end

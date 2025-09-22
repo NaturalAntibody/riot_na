@@ -131,3 +131,21 @@ def run_on_file_mp(  # pylint: disable=too-many-arguments
                 record_type = AirrRearrangementEntryAA if not return_all_domains else SegmentedAirrRearrangementEntryAA
 
         write_airr_iter_to_csv(result_path, record_type, result_iter)
+
+
+if __name__ == "__main__":
+    # Example usage
+
+    # .write.text("/home/pawel.dudzic/workspace/analyzer/projects/automation/experiments/exploration/new_therapeutics/paper/new_mess/data/13_08_2025/molecules_segments.fasta", lineSep="\n")
+    INPUT_PATH = "/home/pawel.dudzic/workspace/analyzer/projects/automation/experiments/exploration/new_therapeutics/paper/new_mess/data/13_08_2025/molecules_segments.fasta"
+    OUTPUT_PATH = "/home/pawel.dudzic/workspace/analyzer/projects/automation/experiments/exploration/new_therapeutics/paper/new_mess/data/13_08_2025/molecules_segments_numbered.csv"
+    run_on_file_mp(
+        db_dir=GENE_DB_DIR,
+        input_fasta_path=Path(INPUT_PATH),
+        result_path=Path(OUTPUT_PATH),
+        n_processes=8,
+        input_format="fasta",
+        scheme=Scheme.IMGT,
+        allowed_species=[Organism.HOMO_SAPIENS],
+        input_type=InputType.AA,
+    )

@@ -401,7 +401,7 @@ def create_v_gene_aligner(allowed_species: Sequence[Organism], db_dir: Path = GE
     genes = []
 
     if not allowed_species:
-        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS]
+        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS]
 
     gene_parsing_function = get_gene_parsing_function(GermlineGene.V)
 
@@ -420,7 +420,7 @@ def create_aa_v_gene_aligner(allowed_species: Sequence[Organism], aa_genes_dir: 
     genes = []
 
     if not allowed_species:
-        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS]
+        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS]
 
     for species in allowed_species:
         input_path = aa_genes_dir / "v_genes" / f"{species.value}.fasta"

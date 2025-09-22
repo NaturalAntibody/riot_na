@@ -16,7 +16,7 @@ def test_produce_aa_alignments():
     assert alignments.v.target_id == "IGHV4-34*01"
     assert alignments.v.alignment_score == 192.68417758360758
     assert alignments.v.seq_identity == 0.9484536082474226
-    assert alignments.v.e_value == 2.1400454290734194e-141
+    assert alignments.v.e_value == 2.2632803302266517e-141
     assert alignments.v.q_start == 0
     assert alignments.v.q_end == 97
     assert alignments.v.t_start == 0
