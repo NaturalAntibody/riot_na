@@ -1,6 +1,70 @@
 # CHANGELOG
 
 
+## v4.0.0 (2025-09-22)
+
+### Bug Fixes
+
+- Correct attribute name
+  ([`42624ea`](https://github.com/NaturalAntibody/riot_na/commit/42624eafd58e4ebfc6c1382da96759d25aa8cb3d))
+
+- Correct filtering using coverage and segment_length in prefiltering
+  ([`70c8251`](https://github.com/NaturalAntibody/riot_na/commit/70c8251a0807bb225edb1d7bffbdd4493083ad6a))
+
+### Chores
+
+- Ipykernel dependency removed
+  ([`c5292f4`](https://github.com/NaturalAntibody/riot_na/commit/c5292f4c8d949c2841866f136230bbbcd0a1daa6))
+
+- Update build to run rust tests
+  ([`ef1eb98`](https://github.com/NaturalAntibody/riot_na/commit/ef1eb987019ff66ba91d7cd2a41228df6054b707))
+
+### Features
+
+- Add multidomain support; user can now choose if he want to number single or many domain sequences.
+  ([`7cae334`](https://github.com/NaturalAntibody/riot_na/commit/7cae334539019c9b56d7c8aead0c453e8a0a5e52))
+
+BREAKING CHANGE: Numbering of multiple variable regions present on the same chain. New columns
+  added, in airr format - segment_start and segment_end
+
+- Added alpaca germlines database
+  ([`34fa658`](https://github.com/NaturalAntibody/riot_na/commit/34fa6586b28f76d387caeb7fd6af258b7cd87ed7))
+
+BREAKING CHANGE: Since alpaca germline database was added, the same sequence can be now assigned
+  different germline genes.
+
+### Refactoring
+
+- Change output schema and workflow to be backward compatible without all_domains flag
+  ([`f1f0652`](https://github.com/NaturalAntibody/riot_na/commit/f1f065232b20b6197d93922b8bbb9ab7d3af43f1))
+
+- Change output schema and workflow to be backward compatible without all_domains flag
+  ([`dcd3133`](https://github.com/NaturalAntibody/riot_na/commit/dcd3133d402c7c61675f45932f3ec476645fea4c))
+
+- Cleanup
+  ([`397fba2`](https://github.com/NaturalAntibody/riot_na/commit/397fba23756e8611f4a2dd4fee4ccc5870ff9406))
+
+- Correct handling of record type for writer
+  ([`4467df8`](https://github.com/NaturalAntibody/riot_na/commit/4467df872579047746dc9b165fc9299b29897ed8))
+
+- Remove redundant code
+  ([`9180a4f`](https://github.com/NaturalAntibody/riot_na/commit/9180a4f16108fc4a97ad37fd45c8ac8234ec7d53))
+
+- Update README
+  ([`b5568a7`](https://github.com/NaturalAntibody/riot_na/commit/b5568a7808b9dc940c7c4a707d6b5c3dd26fec01))
+
+- Update README
+  ([`3b542b8`](https://github.com/NaturalAntibody/riot_na/commit/3b542b85012e9c368856195c9ff1d7e81291f303))
+
+- Update README
+  ([`9fc3c72`](https://github.com/NaturalAntibody/riot_na/commit/9fc3c7204a260999c07cb5513c624845c454acb3))
+
+### Breaking Changes
+
+- Since alpaca germline database was added, the same sequence can be now assigned different germline
+  genes.
+
+
 ## v3.0.0 (2025-06-24)
 
 ### Features
@@ -15,7 +79,7 @@ BREAKING CHANGE: new columns related to c genes
 - Testing alignments for nt and aa
   ([`1acc82b`](https://github.com/NaturalAntibody/riot_na/commit/1acc82bddad55d8a6b0226f17d2d03edabd3c65f))
 
-### BREAKING CHANGES
+### Breaking Changes
 
 - New columns related to c genes
 
@@ -102,7 +166,7 @@ BREAKING CHANGE: new columns related to c genes
 
 BREAKING CHANGE: change get_region() argument from Locus to ChainType
 
-### BREAKING CHANGES
+### Breaking Changes
 
 - Change get_region() argument from Locus to ChainType
 
