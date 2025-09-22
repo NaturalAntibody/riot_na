@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v4.0.1 (2025-09-22)
+
+### Documentation
+
+- Added readme field in pyproject.toml
+  ([`6c471d2`](https://github.com/NaturalAntibody/riot_na/commit/6c471d265b79ac885590c562e2fd0f0b6d7804fa))
+
+
 ## v4.0.0 (2025-09-22)
 
 ### Bug Fixes
