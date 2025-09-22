@@ -111,7 +111,7 @@ def run_riot(
                 )
                 record_type = AirrRearrangementEntryAA if not multiple_domains else SegmentedAirrRearrangementEntryAA
                 result = numbering_aa.run_on_sequence(
-                    header="-", sequence_aa=sequence, scheme=scheme, extend_alignment=extend_alignment
+                    header="-", query_sequence=sequence, scheme=scheme, extend_alignment=extend_alignment
                 )
 
         if output_file:

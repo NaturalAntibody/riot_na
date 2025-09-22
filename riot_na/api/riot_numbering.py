@@ -135,7 +135,7 @@ class RiotNumberingNT:
 
             # produce airr result
             # this is separated on purpose to enable other output formats
-            airr_builder = AirrBuilder(header, sequence, scheme)
+            airr_builder = AirrBuilder(header, sequence or query_sequence, scheme)
             if self.return_all_domains:
                 airr_builder = SegmentedAirrBuilder(header, sequence, scheme, query_sequence)
                 airr_builder.with_segment_start_end(segment_start, segment_end)
@@ -199,7 +199,7 @@ class RiotNumberingAA:
     def run_on_sequence(
         self,
         header: str,
-        sequence_aa: str,
+        query_sequence: str,
         scheme: Scheme = Scheme.IMGT,
         extend_alignment: bool = True,
     ) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]:  # pylint: disable=too-many-statements
@@ -209,7 +209,7 @@ class RiotNumberingAA:
         Parameters:
         -----------
         - header : Fasta sequence header, usually this is simply sequence ID.
-        - sequence_aa : Amino acid sequence to number.
+        - query_sequence : Amino acid sequence to number.
         - scheme : Which numbering scheme to use (default IMGT).
         - extend_alignment: RIOT uses Striped Smith-Waterman local alignemtn algorithm.
         Due to that, if query sequence has too many differences (due to mutations or other reasons)
@@ -222,7 +222,8 @@ class RiotNumberingAA:
         -----------
         AirrRearrangementEntryAA object with alignment results (Extended AIRR format)
         """
-        query_sequence = sequence_aa.upper()
+        query_sequence = query_sequence.upper()
+        sequence_aa = query_sequence
         sch_alignment = None
         aa_offsets = None
         positional_scheme_mapping = None
@@ -269,7 +270,7 @@ class RiotNumberingAA:
 
             # produce airr result
             # this is separated on purpose to enable other output formats
-            airr_builder = AirrBuilderAA(header, sequence_aa, scheme)
+            airr_builder = AirrBuilderAA(header, query_sequence, scheme)
             if self.return_all_domains:
                 airr_builder = SegmentedAirrBuilderAA(header, sequence_aa, scheme, query_sequence)
                 airr_builder.with_segment_start_end(segment_start, segment_end)
@@ -383,20 +384,20 @@ if __name__ == "__main__":
     import json
     from dataclasses import asdict
 
-    vdj_alnr = create_vdjc_aligner_nt()
-    vjc_aa_translator = create_vjc_alignment_translator_aa()
+    # vdj_alnr = create_vdjc_aligner_nt()
+    # vjc_aa_translator = create_vjc_alignment_translator_aa()
     scheme_alnr = SchemeAligner()
 
     # riot_numbering = RiotNumberingNT(vdj_alnr, vjc_aa_translator, scheme_alnr)
     # # given query
-    # QUERY = "CAGGTGCAGCTACAGCAGTGGGGCGCAGGACTGTTGAAGCCTTCGGAGACCCTGTCCCTCACCTGCGCTGTCTATGGTGGGTCCTTCAGTGGTTACTACTGGAGCTGGATCCGCCAGCCCCCAGGGAAGGGGCTGGAGTGGATTGGGGAAATCAATCATAGTGGAAGCACCAACTACAACCCGTCCCTCAAGAGTCGAGTCACCATATCAGTAGACACGTCCAAGAACCAGTTCTCCCTGAAGCTGAGCTCTGTGACCGCCGCGGACACGGCTGTGTATTACTGTGCGAGAGAAAGGCGAGGTTGTAGTAGTACCAGCTGCTTTTGGATTACTCAACGTGGATACAGCTATGGAGGCTCCTACTACTACTACTACATGGACGTCTGGGGCAAAGGGACCACGGTCACCGTCTCCTCA"
+    # QUERY = "CAGGTGCAGCTCGTGGAGTCTGGGGGAGGCTTGGTGCAGCCTGGGGGGTCTCTGAGACTCTCCTGTGTAGCTTCTGGATTCACCTTCAGTGACTATGCCATGACCTGGCACCGCCAGGCCTCAGGGTCGGAGCTCGAGTTGGTCGCGGCGATTAGCAATGGCCGTGGTCGTAACACAAATTATGCAGATGCCGTGAAGGGTCGATTCACCATCTCCAGAGACAATGCCAAGAACACGGTGTATCTGCAAATGAACAACCTGAAATCTGACGACACGGCCGTGTACTACTGTAACGCGGCCGGGTTGGGGCCCGAATATGACTACTGGGGCCAGGGGACCCAGGTCACCGTCTCCGCGGAACCCAAGACACCAAAACCACAA"
     # sample_result = riot_numbering.run_on_sequence("header", QUERY, Scheme.IMGT)
     # print(json.dumps(asdict(sample_result), indent=4))
 
     vjc_aa_alnr = create_vjc_aligner_aa()
     aa_numbering = RiotNumberingAA(vjc_aa_alnr, scheme_alnr)
 
-    AA_QUERY = "QVQLQQWGAGLLKPSETLSLTCAVFGGSFSGYYWSWIRQPPGKGLEWIGEINHRGNTNDNPSLKSRVTISVDTSKNQFALKLSSVTAADTAVYYCARERGYTYGNFDHWGQGTLVTVSSASTKGPSVFPLAPSSKSTSGGTAALGCLVKDYFPEPVTVSWNSGALTSGVHTFPAVLQSSGLYSLSSVVTVPSSSLGTQTYICNVNHKPSNTKVDKKVEPKSCDKTHTCPPCPAPELLGGPSVFLFPPKPKDTLMISRTPEVTCVVVDVSHEDPEVKFNWYVDGVEVHNAKTKPREEQYNSTYRVVSVLTVLHQDWLNGKEYKCKVSNKALPAPIEKTISKAKGQPREPQVYTLPPSRDELTKNQVSLTCLVKGFYPSDIAVEWESNGQPENNYKTTPPVLDSDGSFFLYSKLTVDKSRWQQGNVFSCSVMHEALHNHYTQKSLSLSPGK"
+    AA_QUERY = "QVQLVESGGGLVQPGGSLRLSCVASGFTFSDYAMTWHRQASGSELELVAAISNGRGRNTNYADAVKGRFTISRDNAKNTVYLQMNNLKSDDTAVYYCNAAGLGPEYDYWGQGTQVTVSAEPKTPKPQ"
 
     aa_sample_result = aa_numbering.run_on_sequence("header", AA_QUERY, Scheme.IMGT)
     # Handle both single result and list result

@@ -11,7 +11,7 @@ class SchemeMappingFacade:
 
     def __init__(self, scheme: Scheme, allowed_species: Optional[list[Organism]] = None, db_dir: Path = GENE_DB_DIR):
         if not allowed_species:
-            allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS]
+            allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS]
 
         self.mappings = {}
 
