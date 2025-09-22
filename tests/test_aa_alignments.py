@@ -4,19 +4,19 @@ from riot_na.data.model import Locus, Organism
 
 def test_produce_aa_alignments():
     # given
-    aligner = create_vjc_aligner_aa()
+    aligner = create_vjc_aligner_aa(use_segment_aligner=True)
 
     query_sequence = "QVQLQQWGAGLLKPSETLSLTCAVFGGSFSGYYWSWIRQPPGKGLEWIGEINHRGNTNDNPSLKSRVTISVDTSKNQFALKLSSVTAADTAVYYCARERGYTYGNFDHWGQGTLVTVSSASTKGPSVFPLAPSSKSTSGGTAALGCLVKDYFPEPVTVSWNSGALTSGVHTFPAVLQSSGLYSLSSVVTVPSSSLGTQTYICNVNHKPSNTKVDKKVEPKSCDKTHTCPPCPAPELLGGPSVFLFPPKPKDTLMISRTPEVTCVVVDVSHEDPEVKFNWYVDGVEVHNAKTKPREEQYNSTYRVVSVLTVLHQDWLNGKEYKCKVSNKALPAPIEKTISKAKGQPREPQVYTLPPSRDELTKNQVSLTCLVKGFYPSDIAVEWESNGQPENNYKTTPPVLDSDGSFFLYSKLTVDKSRWQQGNVFSCSVMHEALHNHYTQKSLSLSPGK"
 
     # when
-    alignments = aligner.produce_aa_alignments(query_sequence)
+    alignments = aligner.produce_aa_alignments(query_sequence)[0]
 
     # then
     assert alignments.v is not None
     assert alignments.v.target_id == "IGHV4-34*01"
     assert alignments.v.alignment_score == 192.68417758360758
     assert alignments.v.seq_identity == 0.9484536082474226
-    assert alignments.v.e_value == 2.1400454290734194e-141
+    assert alignments.v.e_value == 2.2632803302266517e-141
     assert alignments.v.q_start == 0
     assert alignments.v.q_end == 97
     assert alignments.v.t_start == 0
@@ -71,6 +71,20 @@ def test_produce_aa_alignments():
         alignments.c.t_seq
         == "ASTKGPSVFPLAPSSKSTSGGTAALGCLVKDYFPEPVTVSWNSGALTSGVHTFPAVLQSSGLYSLSSVVTVPSSSLGTQTYICNVNHKPSNTKVDKKVEPKSCDKTHTCPPCPAPELLGGPSVFLFPPKPKDTLMISRTPEVTCVVVDVSHEDPEVKFNWYVDGVEVHNAKTKPREEQYNSTYRVVSVLTVLHQDWLNGKEYKCKVSNKALPAPIEKTISKAKGQPREPQVYTLPPSRDELTKNQVSLTCLVKGFYPSDIAVEWESNGQPENNYKTTPPVLDSDGSFFLYSKLTVDKSRWQQGNVFSCSVMHEALHNHYTQKSLSLSPELQLEESCAEAQDGELDGLWTTITIFITLFLLSVCYSATVTFFKVKWIFSSVVDLKQTIIPDYRNMIGQGA"
     )
+
+
+def test_produce_aa_alignments_therapeutic():
+    # given
+    aligner = create_vjc_aligner_aa(use_segment_aligner=True)
+
+    query_sequence = "EVQLVESGGGSVQPGGSLRLSCTASGFTISRSYWICWVRQAPGKGLEWVGCIYGDNDITPLYANWAKGRFTISRDTSKNTVYLQMNSLRAEDTATYYCARLGYADYAYDLWGQGTTVTVSS"
+
+    # when
+    alignments = aligner.produce_aa_alignments(query_sequence)[0]
+
+    # then
+    assert alignments.v is not None
+    assert alignments.v.target_id == "IGHV3-66*01"
 
 
 if __name__ == "__main__":

@@ -27,7 +27,9 @@ def count_fasta_records(input_fasta_path: Path, input_format: str = "fasta") -> 
 
 
 def write_airr_iter_to_csv(
-    output_file_path: Path, cls: Type[AirrRearrangementEntry_co], airr_iter: Iterable[AirrRearrangementEntry_co]
+    output_file_path: Path,
+    cls: Type[AirrRearrangementEntry_co],
+    airr_iter: Iterable[AirrRearrangementEntry_co] | Iterable[list[AirrRearrangementEntry_co]],
 ):
     output_file_path.parent.mkdir(exist_ok=True, parents=True)
     with open(output_file_path, "w") as output:

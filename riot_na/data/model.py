@@ -1,7 +1,7 @@
 import json
 from dataclasses import dataclass
 from enum import Enum, unique
-from typing import Optional, TypeVar
+from typing import Generic, Optional, Sequence, TypeVar
 
 from riot_na.common.serialization_utils import base64_encode
 
@@ -108,6 +108,7 @@ class Scheme(str, Enum):
 class Organism(str, Enum):
     HOMO_SAPIENS = "human"
     MUS_MUSCULUS = "mouse"
+    VICUGNA_PACOS = "alpaca"
     CUSTOM = "custom"
 
 
@@ -132,6 +133,7 @@ class AirrRearrangementEntryNT:  # pylint: disable=too-many-instance-attributes
     sequence: str
     numbering_scheme: str
     locus: Optional[str] = None
+    locus_species: Optional[str] = None
     stop_codon: Optional[bool] = None
     vj_in_frame: Optional[bool] = None
     v_frameshift: Optional[bool] = None
@@ -246,6 +248,19 @@ class AirrRearrangementEntryNT:  # pylint: disable=too-many-instance-attributes
     exc: Optional[str] = None
     additional_validation_flags: Optional[EntryValidationResults] = None
 
+    def __gt__(self, other):
+        if self.v_score is None:
+            return False
+        if other.v_score is None:
+            return True
+        return self.v_score > other.v_score
+
+    @property
+    def primary_sequence_aa(self) -> str:
+        if self.scheme_residue_mapping is None:
+            return ""
+        return "".join(self.scheme_residue_mapping.values())
+
 
 @dataclass
 class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
@@ -255,6 +270,7 @@ class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
     sequence_aa: str
     numbering_scheme: str
     locus: Optional[str] = None
+    locus_species: Optional[str] = None
     stop_codon: Optional[bool] = None
     productive: Optional[bool] = None  # V and J aligned and no stop codon
     complete_vdj: Optional[bool] = None
@@ -268,8 +284,6 @@ class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
     v_alignment_end_aa: Optional[int] = None
     j_alignment_start_aa: Optional[int] = None
     j_alignment_end_aa: Optional[int] = None
-    c_alignment_start_aa: Optional[int] = None
-    c_alignment_end_aa: Optional[int] = None
     v_sequence_alignment_aa: Optional[str] = None
     v_germline_alignment_aa: Optional[str] = None
     j_sequence_alignment_aa: Optional[str] = None
@@ -337,9 +351,41 @@ class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
     exc: Optional[str] = None
     additional_validation_flags: Optional[EntryValidationResults] = None
 
+    def __gt__(self, other):
+        if self.v_score_aa is None:
+            return False
+        if other.v_score_aa is None:
+            return True
+        return self.v_score_aa > other.v_score_aa
+
+    @property
+    def primary_sequence_aa(self) -> str:
+        if self.scheme_residue_mapping is None:
+            return ""
+        return "".join(self.scheme_residue_mapping.values())
+
+
+@dataclass
+class SegmentedAirrRearrangementEntryAA(AirrRearrangementEntryAA):
+    query_sequence: Optional[str] = None
+    segment_start: Optional[int] = None
+    segment_end: Optional[int] = None
+
+
+@dataclass
+class SegmentedAirrRearrangementEntryNT(AirrRearrangementEntryNT):
+    query_sequence: Optional[str] = None
+    segment_start: Optional[int] = None
+    segment_end: Optional[int] = None
+
 
 AirrRearrangementEntry_co = TypeVar(
-    "AirrRearrangementEntry_co", AirrRearrangementEntryNT, AirrRearrangementEntryAA, covariant=True
+    "AirrRearrangementEntry_co",
+    AirrRearrangementEntryNT,
+    AirrRearrangementEntryAA,
+    SegmentedAirrRearrangementEntryNT,
+    SegmentedAirrRearrangementEntryAA,
+    covariant=True,
 )
 
 
@@ -418,6 +464,7 @@ class GeneAA:
 
 @dataclass(frozen=True)
 class SpeciesGeneMatch:
+    species_gene_id: str
     gene_id: str
     rev_comp: bool
     coverage: int
@@ -430,6 +477,24 @@ class SpeciesPrefilteringResult:
     query: str
     rev_comp_query: str
     top_matches: list[SpeciesGeneMatch]
+
+
+@dataclass(frozen=True)
+class SegmentMatch:
+    segment_start: int
+    segment_length: int
+    query_start: int
+    query_end: int
+    coverage: int
+    match_count: int
+    matching_genes: list[SpeciesGeneMatch]
+
+
+@dataclass(frozen=True)
+class SpeciesPrefilteringSegmentResult:
+    query: str
+    rev_comp_query: str
+    segments: list[SegmentMatch]
 
 
 @dataclass(frozen=True)
@@ -455,21 +520,24 @@ class AlignmentEntryNT:  # pylint: disable=too-many-instance-attributes
 
     def __lt__(self, other):
         if self.e_value == other.e_value:
-            self_aln_len = self.t_end - self.t_start
-            other_aln_len = self.t_end - self.t_start
-            if self_aln_len == other_aln_len:
-                return self.target_id < other.target_id
-            return self_aln_len > other_aln_len
+            if self.e_value == 0:
+                if self.seq_identity == other.seq_identity:
+                    return self.target_id < other.target_id
+                return self.seq_identity > other.seq_identity
+            return self.target_id < other.target_id
         return self.e_value < other.e_value
 
     def __gt__(self, other):
         if self.e_value == other.e_value:
-            self_aln_len = self.t_end - self.t_start
-            other_aln_len = self.t_end - self.t_start
-            if self_aln_len == other_aln_len:
-                return self.target_id > other.target_id
-            return self_aln_len < other_aln_len
+            if self.e_value == 0:
+                if self.seq_identity == other.seq_identity:
+                    return self.target_id > other.target_id
+                return self.seq_identity < other.seq_identity
+            return self.target_id > other.target_id
         return self.e_value > other.e_value
+
+    def lookup_gene_id(self) -> str:
+        return f"{self.species.value}|{self.locus.value}|{self.target_id}"
 
 
 @dataclass(frozen=True)
@@ -491,24 +559,40 @@ class AlignmentEntryAA:  # pylint: disable=too-many-instance-attributes
 
     def __lt__(self, other):
         if self.e_value == other.e_value:
-            self_aln_len = self.t_end - self.t_start
-            other_aln_len = self.t_end - self.t_start
-            if self_aln_len == other_aln_len:
-                return self.target_id < other.target_id
-            return self_aln_len > other_aln_len
+            if self.e_value == 0:
+                if self.seq_identity == other.seq_identity:
+                    return self.target_id < other.target_id
+                return self.seq_identity > other.seq_identity
+            return self.target_id < other.target_id
         return self.e_value < other.e_value
 
     def __gt__(self, other):
         if self.e_value == other.e_value:
-            self_aln_len = self.t_end - self.t_start
-            other_aln_len = self.t_end - self.t_start
-            if self_aln_len == other_aln_len:
-                return self.target_id > other.target_id
-            return self_aln_len < other_aln_len
+            if self.e_value == 0:
+                if self.seq_identity == other.seq_identity:
+                    return self.target_id > other.target_id
+                return self.seq_identity < other.seq_identity
+            return self.target_id > other.target_id
         return self.e_value > other.e_value
+
+    def lookup_gene_id(self) -> str:
+        return f"{self.species.value}|{self.locus.value}|{self.target_id}"
 
 
 AlignmentEntry = TypeVar("AlignmentEntry", AlignmentEntryNT, AlignmentEntryAA)
+
+
+@dataclass
+class AlignmentSegment(Generic[AlignmentEntry]):
+    alignments: Sequence[AlignmentEntry]
+    best_alignment: Optional[AlignmentEntry] = None  # Best alignment for this segment
+    segment_start: Optional[int] = None
+    segment_end: Optional[int] = None
+
+    def __post_init__(self):
+        """Set the best alignment after initialization"""
+        if self.alignments:
+            self.best_alignment = min(self.alignments)  # Lowest e-value first
 
 
 @dataclass
@@ -517,6 +601,8 @@ class AlignmentsNT:
     d: Optional[AlignmentEntryNT] = None
     j: Optional[AlignmentEntryNT] = None
     c: Optional[AlignmentEntryNT] = None
+    segment_start: Optional[int] = None
+    segment_end: Optional[int] = None
 
 
 @dataclass
@@ -524,6 +610,8 @@ class AlignmentsAA:
     v: Optional[AlignmentEntryAA] = None
     j: Optional[AlignmentEntryAA] = None
     c: Optional[AlignmentEntryAA] = None
+    segment_start: Optional[int] = None
+    segment_end: Optional[int] = None
 
 
 @dataclass

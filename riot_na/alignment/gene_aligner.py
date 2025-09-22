@@ -12,11 +12,13 @@ from riot_na.alignment.skbio_alignment import (
     align_aa,  # type: ignore  # pylint: disable=import-error
 )
 from riot_na.alignment.skbio_alignment import align
+from riot_na.common.gene_match_utils import create_gene_lookup
 from riot_na.common.multi_species_prefiltering import MultiSpeciesPrefiltering
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
     AlignmentEntryAA,
     AlignmentEntryNT,
+    AlignmentSegment,
     Gene,
     GeneAA,
     GermlineGene,
@@ -31,7 +33,7 @@ ALIGNER_PARAMS = {"match_score": 1, "mismatch_score": -1, "gap_open_penalty": 4,
 class GeneAligner:
     def __init__(
         self,
-        genes: list[Gene],
+        genes: Sequence[Gene],
         kmer_size: int,
         distance_threshold: int,
         top_n: int,
@@ -39,46 +41,50 @@ class GeneAligner:
         e_value_threshold: Optional[float] = None,
         alignment_length_threshold: Optional[int] = None,
     ) -> None:
+
         self.prefiltering = MultiSpeciesPrefiltering(genes, kmer_size, distance_threshold, top_n, modulo_n)
 
-        self.gene_lookup = dict(map(lambda gene: (gene.species + "|" + gene.name, gene), genes))
+        self.gene_lookup = create_gene_lookup(genes)
         self.db_length = sum(len(gene.sequence) for gene in genes)
 
         self.e_value_threshold = e_value_threshold
         self.alignment_length_threshold = alignment_length_threshold
 
     def _prefilter(self, query: str, both_strains: bool) -> SpeciesPrefilteringResult:
+        """Prefilter genes and return species-aware gene matches."""
+
         if both_strains:
             return self.prefiltering.calculate_top_matches_with_rev_comp(query)
+
         return self.prefiltering.calculate_top_matches(query)
 
     def _align_sequences(self, query: str, prefiltering_result: SpeciesPrefilteringResult) -> list[AlignmentEntryNT]:
         aligner = StripedSmithWaterman(query, **ALIGNER_PARAMS)
-        rev_comp_aligner = StripedSmithWaterman(prefiltering_result.rev_comp_query, **ALIGNER_PARAMS)
+        rev_comp_aligner = (
+            StripedSmithWaterman(prefiltering_result.rev_comp_query, **ALIGNER_PARAMS)
+            if prefiltering_result.rev_comp_query
+            else None
+        )
 
         result = []
 
         for gene_match in prefiltering_result.top_matches:
-            current_species = gene_match.species
-            match gene_match.rev_comp:
-                case False:
-                    alignment = align(
-                        aligner=aligner,
-                        target_id=gene_match.gene_id,
-                        target=self.gene_lookup[gene_match.species + "|" + gene_match.gene_id].sequence,
-                        query=query,
-                        db_length=self.db_length,
-                        rev_comp=gene_match.rev_comp,
-                    )
-                case True:
-                    alignment = align(
-                        aligner=rev_comp_aligner,
-                        target_id=gene_match.gene_id,
-                        target=self.gene_lookup[gene_match.species + "|" + gene_match.gene_id].sequence,
-                        query=prefiltering_result.rev_comp_query,
-                        db_length=self.db_length,
-                        rev_comp=gene_match.rev_comp,
-                    )
+            target_gene = self.gene_lookup[gene_match.species_gene_id]
+            current_query = (
+                prefiltering_result.rev_comp_query
+                if gene_match.rev_comp and prefiltering_result.rev_comp_query
+                else query
+            )
+            current_aligner = rev_comp_aligner if gene_match.rev_comp and rev_comp_aligner else aligner
+
+            alignment = align(
+                aligner=current_aligner,
+                target_id=gene_match.gene_id,
+                target=target_gene.sequence,
+                query=current_query,
+                db_length=self.db_length,
+                rev_comp=gene_match.rev_comp,
+            )
 
             alignment_length = alignment.t_end - alignment.t_start
 
@@ -89,8 +95,6 @@ class GeneAligner:
             if self.alignment_length_threshold is not None:
                 if alignment_length < self.alignment_length_threshold:
                     continue
-
-            target_gene: Gene = self.gene_lookup[gene_match.species + "|" + gene_match.gene_id]
 
             result.append(
                 AlignmentEntryNT(
@@ -106,23 +110,20 @@ class GeneAligner:
                     t_len=alignment.t_len,
                     cigar=alignment.cigar,
                     rev_comp=alignment.rev_comp,
-                    species=current_species,
+                    species=gene_match.species,
                     locus=gene_match.locus,
-                    q_seq=alignment.query,
+                    q_seq=current_query,
                     t_seq=target_gene.sequence,
-                    reading_frame=target_gene.reading_frame,
+                    reading_frame=target_gene.reading_frame if isinstance(target_gene, Gene) else None,
                 )
             )
 
         return result
 
-    def align(self, query: str, both_strains: bool) -> Optional[AlignmentEntryNT]:
+    def align(self, query: str, both_strains: bool) -> Sequence[AlignmentSegment]:
         prefiltering_result = self._prefilter(query, both_strains)
         alignments = self._align_sequences(query, prefiltering_result)
-
-        alignments.sort()
-
-        return alignments[0] if len(alignments) > 0 else None
+        return [AlignmentSegment(alignments)]
 
 
 AA_ALIGNER_PARAMS = {
@@ -136,7 +137,7 @@ AA_ALIGNER_PARAMS = {
 class GeneAlignerAA:
     def __init__(
         self,
-        genes: list[Gene],
+        genes: Sequence[GeneAA],
         kmer_size: int,
         distance_threshold: int,
         top_n: int,
@@ -145,9 +146,10 @@ class GeneAlignerAA:
         alignment_length_threshold: Optional[int] = None,
         max_cdr3_length: Optional[int] = None,
     ) -> None:
+        # Initialize the base prefiltering directly with species-aware keys
         self.prefiltering = MultiSpeciesPrefiltering(genes, kmer_size, distance_threshold, top_n, modulo_n)
 
-        self.gene_lookup: dict[str, Gene] = dict(map(lambda gene: (gene.species + "|" + gene.name, gene), genes))
+        self.gene_lookup = create_gene_lookup(genes)
         self.db_length = sum(len(gene.sequence) for gene in genes)
 
         self.e_value_threshold = e_value_threshold
@@ -155,19 +157,23 @@ class GeneAlignerAA:
         self.max_cdr3_length = max_cdr3_length
 
     def _prefilter(self, query: str) -> SpeciesPrefilteringResult:
+        """Prefilter genes and return species-aware gene matches."""
         return self.prefiltering.calculate_top_matches(query)
 
-    def _align_sequences(self, query: str, prefiltering_result: SpeciesPrefilteringResult) -> list[AlignmentEntryAA]:
+    def _align_sequences(
+        self, query: str, prefiltering_result: SpeciesPrefilteringResult
+    ) -> Sequence[AlignmentEntryAA]:
         aligner = StripedSmithWaterman(query, **AA_ALIGNER_PARAMS)
 
         result = []
 
         for gene_match in prefiltering_result.top_matches:
-            current_species = gene_match.species
+            target_gene = self.gene_lookup[gene_match.species_gene_id]
+
             alignment = align_aa(
                 aligner=aligner,
                 target_id=gene_match.gene_id,
-                target=self.gene_lookup[gene_match.species + "|" + gene_match.gene_id].sequence,
+                target=target_gene.sequence,
                 query=query,
                 db_length=self.db_length,
             )
@@ -185,8 +191,6 @@ class GeneAlignerAA:
                 if alignment.q_start > self.max_cdr3_length:
                     continue
 
-            target_gene: Gene = self.gene_lookup[gene_match.species + "|" + gene_match.gene_id]
-
             result.append(
                 AlignmentEntryAA(
                     target_id=alignment.target_id,
@@ -198,7 +202,7 @@ class GeneAlignerAA:
                     t_start=alignment.t_start,
                     t_end=alignment.t_end,
                     cigar=alignment.cigar,
-                    species=current_species,
+                    species=gene_match.species,
                     locus=gene_match.locus,
                     q_seq=query,
                     t_seq=target_gene.sequence,
@@ -207,13 +211,10 @@ class GeneAlignerAA:
 
         return result
 
-    def align(self, query: str) -> Optional[AlignmentEntryAA]:
+    def align(self, query: str) -> Sequence[AlignmentSegment]:
         prefiltering_result = self._prefilter(query)
         alignments = self._align_sequences(query, prefiltering_result)
-
-        alignments.sort()
-
-        return alignments[0] if len(alignments) > 0 else None
+        return [AlignmentSegment(alignments)]
 
 
 def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> dict:
@@ -222,29 +223,29 @@ def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> d
     match germline_gene:
         case GermlineGene.V:
             return {
-                "kmer_size": 9,
-                "distance_threshold": 13,
-                "top_n": int(os.environ.get("TOP_N", 12)),
-                "modulo_n": 2,
-                "e_value_threshold": 0.001,
-                "alignment_length_threshold": 100,
+                "kmer_size": int(os.environ.get("KMER_SIZE_V_AA", 9)),
+                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_V_AA", 13)),
+                "top_n": int(os.environ.get("TOP_N_V_AA", 12)),
+                "modulo_n": int(os.environ.get("MODULO_N_V_AA", 2)),
+                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_AA", 0.001)),
+                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_AA", 100)),
             }
         case GermlineGene.D:
             return {
-                "kmer_size": 5,
-                "distance_threshold": 3,
-                "top_n": int(os.environ.get("TOP_N", 5)),
-                "modulo_n": 1,
+                "kmer_size": int(os.environ.get("KMER_SIZE_D_AA", 5)),
+                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_D_AA", 3)),
+                "top_n": int(os.environ.get("TOP_N_D_AA", 5)),
+                "modulo_n": int(os.environ.get("MODULO_N_D_AA", 1)),
             }
         case GermlineGene.J:
             assert locus is not None
             match locus:
                 case Locus.IGH:
                     return {
-                        "kmer_size": 5,
-                        "distance_threshold": 3,
-                        "top_n": int(os.environ.get("TOP_N", 5)),
-                        "modulo_n": 2,
+                        "kmer_size": int(os.environ.get("KMER_SIZE_JH_AA", 5)),
+                        "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_JH_AA", 3)),
+                        "top_n": int(os.environ.get("TOP_N_JH_AA", 5)),
+                        "modulo_n": int(os.environ.get("MODULO_N_JH_AA", 2)),
                     }
                 case Locus.IGK:
                     return {
@@ -292,28 +293,28 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
     match germline_gene:
         case GermlineGene.V:
             return {
-                "kmer_size": 3,
-                "distance_threshold": 3,
-                "top_n": int(os.environ.get("TOP_N", 20)),
-                "modulo_n": 1,
-                "e_value_threshold": 1e-55,
-                "alignment_length_threshold": 80,
+                "kmer_size": int(os.environ.get("KMER_SIZE_V_AA", 3)),
+                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_V_AA", 3)),
+                "top_n": int(os.environ.get("TOP_N_V_AA", 20)),
+                "modulo_n": int(os.environ.get("MODULO_N_V_AA", 1)),
+                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_AA", 1e-45)),
+                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_AA", 50)),
             }
         case GermlineGene.J:
             return {
-                "kmer_size": 3,
-                "distance_threshold": 3,
-                "top_n": int(os.environ.get("TOP_N", 5)),
-                "modulo_n": 1,
-                "alignment_length_threshold": 7,
-                "max_cdr3_length": 60,
+                "kmer_size": int(os.environ.get("KMER_SIZE_J_AA", 3)),
+                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_J_AA", 3)),
+                "top_n": int(os.environ.get("TOP_N_J_AA", 5)),
+                "modulo_n": int(os.environ.get("MODULO_N_J_AA", 1)),
+                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_J_AA", 7)),
+                "max_cdr3_length": int(os.environ.get("MAX_CDR3_LENGTH_J_AA", 60)),
             }
         case GermlineGene.C:
             return {
-                "kmer_size": 3,
-                "distance_threshold": 3,
-                "top_n": int(os.environ.get("TOP_N", 5)),
-                "modulo_n": 2,
+                "kmer_size": int(os.environ.get("KMER_SIZE_C_AA", 3)),
+                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_C_AA", 3)),
+                "top_n": int(os.environ.get("TOP_N_C_AA", 5)),
+                "modulo_n": int(os.environ.get("MODULO_N_C_AA", 2)),
             }
         case _:
             raise ValueError("AA aligner not supported for gene type")
@@ -350,7 +351,7 @@ def get_gene_parsing_function(gene_type: GermlineGene) -> Callable[[str, SeqReco
                 name=description[0],
                 locus=Locus[description[1]],
                 reading_frame=None,
-                species=Organism.HOMO_SAPIENS,
+                species=Organism[description[2]],
                 sequence=str(record.seq),
             )
 
@@ -370,11 +371,11 @@ def read_genes(path: Path, parsing_fn):
     return result
 
 
-def create_v_gene_aligner(allowed_species: list[Organism], db_dir: Path = GENE_DB_DIR) -> GeneAligner:
+def create_v_gene_aligner(allowed_species: Sequence[Organism], db_dir: Path = GENE_DB_DIR) -> GeneAligner:
     genes = []
 
     if not allowed_species:
-        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS]
+        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS]
 
     gene_parsing_function = get_gene_parsing_function(GermlineGene.V)
 
@@ -391,18 +392,14 @@ def create_v_gene_aligner(allowed_species: list[Organism], db_dir: Path = GENE_D
 
 
 def create_aligner(
-    allowed_species: Organism, germline_gene: GermlineGene, locus: Locus, db_dir: Path = GENE_DB_DIR
+    organism: Organism, germline_gene: GermlineGene, locus: Locus, db_dir: Path = GENE_DB_DIR
 ) -> GeneAligner:
     assert germline_gene != GermlineGene.V
 
     gene_parsing_function = get_gene_parsing_function(germline_gene)
 
     gene_path = (
-        Path(db_dir)
-        / "gene_db"
-        / f"{germline_gene.value.lower()}_genes"
-        / allowed_species.value
-        / f"{locus.value}.fasta"
+        Path(db_dir) / "gene_db" / f"{germline_gene.value.lower()}_genes" / organism.value / f"{locus.value}.fasta"
     )
     genes = read_genes(gene_path, gene_parsing_function)
 
@@ -412,11 +409,11 @@ def create_aligner(
     return genes_aligner
 
 
-def create_aa_v_gene_aligner(allowed_species: list[Organism], aa_genes_dir: Path) -> GeneAlignerAA:
+def create_aa_v_gene_aligner(allowed_species: Sequence[Organism], aa_genes_dir: Path) -> GeneAlignerAA:
     genes = []
 
     if not allowed_species:
-        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS]
+        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS]
 
     for species in allowed_species:
         input_path = aa_genes_dir / "v_genes" / f"{species.value}.fasta"

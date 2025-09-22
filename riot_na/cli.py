@@ -15,6 +15,8 @@ from riot_na.data.model import (
     InputType,
     Organism,
     Scheme,
+    SegmentedAirrRearrangementEntryAA,
+    SegmentedAirrRearrangementEntryNT,
 )
 
 
@@ -57,6 +59,12 @@ from riot_na.data.model import (
         "This option impacts only amino acid sequences."
     ),
 )
+@click.option(
+    "--multiple-domains",
+    type=bool,
+    default=False,
+    help=("Return all domains of multiple domain proteins."),
+)
 def run_riot(
     input_file: Optional[Path],
     sequence: Optional[str],
@@ -66,6 +74,7 @@ def run_riot(
     input_type: InputType,
     ncpu: int,
     extend_alignment: bool,
+    multiple_domains: bool,
 ):
     species_list = [species] if species else None
     if input_file and input_file.exists():
@@ -81,6 +90,7 @@ def run_riot(
             allowed_species=species_list,
             n_processes=ncpu,
             input_type=input_type,
+            return_all_domains=multiple_domains,
         )
         end = time.perf_counter()
         elapsed_time = end - start
@@ -90,20 +100,28 @@ def run_riot(
         record_type: Any
         match input_type:
             case InputType.NT:
-                numbering_nt = create_riot_nt(allowed_species=species_list, db_dir=GENE_DB_DIR)
-                record_type = AirrRearrangementEntryNT
+                numbering_nt = create_riot_nt(
+                    allowed_species=species_list, db_dir=GENE_DB_DIR, return_all_domains=multiple_domains
+                )
+                record_type = AirrRearrangementEntryNT if not multiple_domains else SegmentedAirrRearrangementEntryNT
                 result = numbering_nt.run_on_sequence(header="-", query_sequence=sequence, scheme=scheme)
             case InputType.AA:
-                numbering_aa = create_riot_aa(allowed_species=species_list, db_dir=GENE_DB_DIR)
-                record_type = AirrRearrangementEntryAA
+                numbering_aa = create_riot_aa(
+                    allowed_species=species_list, db_dir=GENE_DB_DIR, return_all_domains=multiple_domains
+                )
+                record_type = AirrRearrangementEntryAA if not multiple_domains else SegmentedAirrRearrangementEntryAA
                 result = numbering_aa.run_on_sequence(
                     header="-", query_sequence=sequence, scheme=scheme, extend_alignment=extend_alignment
                 )
 
         if output_file:
-            write_airr_iter_to_csv(output_file, record_type, [result])
+            write_airr_iter_to_csv(output_file, record_type, result if not multiple_domains else [result])
         else:
-            print(result.__dict__)
+            if not multiple_domains:
+                print(result.__dict__)
+            else:
+                for single_result in result:
+                    print(single_result.__dict__)
 
     else:
         print("Need to specify input sequence or FASTA file!")

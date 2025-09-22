@@ -58,6 +58,9 @@ jobs:
           echo "$OUTPUT"
           echo "$OUTPUT" > pytest-output.txt
           exit $CODE
+      - name: Rust tests
+        run: |
+          cargo test
       - name: Upload pytest test results
         uses: actions/upload-artifact@v4
         with:

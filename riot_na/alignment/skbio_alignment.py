@@ -60,6 +60,8 @@ def align_aa(
     target: str,
     db_length: Optional[int] = None,
     calculate_score: bool = True,
+    extend_c_terminus: bool = False,
+    extend_n_terminus: bool = False,
 ) -> InternalAlignmentEntryAA:
     res = aligner(target)
 
@@ -70,6 +72,8 @@ def align_aa(
 
     if calculate_score:
         assert db_length is not None
+        assert extend_c_terminus is False, "Score calculation not supported for extended C-terminus"
+        assert extend_n_terminus is False, "Score calculation not supported for extended N-terminus"
         bit_score = compute_bit_score(res["optimal_alignment_score"], gumbell_params=GumbellParams.AA)
         e_value = compute_evalue(len(query), db_length, res["optimal_alignment_score"])
         seq_identity = calculate_seq_identity(res["cigar"], query, target, q_start, t_start) if query else 0
@@ -77,6 +81,20 @@ def align_aa(
         bit_score = None
         e_value = None
         seq_identity = None
+
+    fixed_cigar = Cigar(res["cigar"])
+
+    if extend_n_terminus:
+        n_term_number_of_matches = min(q_start, t_start)
+        fixed_cigar = Cigar(f"{n_term_number_of_matches}M" + fixed_cigar)
+        q_start = q_start - n_term_number_of_matches
+        t_start = t_start - n_term_number_of_matches
+
+    if extend_c_terminus:
+        c_term_number_of_matches = min(len(query) - q_end, len(target) - t_end)
+        fixed_cigar = Cigar(fixed_cigar + f"{c_term_number_of_matches}M")
+        q_end = q_end + c_term_number_of_matches
+        t_end = t_end + c_term_number_of_matches
 
     return InternalAlignmentEntryAA(
         target_id=target_id,
@@ -87,5 +105,5 @@ def align_aa(
         q_end=q_end,
         t_start=t_start,
         t_end=t_end,
-        cigar=Cigar(res["cigar"]),
+        cigar=fixed_cigar,
     )

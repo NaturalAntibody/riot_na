@@ -17,6 +17,7 @@ from riot_na.data.model import (
     RegionOffsetsNT,
     Scheme,
     SchemeAlignment,
+    SegmentedAirrRearrangementEntryNT,
     TranslatedAlignmentsNT,
 )
 
@@ -49,6 +50,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         self.d_gene_sequence: Optional[str] = None
         self.d_gene_name: Optional[str] = None
 
+        self.scheme_alingment: Optional[SchemeAlignment] = None
         self.nt_offsets: Optional[RegionOffsetsNT] = None
         self.aa_offsets: Optional[RegionOffsetsAA] = None
 
@@ -65,6 +67,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
 
         self.rearrangement.v_call = v_aln.target_id
         self.rearrangement.locus = v_aln.locus.value
+        self.rearrangement.locus_species = v_aln.species.value
 
         self.rearrangement.v_sequence_start = v_aln.q_start + 1
         self.rearrangement.v_sequence_end = v_aln.q_end
@@ -471,3 +474,20 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         self.rearrangement.additional_validation_flags = validate_airr_entry(self.rearrangement, scheme=self.scheme)
 
         return self.rearrangement
+
+
+class SegmentedAirrBuilder(AirrBuilder):
+    def __init__(self, sequence_header: str, sequence: str, scheme: Scheme, query_sequence: str):
+        super().__init__(sequence_header, sequence, scheme)
+
+        self.rearrangement: SegmentedAirrRearrangementEntryNT = SegmentedAirrRearrangementEntryNT(
+            sequence_header=sequence_header,
+            sequence=sequence,
+            numbering_scheme=scheme.value,
+            query_sequence=query_sequence,
+        )
+
+    def with_segment_start_end(self, segment_start: int, segment_end: int):
+        self.rearrangement.segment_start = segment_start + 1
+        self.rearrangement.segment_end = segment_end
+        return self
