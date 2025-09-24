@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v4.0.2 (2025-09-24)
+
+### Bug Fixes
+
+- Correct scheme residue mapping for VICUGNA_PACOS
+  ([`78e0893`](https://github.com/NaturalAntibody/riot_na/commit/78e0893ec4f14d7df68897d66e7dd46a29a82950))
+
+
 ## v4.0.1 (2025-09-22)
 
 ### Documentation
