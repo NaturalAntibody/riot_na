@@ -1,6 +1,9 @@
 # CHANGELOG
 
 
+## v4.0.3 (2025-10-23)
+
+
 ## v4.0.2 (2025-09-24)
 
 ### Bug Fixes
@@ -26,6 +29,9 @@
 
 - Correct filtering using coverage and segment_length in prefiltering
   ([`70c8251`](https://github.com/NaturalAntibody/riot_na/commit/70c8251a0807bb225edb1d7bffbdd4493083ad6a))
+
+- Riot c alignment offset fix
+  ([`6a36a6d`](https://github.com/NaturalAntibody/riot_na/commit/6a36a6d491450640cf1046b90222301f0c0f1624))
 
 ### Chores
 
