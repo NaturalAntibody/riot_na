@@ -239,7 +239,7 @@ class VJCAlignmentTranslatorAA:
                 extended_j_aa_alignment = None
 
             masked_aa_for_c, c_gene_id, c_gene_aa, c_aa_alignment = self.generate_c_aa_alignment(
-                alignments, aligned_sequence_aa, species, locus, extended_j_aa_alignment
+                alignments, aligned_sequence_aa, species, locus, extended_j_aa_alignment, v_aa_alignment.q_end
             )
 
             if c_aa_alignment:
@@ -305,9 +305,10 @@ class VJCAlignmentTranslatorAA:
         species: Organism,
         locus: Locus,
         extended_j_aa_alignment: AlignmentEntryAA | None,
+        j_offset: int,
     ) -> tuple[str, str | None, str | None, InternalAlignmentEntryAA | None]:
         if alignments.c and extended_j_aa_alignment:
-            masked_aa_for_c = aligned_sequence_aa[extended_j_aa_alignment.q_end :]
+            masked_aa_for_c = aligned_sequence_aa[extended_j_aa_alignment.q_end + j_offset :]
 
             c_gene_id = alignments.c.target_id
 
