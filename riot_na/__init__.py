@@ -1,7 +1,7 @@
 # pylint: skip-file
 # flake8: noqa
 # isort: skip_file
-__version__ = "3.0.0"
+__version__ = "4.0.2"
 from riot_na.riot_na import Prefiltering, GeneMatch
 from riot_na.api.riot_numbering import (
     RiotNumberingAA,
