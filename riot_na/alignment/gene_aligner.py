@@ -315,6 +315,7 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_C_AA", 3)),
                 "top_n": int(os.environ.get("TOP_N_C_AA", 5)),
                 "modulo_n": int(os.environ.get("MODULO_N_C_AA", 2)),
+                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_C_AA", 3)),
             }
         case _:
             raise ValueError("AA aligner not supported for gene type")

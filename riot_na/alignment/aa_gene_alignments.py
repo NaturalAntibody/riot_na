@@ -170,11 +170,13 @@ class VJCAlignmentTranslatorAA:
                 calculate_score=False,
                 extend_n_terminus=extend_alignment,
             )
+            v_aln_length_threshold = self.v_aligner.alignment_length_threshold or 0
             assert (
                 v_aa_alignment.t_start != -1
                 and v_aa_alignment.t_end != -1
                 and v_aa_alignment.q_start != -1
                 and v_aa_alignment.q_end != -1
+                and v_aa_alignment.q_end - v_aa_alignment.q_start >= v_aln_length_threshold
             ), "Query translation failed: could not align sequence_aa to germline_aa"
 
             masked_aa = alignes_sequence_no_c_aa[v_aa_alignment.q_end :]
@@ -192,11 +194,13 @@ class VJCAlignmentTranslatorAA:
                 else None
             )
 
-            if j_aa_alignment is not None and (
+            j_aln_length_threshold = self.j_aligners[species][locus].alignment_length_threshold or 0
+            if j_aa_alignment is not None and (  # pylint: disable=too-many-boolean-expressions
                 j_aa_alignment.q_start == -1
                 or j_aa_alignment.q_end == -1
                 or j_aa_alignment.t_start == -1
                 or j_aa_alignment.t_end == -1
+                or j_aa_alignment.q_end - j_aa_alignment.q_start < j_aln_length_threshold
             ):
                 j_aa_alignment = None
 
@@ -241,6 +245,17 @@ class VJCAlignmentTranslatorAA:
             masked_aa_for_c, c_gene_id, c_gene_aa, c_aa_alignment = self.generate_c_aa_alignment(
                 alignments, aligned_sequence_aa, species, locus, extended_j_aa_alignment, v_aa_alignment.q_end
             )
+
+            if self.c_aligners is not None:
+                c_aln_length_threshold = self.c_aligners[species][locus].alignment_length_threshold or 0
+                if c_aa_alignment is not None and (  # pylint: disable=too-many-boolean-expressions
+                    c_aa_alignment.q_start == -1
+                    or c_aa_alignment.q_end == -1
+                    or c_aa_alignment.t_start == -1
+                    or c_aa_alignment.t_end == -1
+                    or c_aa_alignment.q_end - c_aa_alignment.q_start < c_aln_length_threshold
+                ):
+                    c_aa_alignment = None
 
             if c_aa_alignment:
                 assert c_gene_aa
