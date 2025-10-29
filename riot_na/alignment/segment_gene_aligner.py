@@ -363,14 +363,14 @@ def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> d
     match germline_gene:
         case GermlineGene.V:
             return {
-                "kmer_size": 9,
-                "distance_threshold": 13,
-                "top_n": int(os.environ.get("TOP_N", 12)),
-                "modulo_n": 2,
-                "e_value_threshold": 0.001,
-                "alignment_length_threshold": 80,
-                "min_prefiltering_coverage": 60,
-                "min_segment_length": 120,
+                "kmer_size": int(os.environ.get("KMER_SIZE_V_NT", 5)),
+                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_V_NT", 13)),
+                "top_n": int(os.environ.get("TOP_N_V_NT", 12)),
+                "modulo_n": int(os.environ.get("MODULO_N_V_NT", 2)),
+                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_NT", 0.05)),
+                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_NT", 100)),
+                "min_prefiltering_coverage": int(os.environ.get("MIN_PREFILTERING_COVERAGE_V_NT", 75)),
+                "min_segment_length": int(os.environ.get("MIN_SEGMENT_LENGTH_V_NT", 180)),
             }
         case _:
             return gene_aligner_params(germline_gene, locus)
@@ -383,14 +383,14 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
     match germline_gene:
         case GermlineGene.V:
             return {
-                "kmer_size": 3,
-                "distance_threshold": 4,
-                "top_n": int(os.environ.get("TOP_N", 100)),
-                "modulo_n": 1,
-                "e_value_threshold": 1e-55,
-                "alignment_length_threshold": 80,
-                "min_prefiltering_coverage": 20,
-                "min_segment_length": 60,
+                "kmer_size": int(os.environ.get("KMER_SIZE_V_AA", 3)),
+                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_V_AA", 4)),
+                "top_n": int(os.environ.get("TOP_N_V_AA", 12)),
+                "modulo_n": int(os.environ.get("MODULO_N_V_AA", 1)),
+                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_AA", 1e-55)),
+                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_AA", 50)),
+                "min_prefiltering_coverage": int(os.environ.get("MIN_PREFILTERING_COVERAGE_V_AA", 35)),
+                "min_segment_length": int(os.environ.get("MIN_SEGMENT_LENGTH_V_AA", 60)),
             }
         case _:
             return gene_aa_aligner_params(germline_gene)

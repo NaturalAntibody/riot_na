@@ -1,3 +1,4 @@
+import os
 from pathlib import Path
 from typing import Literal, Optional
 
@@ -306,7 +307,7 @@ def scheme_alignment(
         assert j_gene_start_on_scheme is not None
         assert j_aligment.t_seq is not None
 
-        if j_aligment.q_end - j_aligment.q_start > 5:
+        if j_aligment.q_end - j_aligment.q_start >= int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_J_AA", 5)):
             masked = v_aligment.q_seq[v_aligment.q_end :]
 
             # masked = v_aligment.q_seq[v_aligment.q_end - v_aligment.q_start :]

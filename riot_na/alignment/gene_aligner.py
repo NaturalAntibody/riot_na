@@ -219,71 +219,73 @@ class GeneAlignerAA:
 
 def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> dict:
     # ideally this should be read from a file or env
-
     match germline_gene:
         case GermlineGene.V:
             return {
-                "kmer_size": int(os.environ.get("KMER_SIZE_V_AA", 9)),
-                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_V_AA", 13)),
-                "top_n": int(os.environ.get("TOP_N_V_AA", 12)),
-                "modulo_n": int(os.environ.get("MODULO_N_V_AA", 2)),
-                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_AA", 0.001)),
-                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_AA", 100)),
+                "kmer_size": int(os.environ.get("KMER_SIZE_V_NT", 5)),
+                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_V_NT", 13)),
+                "top_n": int(os.environ.get("TOP_N_V_NT", 12)),
+                "modulo_n": int(os.environ.get("MODULO_N_V_NT", 2)),
+                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_NT", 0.05)),
+                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_NT", 100)),
             }
         case GermlineGene.D:
             return {
-                "kmer_size": int(os.environ.get("KMER_SIZE_D_AA", 5)),
-                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_D_AA", 3)),
-                "top_n": int(os.environ.get("TOP_N_D_AA", 5)),
-                "modulo_n": int(os.environ.get("MODULO_N_D_AA", 1)),
+                "kmer_size": int(os.environ.get("KMER_SIZE_D_NT", 5)),
+                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_D_NT", 3)),
+                "top_n": int(os.environ.get("TOP_N_D_NT", 5)),
+                "modulo_n": int(os.environ.get("MODULO_N_D_NT", 1)),
             }
         case GermlineGene.J:
             assert locus is not None
             match locus:
                 case Locus.IGH:
                     return {
-                        "kmer_size": int(os.environ.get("KMER_SIZE_JH_AA", 5)),
-                        "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_JH_AA", 3)),
-                        "top_n": int(os.environ.get("TOP_N_JH_AA", 5)),
-                        "modulo_n": int(os.environ.get("MODULO_N_JH_AA", 2)),
+                        "kmer_size": int(os.environ.get("KMER_SIZE_JH_NT", 5)),
+                        "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_JH_NT", 3)),
+                        "top_n": int(os.environ.get("TOP_N_JH_NT", 5)),
+                        "modulo_n": int(os.environ.get("MODULO_N_JH_NT", 2)),
                     }
                 case Locus.IGK:
                     return {
-                        "kmer_size": 5,
-                        "distance_threshold": 5,
-                        "top_n": int(os.environ.get("TOP_N", 5)),
-                        "modulo_n": 1,
+                        "kmer_size": int(os.environ.get("KMER_SIZE_JK_NT", 5)),
+                        "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_JK_NT", 5)),
+                        "top_n": int(os.environ.get("TOP_N_JK_NT", 5)),
+                        "modulo_n": int(os.environ.get("MODULO_N_JK_NT", 1)),
                     }
                 case Locus.IGL:
                     return {
-                        "kmer_size": 5,
-                        "distance_threshold": 7,
-                        "top_n": int(os.environ.get("TOP_N", 5)),
-                        "modulo_n": 2,
+                        "kmer_size": int(os.environ.get("KMER_SIZE_JL_NT", 5)),
+                        "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_JL_NT", 7)),
+                        "top_n": int(os.environ.get("TOP_N_JL_NT", 5)),
+                        "modulo_n": int(os.environ.get("MODULO_N_JL_NT", 2)),
                     }
         case GermlineGene.C:
             assert locus is not None
             match locus:
                 case Locus.IGH:
                     return {
-                        "kmer_size": 5,
-                        "distance_threshold": 5,
-                        "top_n": int(os.environ.get("TOP_N", 5)),
-                        "modulo_n": 2,
+                        "kmer_size": int(os.environ.get("KMER_SIZE_CH_NT", 5)),
+                        "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_CH_NT", 5)),
+                        "top_n": int(os.environ.get("TOP_N_CH_NT", 5)),
+                        "modulo_n": int(os.environ.get("MODULO_N_CH_NT", 2)),
+                        "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_CH_NT", 0.05)),
                     }
                 case Locus.IGK:
                     return {
-                        "kmer_size": 3,
-                        "distance_threshold": 5,
-                        "top_n": int(os.environ.get("TOP_N", 3)),
-                        "modulo_n": 1,
+                        "kmer_size": int(os.environ.get("KMER_SIZE_CK_NT", 3)),
+                        "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_CK_NT", 5)),
+                        "top_n": int(os.environ.get("TOP_N_CK_NT", 3)),
+                        "modulo_n": int(os.environ.get("MODULO_N_CK_NT", 1)),
+                        "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_CK_NT", 0.05)),
                     }
                 case Locus.IGL:
                     return {
-                        "kmer_size": 3,
-                        "distance_threshold": 5,
-                        "top_n": int(os.environ.get("TOP_N", 3)),
-                        "modulo_n": 1,
+                        "kmer_size": int(os.environ.get("KMER_SIZE_CL_NT", 3)),
+                        "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_CL_NT", 5)),
+                        "top_n": int(os.environ.get("TOP_N_CL_NT", 3)),
+                        "modulo_n": int(os.environ.get("MODULO_N_CL_NT", 1)),
+                        "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_CL_NT", 0.05)),
                     }
 
 
@@ -306,7 +308,8 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_J_AA", 3)),
                 "top_n": int(os.environ.get("TOP_N_J_AA", 5)),
                 "modulo_n": int(os.environ.get("MODULO_N_J_AA", 1)),
-                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_J_AA", 7)),
+                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_J_AA", 5)),
+                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_J_AA", 0.001)),
                 "max_cdr3_length": int(os.environ.get("MAX_CDR3_LENGTH_J_AA", 60)),
             }
         case GermlineGene.C:
@@ -315,7 +318,8 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_C_AA", 3)),
                 "top_n": int(os.environ.get("TOP_N_C_AA", 5)),
                 "modulo_n": int(os.environ.get("MODULO_N_C_AA", 2)),
-                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_C_AA", 3)),
+                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_C_AA", 4)),
+                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_C_AA", 0.05)),
             }
         case _:
             raise ValueError("AA aligner not supported for gene type")
