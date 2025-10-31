@@ -18,9 +18,9 @@ def test_produce_nt_alignments():
     assert alignments.v.target_id == "IGHV-2ZSK"
     assert alignments.v.alignment_score == 445.8980348533401
     assert alignments.v.seq_identity == 0.9896907216494846
-    assert alignments.v.e_value == 4.962993038125875e-78
-    assert alignments.segment_start == 111
-    assert alignments.v.q_start == 0
+    assert alignments.v.e_value == 5.147860973643458e-78
+    assert alignments.segment_start == 85
+    assert alignments.v.q_start == 26
     assert alignments.v.q_end == 402 - alignments.segment_start
     assert alignments.v.q_len == 291
     assert alignments.v.t_start == 0

@@ -72,7 +72,7 @@ class RiotNumberingNT:
         -----------
         AirrRearrangementEntryNT object with alignment results (Extended AIRR format)
         """
-        query_sequence = query_sequence.upper()
+        query_sequence = query_sequence.upper().replace("U", "T")
         sequence = ""
         segment_start = -1
         segment_end = -1
@@ -384,24 +384,31 @@ if __name__ == "__main__":
     import json
     from dataclasses import asdict
 
-    # vdj_alnr = create_vdjc_aligner_nt()
-    # vjc_aa_translator = create_vjc_alignment_translator_aa()
-    scheme_alnr = SchemeAligner()
+    nt_numbering = create_riot_nt(return_all_domains=True)
+    NT_QUERY = "caagugcaauuggucgagagcgggggcggggucgugcaaccgggcaggagccugcgcuugagcugugccgcgagccaguucacguucgggagcuauggcaugcacugggucaggcaaauacccgggaaagggcucgaguggguggccacgaucucguacgauggcacgaaaaaguaccaugccgauagcgugugggaucgcuuuaucauaagcagggacaauagcaagaacacgcucuuucuccagaugaauagcuugcgcccggaagauaccgcgcucuauuucugugucaaggaccagcgccaggacgagugcgaggaaugguggucggacuauuacgauuucgggcgcaggcucccgugcaggaaaucgcgcgggcuagcgggcauauucgaugucuggggccauggcacgauggugaccgugagcucg"
+    # NT_QUERY = "CAGGCCCACCTGGAGCAAAGCGGCTCCGGGGTGAAGAAACCCGGAGCTTCTGTCAGAGTTAGCTGCTGGTCCTCTGAAGACATCTTCGAGCGGACCGAACTCATTCATTGGGTGCGCCAGGCCCCTGGCCAGGGGCTGGAGTGGATCGGATGGGTGAAGACAGTCACGGGCGCGGTGAACTTTGGGAGCCTTGATTTCAGACACCGGATTTCCCTGACCCGCGACAGAGATCTCTCTACAGCTTACATGGACATCCGGGGACTGACCCAGGATGACACAGCCACCTATTTTTGTGCCCGCCAAAAATTCGCTAGCAGATACTCCGGCGATCAGGGCAGCTATTTTGACCTTTGGGGGCGGGGAACACTGATTGTTGTGTCTTCC"
+    # NT_QUERY = (
+    #         # VH domain (nucleotide)
+    #         "GAGGTGCAGCTGGTGGAGTCTGGGGGAGGCTTGGTCCAGCCTGGGGGGTCCCTGAGACTCTCCTGTGCAGCCTCTGGATTCACCTTTAGCAGCTATGCCATGAGCTGGGTCCGCCAGGCTCCAGGCAAGGGGCTGGAGTGGGTGGCAGTTATATCATATGATGGAAGTAATAAATACTATGCAGACTCCGTGAAGGGCCGATTCACCATCTCCAGAGACAACGCCAAGAACTCACTGTATCTGCAAATGAACAGCCTGAGAGCCGAGGACACGGCTGTGTATTACTGTGCGAGAGATCGGGGGAGGAACGGTTATGATGCTTTTGATATCTGGGGCCAAGGGACAATGGTCACCGTCTCTTCAG"
+    #         # (GGGGS)3 linker (nucleotide)
+    #         "GGTGGCGGTTCAGGCGGAGGTGGCTCTGGCGGTGGCGGATCG"
+    #         # VL domain (nucleotide)
+    #         "GACATCCAGATGACCCAGTCTCCATCCTCCCTGTCTGCATCTGTAGGAGACAGAGTCACCATCACTTGCCGGGCAAGTCAGGGCATTAGCAGTTGGCTGGCCTGGTATCAGCAGAAACCAGGGAAAGCCCCTAAGCTCCTGATCTATGCTGCATCCAGTTTGCAAAGTGGGGTCCCATCAAGGTTCAGTGGCAGTGGATCTGGGACAGATTTCACTCTCACCATCAGCAGTCTGCAACCTGAAGATTTTGCAACTTACTACTGTCAGCAAGCTAACAGCTTCCCTTATACGTTCGGCCAAGGGACCAAGGTGGAAATCAAACGG"
+    #     )
 
-    # riot_numbering = RiotNumberingNT(vdj_alnr, vjc_aa_translator, scheme_alnr)
-    # # given query
-    # QUERY = "CAGGTGCAGCTCGTGGAGTCTGGGGGAGGCTTGGTGCAGCCTGGGGGGTCTCTGAGACTCTCCTGTGTAGCTTCTGGATTCACCTTCAGTGACTATGCCATGACCTGGCACCGCCAGGCCTCAGGGTCGGAGCTCGAGTTGGTCGCGGCGATTAGCAATGGCCGTGGTCGTAACACAAATTATGCAGATGCCGTGAAGGGTCGATTCACCATCTCCAGAGACAATGCCAAGAACACGGTGTATCTGCAAATGAACAACCTGAAATCTGACGACACGGCCGTGTACTACTGTAACGCGGCCGGGTTGGGGCCCGAATATGACTACTGGGGCCAGGGGACCCAGGTCACCGTCTCCGCGGAACCCAAGACACCAAAACCACAA"
-    # sample_result = riot_numbering.run_on_sequence("header", QUERY, Scheme.IMGT)
-    # print(json.dumps(asdict(sample_result), indent=4))
+    nt_sample_result = nt_numbering.run_on_sequence("header", NT_QUERY, Scheme.IMGT)
 
-    vjc_aa_alnr = create_vjc_aligner_aa()
-    aa_numbering = RiotNumberingAA(vjc_aa_alnr, scheme_alnr)
-
-    AA_QUERY = "QVQLVESGGGLVQPGGSLRLSCVASGFTFSDYAMTWHRQASGSELELVAAISNGRGRNTNYADAVKGRFTISRDNAKNTVYLQMNNLKSDDTAVYYCNAAGLGPEYDYWGQGTQVTVSAEPKTPKPQ"
-
-    aa_sample_result = aa_numbering.run_on_sequence("header", AA_QUERY, Scheme.IMGT)
-    # Handle both single result and list result
-    if isinstance(aa_sample_result, list):
-        print(json.dumps([asdict(result) for result in aa_sample_result], indent=4))
+    if isinstance(nt_sample_result, list):
+        print(json.dumps([asdict(result) for result in nt_sample_result], indent=4))
     else:
-        print(json.dumps(asdict(aa_sample_result), indent=4))
+        print(json.dumps(asdict(nt_sample_result), indent=4))
+
+    # aa_numbering = create_riot_aa(return_all_domains=True)
+    # AA_QUERY = "MPSSAVGVLGEAWYSLGGPDSSCAASGFTFSSYAMSWVRQAPGKGLEWVSSIANKGHETRYVDSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYCAKYAGTFDYWGQGTLVTVSSGGGGSGGGGSGGGGSTDIQMTQSPSSLSASVGDRVTITCRASQSISSYLNWYQQKPGKAPKLLIYAASMLQSGVPSRFSGSGSGTDFTLTISSLQPEYFATYYCQQARSWPPTFGQGDQGGNQTGRPHIIIAITGATHHHHHHGAAEQKLISEEDLNGAA"
+
+    # aa_sample_result = aa_numbering.run_on_sequence("header", AA_QUERY, Scheme.IMGT)
+    # # Handle both single result and list result
+    # if isinstance(aa_sample_result, list):
+    #     print(json.dumps([asdict(result) for result in aa_sample_result], indent=4))
+    # else:
+    #     print(json.dumps(asdict(aa_sample_result), indent=4))

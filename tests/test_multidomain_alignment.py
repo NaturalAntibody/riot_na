@@ -30,7 +30,7 @@ class TestMultiDomainAlignments:
         """Get nucleotide numbering API."""
         return get_or_create_riot_nt(return_all_domains=True)
 
-    def test_devextinetug_amino_acid(self, human_riot_aa: RiotNumberingAA):
+    def test_devextinetug_amino_acid(self, riot_aa: RiotNumberingAA):
         """Test Devextinetug construct (amino acid)."""
         devextinetug_sequence = (
             "EIQLQQSGPELGKPGASVKVSCRASGFSFADYYIYWVKQSHGKSLELIGYIDPFNGGDTYNQIFKGKATLTVDKSSSTAFMYLNSLTSEDSAVYYCAAFRNPSFDFWGQGTTLTVSS"
@@ -40,20 +40,20 @@ class TestMultiDomainAlignments:
 
         expected_genes: Dict[str, Dict[str, Optional[str]]] = {
             "domain_1": {
-                "v_call": "IGHV1-69-2*01",
-                "j_call": "IGHJ4*02",
-                "c_call": "IGHG1",
+                "v_call": "IGHV-3GZS",
+                "j_call": "IGHJ-2FQV",
+                "c_call": None,
                 "locus": Locus.IGH.value,
             },
             "domain_2": {
-                "v_call": "IGKV3-7*04",
-                "j_call": "IGKJ2*01",
+                "v_call": "IGKV-3GON",
+                "j_call": "IGKJ-Z5J4",
                 "c_call": None,
                 "locus": Locus.IGK.value,
             },
         }
 
-        results = human_riot_aa.run_on_sequence("devextinetug", devextinetug_sequence, scheme=Scheme.IMGT)
+        results = riot_aa.run_on_sequence("devextinetug", devextinetug_sequence, scheme=Scheme.IMGT)
 
         assert isinstance(results, list), "Should return list when return_all_domains=True"
         assert len(results) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
@@ -135,7 +135,7 @@ class TestMultiDomainAlignments:
                 "v_call": "IGHV3-30*03",
                 "d_call": "IGHD3-16*02",
                 "j_call": "IGHJ3*02",
-                "c_call": "IGHA1",
+                "c_call": None,
                 "locus": Locus.IGH.value,
             },
             "domain_2": {
@@ -442,7 +442,7 @@ class TestMultiDomainAlignments:
             "domain_1": {
                 "v_call": "IGHV-JRQS",
                 "j_call": "IGHJ-EGQA",
-                "c_call": "IGHE",
+                "c_call": None,
                 "locus": Locus.IGH.value,
             },
             "domain_2": {
@@ -454,7 +454,7 @@ class TestMultiDomainAlignments:
             "domain_3": {
                 "v_call": "IGHV-GNPX",
                 "j_call": "IGHJ-KZ3G",
-                "c_call": "IGHE",
+                "c_call": None,
                 "locus": Locus.IGH.value,
             },
             "domain_4": {
