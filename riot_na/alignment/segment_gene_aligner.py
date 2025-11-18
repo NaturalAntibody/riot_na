@@ -370,7 +370,7 @@ def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> d
                 "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_NT", 0.05)),
                 "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_NT", 100)),
                 "min_prefiltering_coverage": int(os.environ.get("MIN_PREFILTERING_COVERAGE_V_NT", 75)),
-                "min_segment_length": int(os.environ.get("MIN_SEGMENT_LENGTH_V_NT", 180)),
+                "min_segment_length": int(os.environ.get("MIN_SEGMENT_LENGTH_V_NT", 100)),
             }
         case _:
             return gene_aligner_params(germline_gene, locus)
@@ -389,8 +389,8 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 "modulo_n": int(os.environ.get("MODULO_N_V_AA", 1)),
                 "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_AA", 1e-55)),
                 "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_AA", 50)),
-                "min_prefiltering_coverage": int(os.environ.get("MIN_PREFILTERING_COVERAGE_V_AA", 35)),
-                "min_segment_length": int(os.environ.get("MIN_SEGMENT_LENGTH_V_AA", 60)),
+                "min_prefiltering_coverage": int(os.environ.get("MIN_PREFILTERING_COVERAGE_V_AA", 32)),
+                "min_segment_length": int(os.environ.get("MIN_SEGMENT_LENGTH_V_AA", 35)),
             }
         case _:
             return gene_aa_aligner_params(germline_gene)
