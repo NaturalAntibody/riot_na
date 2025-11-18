@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v4.0.6 (2025-11-18)
+
+### Bug Fixes
+
+- Aa alignments thresholds checks
+  ([`87e3fbf`](https://github.com/NaturalAntibody/riot_na/commit/87e3fbf6d32a9fb9c49a26e4e7156c983da483d8))
+
+
 ## v4.0.5 (2025-10-31)
 
 
@@ -13,6 +21,9 @@
 
 - Riot minimal aa alignment thresholds
   ([`b8dcd22`](https://github.com/NaturalAntibody/riot_na/commit/b8dcd2288c26748338d4de56302db3a02dbeba99))
+
+- Segment len threshold fix
+  ([`c320fd9`](https://github.com/NaturalAntibody/riot_na/commit/c320fd97ecadd7fe16ef5a19792633b49df1a2dc))
 
 
 ## v4.0.3 (2025-10-23)
