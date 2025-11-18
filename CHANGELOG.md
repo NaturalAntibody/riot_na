@@ -1,9 +1,15 @@
 # CHANGELOG
 
 
+## v4.0.5 (2025-10-31)
+
+
 ## v4.0.4 (2025-10-23)
 
 ### Bug Fixes
+
+- Fine tuned alignent thersholds
+  ([`012d692`](https://github.com/NaturalAntibody/riot_na/commit/012d6926d2c36b443b5bee2d14a68aa4b9e61ac0))
 
 - Riot minimal aa alignment thresholds
   ([`b8dcd22`](https://github.com/NaturalAntibody/riot_na/commit/b8dcd2288c26748338d4de56302db3a02dbeba99))
