@@ -18,7 +18,7 @@ class TestMultiDomainAlignments:
     @pytest.fixture
     def human_riot_aa(self) -> RiotNumberingAA:
         """Get amino acid numbering API."""
-        return create_riot_aa(allowed_species=[Organism.HOMO_SAPIENS], return_all_domains=True)
+        return create_riot_aa(allowed_species=(Organism.HOMO_SAPIENS,), return_all_domains=True)
 
     @pytest.fixture
     def riot_aa(self) -> RiotNumberingAA:

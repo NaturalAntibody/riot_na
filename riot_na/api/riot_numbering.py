@@ -318,7 +318,7 @@ class RiotNumberingAA:
 
 
 def create_riot_nt(
-    allowed_species: Optional[list[Organism]] = None,
+    allowed_species: Optional[tuple[Organism, ...]] = None,
     return_all_domains: bool = False,
     db_dir: Path = GENE_DB_DIR,
 ) -> RiotNumberingNT:
@@ -327,7 +327,7 @@ def create_riot_nt(
 
     Parameters:
     -----------
-    - allowed_species : Limit gene database to specified Organism list (default use all species - mouse and human).
+    - allowed_species : Limit gene database to specified Organism tuple (default use all species - mouse, human and alpaca).
     - return_all_domains: If True, return all domains of multiple domain proteins.
     - db_dir : Path to gene and scheme mappings database directory (default use embeded database).
 
@@ -344,7 +344,7 @@ def create_riot_nt(
 
 
 def create_riot_aa(
-    allowed_species: Optional[list[Organism]] = None,
+    allowed_species: Optional[tuple[Organism, ...]] = None,
     return_all_domains: bool = False,
     db_dir: Path = GENE_DB_DIR,
 ) -> RiotNumberingAA:
@@ -353,7 +353,7 @@ def create_riot_aa(
 
     Parameters:
     -----------
-    - allowed_species : Limit gene database to specified Organism list (default use all species - mouse and human).
+    - allowed_species : Limit gene database to specified Organism tuple (default use all species - mouse, human and alpaca).
     - return_all_domains: If True, return all domains of multiple domain proteins.
     - db_dir : Path to gene and scheme mappings database directory (default use embeded database).
 

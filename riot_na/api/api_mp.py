@@ -24,7 +24,7 @@ from riot_na.data.model import (
 class _WorkerNT:
     def __init__(
         self,
-        allowed_species: Optional[list[Organism]] = None,
+        allowed_species: Optional[tuple[Organism, ...]] = None,
         scheme: Scheme = Scheme.IMGT,
         db_dir: Path = GENE_DB_DIR,
         return_all_domains: bool = False,
@@ -53,7 +53,7 @@ class _WorkerNT:
 class _WorkerAA:
     def __init__(
         self,
-        allowed_species: Optional[list[Organism]] = None,
+        allowed_species: Optional[tuple[Organism, ...]] = None,
         scheme: Scheme = Scheme.IMGT,
         db_dir: Path = GENE_DB_DIR,
         return_all_domains: bool = False,
@@ -83,7 +83,7 @@ class _WorkerAA:
 
 
 def _worker_initializer(
-    allowed_species: Optional[list[Organism]] = None,
+    allowed_species: Optional[tuple[Organism, ...]] = None,
     scheme: Scheme = Scheme.IMGT,
     db_dir: Path = GENE_DB_DIR,
     input_type: InputType = InputType.NT,
@@ -108,7 +108,7 @@ def run_on_file_mp(  # pylint: disable=too-many-arguments
     n_processes: int = cpu_count(logical=False),
     input_format: str = "fasta",
     scheme: Scheme = Scheme.IMGT,
-    allowed_species: Optional[list[Organism]] = None,
+    allowed_species: Optional[tuple[Organism, ...]] = None,
     input_type: InputType = InputType.NT,
     limit: Optional[int] = None,
     return_all_domains: bool = False,
@@ -146,6 +146,6 @@ if __name__ == "__main__":
         n_processes=8,
         input_format="fasta",
         scheme=Scheme.IMGT,
-        allowed_species=[Organism.HOMO_SAPIENS],
+        allowed_species=(Organism.HOMO_SAPIENS,),
         input_type=InputType.AA,
     )

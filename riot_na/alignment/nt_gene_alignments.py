@@ -110,10 +110,12 @@ class VDJCAlignerNT:
 
 
 def create_vdjc_aligner_nt(
-    allowed_species: Optional[list[Organism]] = None, db_dir: Path = GENE_DB_DIR, use_segment_aligner: bool = False
+    allowed_species: Optional[tuple[Organism, ...]] = None,
+    db_dir: Path = GENE_DB_DIR,
+    use_segment_aligner: bool = False,
 ):
     if not allowed_species:
-        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS]
+        allowed_species = (Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS)
 
     v_aligner = (
         create_segment_v_gene_aligner(allowed_species=allowed_species, db_dir=db_dir)

@@ -344,10 +344,12 @@ class VJCAlignmentTranslatorAA:
 
 
 def create_vjc_aligner_aa(
-    allowed_species: Optional[list[Organism]] = None, db_dir: Path = GENE_DB_DIR, use_segment_aligner: bool = False
+    allowed_species: Optional[tuple[Organism, ...]] = None,
+    db_dir: Path = GENE_DB_DIR,
+    use_segment_aligner: bool = False,
 ) -> VJCAlignerAA:
     if not allowed_species:
-        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS]
+        allowed_species = (Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS)
 
     aa_genes_dir = db_dir / "gene_db" / "aa_genes_deduplicated"
     v_aligner = (
@@ -394,10 +396,10 @@ def create_vjc_aligner_aa(
 
 
 def create_vjc_alignment_translator_aa(
-    allowed_species: Optional[list[Organism]] = None, db_dir: Path = GENE_DB_DIR
+    allowed_species: Optional[tuple[Organism, ...]] = None, db_dir: Path = GENE_DB_DIR
 ) -> VJCAlignmentTranslatorAA:
     if not allowed_species:
-        allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS]
+        allowed_species = (Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS)
 
     aa_genes_dir = db_dir / "gene_db" / "aa_genes"
     v_aligner = create_aa_v_gene_aligner(allowed_species=allowed_species, aa_genes_dir=aa_genes_dir)
@@ -445,7 +447,7 @@ if __name__ == "__main__":
     # given query
     SAMPLE_QUERY = "QVQLQQWGAGLLKPSETLSLTCAVFGGSFSGYYWSWIRQPPGKGLEWIGEINHRGNTNDNPSLKSRVTISVDTSKNQFALKLSSVTAADTAVYYCARERGYTYGNFDHWGQGTLVTVSSASTKGPSVFPLAPSSKSTSGGTAALGCLVKDYFPEPVTVSWNSGALTSGVHTFPAVLQSSGLYSLSSVVTVPSSSLGTQTYICNVNHKPSNTKVDKKVEPKSCDKTHTCPPCPAPELLGGPSVFLFPPKPKDTLMISRTPEVTCVVVDVSHEDPEVKFNWYVDGVEVHNAKTKPREEQYNSTYRVVSVLTVLHQDWLNGKEYKCKVSNKALPAPIEKTISKAKGQPREPQVYTLPPSRDELTKNQVSLTCLVKGFYPSDIAVEWESNGQPENNYKTTPPVLDSDGSFFLYSKLTVDKSRWQQGNVFSCSVMHEALHNHYTQKSLSLSPGK"
 
-    vjc_alnr = create_vjc_aligner_aa(allowed_species=[Organism.HOMO_SAPIENS])
+    vjc_alnr = create_vjc_aligner_aa(allowed_species=(Organism.HOMO_SAPIENS,))
 
     local_aa_alignments = vjc_alnr.produce_aa_alignments(SAMPLE_QUERY)
     print(json.dumps([asdict(aa_alignment) for aa_alignment in local_aa_alignments], indent=4))

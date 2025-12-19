@@ -407,13 +407,13 @@ def _get_j_gene_start_on_scheme(j_gene_scheme_alignment: AlignmentString, chain_
 class SchemeAligner:
     def __init__(
         self,
-        allowed_species: Optional[list[Organism]] = None,
+        allowed_species: Optional[tuple[Organism, ...]] = None,
         db_dir: Path = GENE_DB_DIR,
     ):
         self.scheme_mapping_facades: dict[Scheme, SchemeMappingFacade] = {}
 
         if not allowed_species:
-            allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS]
+            allowed_species = (Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS)
 
         for scheme in Scheme:
             self.scheme_mapping_facades[scheme] = SchemeMappingFacade(scheme, allowed_species, db_dir)
