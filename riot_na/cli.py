@@ -76,7 +76,7 @@ def run_riot(
     extend_alignment: bool,
     multiple_domains: bool,
 ):
-    species_list = [species] if species else None
+    species_list = (species,) if species else None
     if input_file and input_file.exists():
         if not output_file:
             output_file = Path() / "numbering_result.csv"
