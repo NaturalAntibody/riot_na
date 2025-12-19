@@ -1,6 +1,27 @@
 # CHANGELOG
 
 
+## v4.0.7 (2025-12-19)
+
+### Bug Fixes
+
+- Changed allow_species parameter from list to tuple to allow hashing for caching
+  ([`7daf7f4`](https://github.com/NaturalAntibody/riot_na/commit/7daf7f429880e836df58590f0b898abaef9c1d7c))
+
+- Fixed cli and README allowed_species types
+  ([`726a567`](https://github.com/NaturalAntibody/riot_na/commit/726a5672fa26077cd367e57849c63a98aa368ab1))
+
+### Chores
+
+- Bump dependencies with high vulnerabilities
+  ([`762a20b`](https://github.com/NaturalAntibody/riot_na/commit/762a20b5d4a73435b2b1a06569d1d26c71cd57bb))
+
+### Refactoring
+
+- Added param signatures to get_or_create_riot_aa/nt()
+  ([`de5318b`](https://github.com/NaturalAntibody/riot_na/commit/de5318b4d2838f69dee7fe3a419dadadd813a812))
+
+
 ## v4.0.6 (2025-11-18)
 
 ### Bug Fixes
