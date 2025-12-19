@@ -371,13 +371,21 @@ def create_riot_aa(
 
 
 @cached({})
-def get_or_create_riot_nt(**riot_kwargs) -> RiotNumberingNT:
-    return create_riot_nt(**riot_kwargs)
+def get_or_create_riot_nt(
+    allowed_species: Optional[tuple[Organism, ...]] = None,
+    return_all_domains: bool = False,
+    db_dir: Path = GENE_DB_DIR,
+) -> RiotNumberingNT:
+    return create_riot_nt(allowed_species=allowed_species, return_all_domains=return_all_domains, db_dir=db_dir)
 
 
 @cached({})
-def get_or_create_riot_aa(**riot_kwargs) -> RiotNumberingAA:
-    return create_riot_aa(**riot_kwargs)
+def get_or_create_riot_aa(
+    allowed_species: Optional[tuple[Organism, ...]] = None,
+    return_all_domains: bool = False,
+    db_dir: Path = GENE_DB_DIR,
+) -> RiotNumberingAA:
+    return create_riot_aa(allowed_species=allowed_species, return_all_domains=return_all_domains, db_dir=db_dir)
 
 
 if __name__ == "__main__":
