@@ -9,9 +9,11 @@ from riot_na.data.model import AlignmentString, GeneId, Organism, Scheme
 class SchemeMappingFacade:
     mappings: dict[GeneId, AlignmentString]
 
-    def __init__(self, scheme: Scheme, allowed_species: Optional[list[Organism]] = None, db_dir: Path = GENE_DB_DIR):
+    def __init__(
+        self, scheme: Scheme, allowed_species: Optional[tuple[Organism, ...]] = None, db_dir: Path = GENE_DB_DIR
+    ):
         if not allowed_species:
-            allowed_species = [Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS]
+            allowed_species = (Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS)
 
         self.mappings = {}
 
@@ -31,7 +33,7 @@ class SchemeMappingFacade:
 if __name__ == "__main__":
     scheme_mapping_data_path = GENE_DB_DIR
     scheme_mapping_db = SchemeMappingFacade(
-        scheme=Scheme.IMGT, allowed_species=[Organism.HOMO_SAPIENS], db_dir=scheme_mapping_data_path
+        scheme=Scheme.IMGT, allowed_species=(Organism.HOMO_SAPIENS,), db_dir=scheme_mapping_data_path
     )
 
     print(scheme_mapping_db.mappings["IGHV1-2*07"])

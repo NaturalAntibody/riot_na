@@ -103,7 +103,7 @@ riot_na -f input.fasta -o results.csv
 ```python
 from riot_na import create_riot_nt, Organism, Scheme, RiotNumberingNT, AirrRearrangementEntryNT
 
-riot_nt: RiotNumberingNT = create_riot_nt(allowed_species = [Organism.HOMO_SAPIENS])
+riot_nt: RiotNumberingNT = create_riot_nt(allowed_species = (Organism.HOMO_SAPIENS,))
 airr_result: AirrRearrangementEntryNT = riot_nt.run_on_sequence(
                     header = "SRR13857054.957936",
                     query_sequence = "GAACCAAACTGACTGTCCTAGGCCAGCCCAAGTCTTCGCCATCAGTCACCCTGTTTCCACCTTCCCCTGAAGAGCTAAAAAAA",
@@ -116,7 +116,7 @@ airr_result: AirrRearrangementEntryNT = riot_nt.run_on_sequence(
 ```python
 from riot_na import create_riot_aa, Organism, Scheme, RiotNumberingAA, AirrRearrangementEntryAA
 
-riot_aa: RiotNumberingAA = create_riot_aa(allowed_species = [Organism.HOMO_SAPIENS])
+riot_aa: RiotNumberingAA = create_riot_aa(allowed_species = (Organism.HOMO_SAPIENS,))
 airr_result: AirrRearrangementEntryAA = riot_aa.run_on_sequence(
                     header = "SRR13385915.5101835",
                     query_sequence = "QVTLKESGPVLVKPTETLTLTCTVSGFSLSNARMGVSWIRQPPGKALEWLAHIFSNDEKSYSTSLKSRLTISKDTSKSQVVLTMTNMDPGDTATYYCARRGGTIFGVVIILVRRPPL",
@@ -131,7 +131,7 @@ We provide two cached wrappers for `create_riot_nt()` and `crate_riot_aa()` func
 ```python
 from riot_na import get_or_create_riot_aa, Organism, Scheme, RiotNumberingAA, AirrRearrangementEntryAA
 
-riot_aa: RiotNumberingAA = get_or_create_riot_aa(allowed_species = [Organism.HOMO_SAPIENS])
+riot_aa: RiotNumberingAA = get_or_create_riot_aa(allowed_species = (Organism.HOMO_SAPIENS,))
 airr_result: AirrRearrangementEntryAA = riot_aa.run_on_sequence(
                     header = "SRR13385915.5101835",
                     query_sequence = "QVTLKESGPVLVKPTETLTLTCTVSGFSLSNARMGVSWIRQPPGKALEWLAHIFSNDEKSYSTSLKSRLTISKDTSKSQVVLTMTNMDPGDTATYYCARRGGTIFGVVIILVRRPPL",
