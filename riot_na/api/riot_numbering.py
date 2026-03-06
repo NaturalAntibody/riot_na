@@ -55,6 +55,15 @@ class RiotNumberingNT:
         query_sequence: str,
         scheme: Scheme = ...,
         extend_alignment: bool = ...,
+    ) -> AirrRearrangementEntryNT: ...
+
+    @overload
+    def run_on_sequence(
+        self,
+        header: str,
+        query_sequence: str,
+        scheme: Scheme = ...,
+        extend_alignment: bool = ...,
         return_all_domains: Literal[True] = ...,
     ) -> list[AirrRearrangementEntryNT]: ...
 
@@ -223,6 +232,15 @@ class RiotNumberingAA:
     def __init__(self, vjc_aligner_aa: VJCAlignerAA, scheme_aligner: SchemeAligner):
         self.vjc_aligner_aa = vjc_aligner_aa
         self.scheme_aligner = scheme_aligner
+
+    @overload
+    def run_on_sequence(
+        self,
+        header: str,
+        query_sequence: str,
+        scheme: Scheme = ...,
+        extend_alignment: bool = ...,
+    ) -> AirrRearrangementEntryAA: ...
 
     @overload
     def run_on_sequence(
