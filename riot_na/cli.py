@@ -104,14 +104,20 @@ def run_riot(
                     allowed_species=species_list, db_dir=GENE_DB_DIR, return_all_domains=multiple_domains
                 )
                 record_type = AirrRearrangementEntryNT if not multiple_domains else SegmentedAirrRearrangementEntryNT
-                result = numbering_nt.run_on_sequence(header="-", query_sequence=sequence, scheme=scheme)
+                result = numbering_nt.run_on_sequence(
+                    header="-", query_sequence=sequence, scheme=scheme, return_all_domains=multiple_domains
+                )
             case InputType.AA:
                 numbering_aa = create_riot_aa(
                     allowed_species=species_list, db_dir=GENE_DB_DIR, return_all_domains=multiple_domains
                 )
                 record_type = AirrRearrangementEntryAA if not multiple_domains else SegmentedAirrRearrangementEntryAA
                 result = numbering_aa.run_on_sequence(
-                    header="-", query_sequence=sequence, scheme=scheme, extend_alignment=extend_alignment
+                    header="-",
+                    query_sequence=sequence,
+                    scheme=scheme,
+                    extend_alignment=extend_alignment,
+                    return_all_domains=multiple_domains,
                 )
 
         if output_file:

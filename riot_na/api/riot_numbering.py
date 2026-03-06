@@ -1,7 +1,7 @@
 # pylint: disable=too-many-branches, too-many-statements
 
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional, overload
 
 from cachetools import cached
 
@@ -43,12 +43,40 @@ class RiotNumberingNT:
         vdjc_aligner_nt: VDJCAlignerNT,
         vjc_alignment_translator_aa: VJCAlignmentTranslatorAA,
         scheme_aligner: SchemeAligner,
-        return_all_domains: bool = False,
     ):
         self.vdjc_aligner = vdjc_aligner_nt
         self.vjc_alignment_translator_aa = vjc_alignment_translator_aa
         self.scheme_aligner = scheme_aligner
-        self.return_all_domains = return_all_domains
+
+    @overload
+    def run_on_sequence(
+        self,
+        header: str,
+        query_sequence: str,
+        scheme: Scheme = ...,
+        extend_alignment: bool = ...,
+        return_all_domains: Literal[True] = ...,
+    ) -> list[AirrRearrangementEntryNT]: ...
+
+    @overload
+    def run_on_sequence(
+        self,
+        header: str,
+        query_sequence: str,
+        scheme: Scheme = ...,
+        extend_alignment: bool = ...,
+        return_all_domains: Literal[False] = ...,
+    ) -> AirrRearrangementEntryNT: ...
+
+    @overload
+    def run_on_sequence(
+        self,
+        header: str,
+        query_sequence: str,
+        scheme: Scheme = ...,
+        extend_alignment: bool = ...,
+        return_all_domains: bool = ...,
+    ) -> AirrRearrangementEntryNT | list[AirrRearrangementEntryNT]: ...
 
     def run_on_sequence(
         self,
@@ -56,6 +84,7 @@ class RiotNumberingNT:
         query_sequence: str,
         scheme: Scheme = Scheme.IMGT,
         extend_alignment: bool = True,
+        return_all_domains: bool = False,
     ) -> AirrRearrangementEntryNT | list[AirrRearrangementEntryNT]:  # pylint: disable=too-many-statements
         """
         Align and number nucleotide sequence.
@@ -136,7 +165,7 @@ class RiotNumberingNT:
             # produce airr result
             # this is separated on purpose to enable other output formats
             airr_builder = AirrBuilder(header, sequence or query_sequence, scheme)
-            if self.return_all_domains:
+            if return_all_domains:
                 airr_builder = SegmentedAirrBuilder(header, sequence, scheme, query_sequence)
                 airr_builder.with_segment_start_end(segment_start, segment_end)
 
@@ -179,22 +208,51 @@ class RiotNumberingNT:
             results = [
                 (
                     AirrBuilder(header, sequence, scheme).build()
-                    if not self.return_all_domains
+                    if not return_all_domains
                     else SegmentedAirrBuilder(header, sequence, scheme, query_sequence).build()
                 )
             ]
 
-        if self.return_all_domains:
+        if return_all_domains:
             return results
 
         return sorted(results)[-1]
 
 
 class RiotNumberingAA:
-    def __init__(self, vjc_aligner_aa: VJCAlignerAA, scheme_aligner: SchemeAligner, return_all_domains: bool = False):
+    def __init__(self, vjc_aligner_aa: VJCAlignerAA, scheme_aligner: SchemeAligner):
         self.vjc_aligner_aa = vjc_aligner_aa
         self.scheme_aligner = scheme_aligner
-        self.return_all_domains = return_all_domains
+
+    @overload
+    def run_on_sequence(
+        self,
+        header: str,
+        query_sequence: str,
+        scheme: Scheme = ...,
+        extend_alignment: bool = ...,
+        return_all_domains: Literal[True] = ...,
+    ) -> list[AirrRearrangementEntryAA]: ...
+
+    @overload
+    def run_on_sequence(
+        self,
+        header: str,
+        query_sequence: str,
+        scheme: Scheme = ...,
+        extend_alignment: bool = ...,
+        return_all_domains: Literal[False] = ...,
+    ) -> AirrRearrangementEntryAA: ...
+
+    @overload
+    def run_on_sequence(
+        self,
+        header: str,
+        query_sequence: str,
+        scheme: Scheme = ...,
+        extend_alignment: bool = ...,
+        return_all_domains: bool = ...,
+    ) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]: ...
 
     def run_on_sequence(
         self,
@@ -202,6 +260,7 @@ class RiotNumberingAA:
         query_sequence: str,
         scheme: Scheme = Scheme.IMGT,
         extend_alignment: bool = True,
+        return_all_domains: bool = False,
     ) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]:  # pylint: disable=too-many-statements
         """
         Align and number amino acid sequence.
@@ -271,7 +330,7 @@ class RiotNumberingAA:
             # produce airr result
             # this is separated on purpose to enable other output formats
             airr_builder = AirrBuilderAA(header, query_sequence, scheme)
-            if self.return_all_domains:
+            if return_all_domains:
                 airr_builder = SegmentedAirrBuilderAA(header, sequence_aa, scheme, query_sequence)
                 airr_builder.with_segment_start_end(segment_start, segment_end)
 
@@ -306,12 +365,12 @@ class RiotNumberingAA:
             results = [
                 (
                     AirrBuilderAA(header, sequence_aa, scheme).build()
-                    if not self.return_all_domains
+                    if not return_all_domains
                     else SegmentedAirrBuilderAA(header, sequence_aa, scheme, query_sequence).build()
                 )
             ]
 
-        if self.return_all_domains:
+        if return_all_domains:
             return results
 
         return sorted(results)[-1]
@@ -340,7 +399,7 @@ def create_riot_nt(
     )
     vjc_alignment_translator_aa = create_vjc_alignment_translator_aa(allowed_species=allowed_species, db_dir=db_dir)
     scheme_aligner = SchemeAligner(allowed_species=allowed_species, db_dir=db_dir)
-    return RiotNumberingNT(vdjc_aligner_nt, vjc_alignment_translator_aa, scheme_aligner, return_all_domains)
+    return RiotNumberingNT(vdjc_aligner_nt, vjc_alignment_translator_aa, scheme_aligner)
 
 
 def create_riot_aa(
@@ -367,7 +426,7 @@ def create_riot_aa(
         use_segment_aligner=return_all_domains,
     )
     scheme_aligner = SchemeAligner(allowed_species=allowed_species, db_dir=db_dir)
-    return RiotNumberingAA(vjc_aligner_aa, scheme_aligner, return_all_domains)
+    return RiotNumberingAA(vjc_aligner_aa, scheme_aligner)
 
 
 @cached({})
