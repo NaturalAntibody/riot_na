@@ -1,6 +1,31 @@
 # CHANGELOG
 
 
+## v5.0.0 (2026-03-06)
+
+### Refactoring
+
+- Move return_all_domains from class init to run_on_sequence param
+  ([`1fea7b9`](https://github.com/NaturalAntibody/riot_na/commit/1fea7b978a7cc2bdb9deacdd063a95bd16673dd0))
+
+BREAKING CHANGE: `return_all_domains` is no longer accepted by `RiotNumberingNT.__init__`,
+  `RiotNumberingAA.__init__`, `create_riot_nt`, `create_riot_aa`, `get_or_create_riot_nt`, and
+  `get_or_create_riot_aa`. Pass it instead to `run_on_sequence` directly.
+
+Before: riot = create_riot_nt(return_all_domains=True) result = riot.run_on_sequence(header, seq)
+
+After: riot = create_riot_nt() result = riot.run_on_sequence(header, seq, return_all_domains=True)
+
+Typed overloads added so that `Literal[True]` resolves to `list[AirrRearrangementEntry*]` and
+  `Literal[False]` resolves to `AirrRearrangementEntry*`.
+
+### Breaking Changes
+
+- `return_all_domains` is no longer accepted by `RiotNumberingNT.__init__`,
+  `RiotNumberingAA.__init__`, `create_riot_nt`, `create_riot_aa`, `get_or_create_riot_nt`, and
+  `get_or_create_riot_aa`. Pass it instead to `run_on_sequence` directly.
+
+
 ## v4.0.7 (2025-12-19)
 
 ### Bug Fixes
