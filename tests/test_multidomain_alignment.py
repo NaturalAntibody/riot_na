@@ -53,7 +53,9 @@ class TestMultiDomainAlignments:
             },
         }
 
-        results = riot_aa.run_on_sequence("devextinetug", devextinetug_sequence, scheme=Scheme.IMGT)
+        results = riot_aa.run_on_sequence(
+            "devextinetug", devextinetug_sequence, scheme=Scheme.IMGT, return_all_domains=True
+        )
 
         assert isinstance(results, list), "Should return list when return_all_domains=True"
         assert len(results) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
@@ -98,7 +100,7 @@ class TestMultiDomainAlignments:
         }
 
         # Test with return_all_domains=True to get all domains
-        results = riot_aa.run_on_sequence("anti_CD19_scFv", scfv_sequence, scheme=Scheme.IMGT)
+        results = riot_aa.run_on_sequence("anti_CD19_scFv", scfv_sequence, scheme=Scheme.IMGT, return_all_domains=True)
 
         # Should return multiple domains (expecting 2: VH and VL)
         assert isinstance(results, list), "Should return list when return_all_domains=True"
@@ -149,7 +151,7 @@ class TestMultiDomainAlignments:
 
         # Test with different numbering schemes
         for scheme in [Scheme.IMGT, Scheme.CHOTHIA]:
-            result = riot_nt.run_on_sequence("anti_HER2_scFv", scfv_nt_sequence, scheme=scheme)
+            result = riot_nt.run_on_sequence("anti_HER2_scFv", scfv_nt_sequence, scheme=scheme, return_all_domains=True)
 
             assert isinstance(result, list), "Should return list when return_all_domains=True"
             assert len(result) == 2, "Should detect 2 domains"
@@ -199,7 +201,9 @@ class TestMultiDomainAlignments:
         }
 
         # Test with return_all_domains=True to detect multiple domains
-        results = riot_aa.run_on_sequence("scFv_with_constant", scfv_with_constant, scheme=Scheme.IMGT)
+        results = riot_aa.run_on_sequence(
+            "scFv_with_constant", scfv_with_constant, scheme=Scheme.IMGT, return_all_domains=True
+        )
 
         # Should return list with at least 1 domain
         assert isinstance(results, list), "Should return list when return_all_domains=True"
@@ -253,7 +257,7 @@ class TestMultiDomainAlignments:
         }
 
         # Test with IMGT scheme
-        result = riot_aa.run_on_sequence("CAR_T_construct", car_t_sequence, scheme=Scheme.IMGT)
+        result = riot_aa.run_on_sequence("CAR_T_construct", car_t_sequence, scheme=Scheme.IMGT, return_all_domains=True)
 
         assert isinstance(result, list), "Should return list when return_all_domains=True"
         assert len(result) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
@@ -297,7 +301,9 @@ class TestMultiDomainAlignments:
                 "locus": Locus.IGK.value,
             },
         }
-        result = riot_aa.run_on_sequence("diabody_construct", diabody_sequence, scheme=Scheme.IMGT)
+        result = riot_aa.run_on_sequence(
+            "diabody_construct", diabody_sequence, scheme=Scheme.IMGT, return_all_domains=True
+        )
 
         # Should identify as heavy chain (VH first)
         assert isinstance(result, list), "Should return list when return_all_domains=True"
@@ -377,7 +383,9 @@ class TestMultiDomainAlignments:
             },
         }
 
-        result = riot_aa.run_on_sequence("trispecific_Ab", trispecific_sequence, scheme=Scheme.IMGT)
+        result = riot_aa.run_on_sequence(
+            "trispecific_Ab", trispecific_sequence, scheme=Scheme.IMGT, return_all_domains=True
+        )
 
         assert isinstance(result, list), "Should return list when return_all_domains=True"
         assert len(result) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
@@ -415,7 +423,9 @@ class TestMultiDomainAlignments:
             },
         }
 
-        result = riot_aa.run_on_sequence("trastuzumab_heavy", trastuzumab_heavy, scheme=Scheme.IMGT)
+        result = riot_aa.run_on_sequence(
+            "trastuzumab_heavy", trastuzumab_heavy, scheme=Scheme.IMGT, return_all_domains=True
+        )
 
         assert isinstance(result, list), "Should return list when return_all_domains=True"
         assert len(result) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
@@ -465,7 +475,9 @@ class TestMultiDomainAlignments:
             },
         }
 
-        result = riot_aa.run_on_sequence("acapatamab_heavy", acapatamab_full_sequence, scheme=Scheme.IMGT)
+        result = riot_aa.run_on_sequence(
+            "acapatamab_heavy", acapatamab_full_sequence, scheme=Scheme.IMGT, return_all_domains=True
+        )
 
         assert isinstance(result, list), "Should return list when return_all_domains=True"
         assert len(result) == len(expected_genes), f"Should detect {len(expected_genes)} domains"

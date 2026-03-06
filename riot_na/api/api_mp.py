@@ -33,6 +33,7 @@ class _WorkerNT:
             allowed_species=allowed_species, db_dir=db_dir, return_all_domains=return_all_domains
         )
         self.scheme = scheme
+        self.return_all_domains = return_all_domains
 
     def __call__(self, fasta_record: SeqIO.SeqRecord) -> AirrRearrangementEntryNT | list[AirrRearrangementEntryNT]:
         try:
@@ -40,6 +41,7 @@ class _WorkerNT:
                 fasta_record.description,
                 str(fasta_record.seq),
                 self.scheme,
+                return_all_domains=self.return_all_domains,
             )
         except Exception as exc:
             print(fasta_record.description)
@@ -64,6 +66,7 @@ class _WorkerAA:
         )
         self.scheme = scheme
         self.extend_alignment = extend_alignment
+        self.return_all_domains = return_all_domains
 
     def __call__(self, fasta_record: SeqIO.SeqRecord) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]:
         try:
@@ -72,6 +75,7 @@ class _WorkerAA:
                 str(fasta_record.seq),
                 self.scheme,
                 extend_alignment=self.extend_alignment,
+                return_all_domains=self.return_all_domains,
             )
         except Exception as exc:
             print(fasta_record.description)
