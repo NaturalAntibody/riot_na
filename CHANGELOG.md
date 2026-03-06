@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v5.0.1 (2026-03-06)
+
+### Bug Fixes
+
+- Added missing run_on_sequence() overload - the case when optional disctiminator param is omitted
+  ([`9fab2d0`](https://github.com/NaturalAntibody/riot_na/commit/9fab2d0101a40cd2bc41f0a8cb5d6cf0e483dfb3))
+
+
 ## v5.0.0 (2026-03-06)
 
 ### Refactoring
