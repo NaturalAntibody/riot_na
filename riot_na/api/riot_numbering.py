@@ -469,8 +469,8 @@ if __name__ == "__main__":
     import json
     from dataclasses import asdict
 
-    nt_numbering = create_riot_nt(return_all_domains=True)
-    NT_QUERY = "caagugcaauuggucgagagcgggggcggggucgugcaaccgggcaggagccugcgcuugagcugugccgcgagccaguucacguucgggagcuauggcaugcacugggucaggcaaauacccgggaaagggcucgaguggguggccacgaucucguacgauggcacgaaaaaguaccaugccgauagcgugugggaucgcuuuaucauaagcagggacaauagcaagaacacgcucuuucuccagaugaauagcuugcgcccggaagauaccgcgcucuauuucugugucaaggaccagcgccaggacgagugcgaggaaugguggucggacuauuacgauuucgggcgcaggcucccgugcaggaaaucgcgcgggcuagcgggcauauucgaugucuggggccauggcacgauggugaccgugagcucg"
+    # nt_numbering = create_riot_nt(return_all_domains=True)
+    # NT_QUERY = "caagugcaauuggucgagagcgggggcggggucgugcaaccgggcaggagccugcgcuugagcugugccgcgagccaguucacguucgggagcuauggcaugcacugggucaggcaaauacccgggaaagggcucgaguggguggccacgaucucguacgauggcacgaaaaaguaccaugccgauagcgugugggaucgcuuuaucauaagcagggacaauagcaagaacacgcucuuucuccagaugaauagcuugcgcccggaagauaccgcgcucuauuucugugucaaggaccagcgccaggacgagugcgaggaaugguggucggacuauuacgauuucgggcgcaggcucccgugcaggaaaucgcgcgggcuagcgggcauauucgaugucuggggccauggcacgauggugaccgugagcucg"
     # NT_QUERY = "CAGGCCCACCTGGAGCAAAGCGGCTCCGGGGTGAAGAAACCCGGAGCTTCTGTCAGAGTTAGCTGCTGGTCCTCTGAAGACATCTTCGAGCGGACCGAACTCATTCATTGGGTGCGCCAGGCCCCTGGCCAGGGGCTGGAGTGGATCGGATGGGTGAAGACAGTCACGGGCGCGGTGAACTTTGGGAGCCTTGATTTCAGACACCGGATTTCCCTGACCCGCGACAGAGATCTCTCTACAGCTTACATGGACATCCGGGGACTGACCCAGGATGACACAGCCACCTATTTTTGTGCCCGCCAAAAATTCGCTAGCAGATACTCCGGCGATCAGGGCAGCTATTTTGACCTTTGGGGGCGGGGAACACTGATTGTTGTGTCTTCC"
     # NT_QUERY = (
     #         # VH domain (nucleotide)
@@ -480,20 +480,18 @@ if __name__ == "__main__":
     #         # VL domain (nucleotide)
     #         "GACATCCAGATGACCCAGTCTCCATCCTCCCTGTCTGCATCTGTAGGAGACAGAGTCACCATCACTTGCCGGGCAAGTCAGGGCATTAGCAGTTGGCTGGCCTGGTATCAGCAGAAACCAGGGAAAGCCCCTAAGCTCCTGATCTATGCTGCATCCAGTTTGCAAAGTGGGGTCCCATCAAGGTTCAGTGGCAGTGGATCTGGGACAGATTTCACTCTCACCATCAGCAGTCTGCAACCTGAAGATTTTGCAACTTACTACTGTCAGCAAGCTAACAGCTTCCCTTATACGTTCGGCCAAGGGACCAAGGTGGAAATCAAACGG"
     #     )
-
-    nt_sample_result = nt_numbering.run_on_sequence("header", NT_QUERY, Scheme.IMGT)
-
-    if isinstance(nt_sample_result, list):
-        print(json.dumps([asdict(result) for result in nt_sample_result], indent=4))
-    else:
-        print(json.dumps(asdict(nt_sample_result), indent=4))
-
-    # aa_numbering = create_riot_aa(return_all_domains=True)
-    # AA_QUERY = "MPSSAVGVLGEAWYSLGGPDSSCAASGFTFSSYAMSWVRQAPGKGLEWVSSIANKGHETRYVDSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYCAKYAGTFDYWGQGTLVTVSSGGGGSGGGGSGGGGSTDIQMTQSPSSLSASVGDRVTITCRASQSISSYLNWYQQKPGKAPKLLIYAASMLQSGVPSRFSGSGSGTDFTLTISSLQPEYFATYYCQQARSWPPTFGQGDQGGNQTGRPHIIIAITGATHHHHHHGAAEQKLISEEDLNGAA"
-
-    # aa_sample_result = aa_numbering.run_on_sequence("header", AA_QUERY, Scheme.IMGT)
-    # # Handle both single result and list result
-    # if isinstance(aa_sample_result, list):
-    #     print(json.dumps([asdict(result) for result in aa_sample_result], indent=4))
+    # nt_sample_result = nt_numbering.run_on_sequence("header", NT_QUERY, Scheme.IMGT)
+    # if isinstance(nt_sample_result, list):
+    #     print(json.dumps([asdict(result) for result in nt_sample_result], indent=4))
     # else:
-    #     print(json.dumps(asdict(aa_sample_result), indent=4))
+    #     print(json.dumps(asdict(nt_sample_result), indent=4))
+
+    aa_numbering = create_riot_aa(return_all_domains=True)
+    AA_QUERY = "EVQLVESGGGLVQPGGSLRLSCAASGSILSILSMAWYRQAPGKGRELVAGILSDGSTSYADSVKGRFTISRDNAKNTLYLQMNSLRPEDTAVYYCAALVDTENGAKLYWGQGTLVTVSS"
+
+    aa_sample_result = aa_numbering.run_on_sequence("header", AA_QUERY, Scheme.IMGT, extend_alignment=True)
+    # # Handle both single result and list result
+    if isinstance(aa_sample_result, list):
+        print(json.dumps([asdict(result) for result in aa_sample_result], indent=4))
+    else:
+        print(json.dumps(asdict(aa_sample_result), indent=4))
