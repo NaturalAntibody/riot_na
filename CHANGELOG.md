@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v5.0.2 (2026-03-31)
+
+### Bug Fixes
+
+- Incorrect alignments for alpaca ighj-5
+  ([`bece39f`](https://github.com/NaturalAntibody/riot_na/commit/bece39fb6b27f3b18b8ccc5fe13610a9f2fad107))
+
+
 ## v5.0.1 (2026-03-06)
 
 ### Bug Fixes
