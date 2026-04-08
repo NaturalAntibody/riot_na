@@ -13,18 +13,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Dependency review
         if: ${{ github.ref != 'refs/heads/master' }}
-        uses: actions/dependency-review-action@v4.4.0
+        uses: actions/dependency-review-action@v4
       - name: Dependency review - master
         if: ${{ github.ref == 'refs/heads/master' }}
-        uses: actions/dependency-review-action@v4.4.0
+        uses: actions/dependency-review-action@v4
         with:
           head-ref: ${{ github.ref }}
           base-ref: ${{ github.event.before }}
       - name: Setup python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         id: setup-python
         with:
           python-version: ${{ env.python-version }}
@@ -32,7 +32,7 @@ jobs:
           pipx install poetry
       - name: Cache poetry virtualenv
         id: cache-poetry
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pypoetry/virtualenvs
           key: ${{ runner.os }}-python-${{ steps.setup-python.outputs.python-version }}-poetry-${{ hashFiles('**/poetry.lock', '**/.pre-commit-config.yaml') }}
@@ -62,7 +62,7 @@ jobs:
         run: |
           cargo test
       - name: Upload pytest test results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pytest-results-${{ env.python-version }}
           path: |
@@ -94,14 +94,14 @@ jobs:
     environment: release
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
       - name: Install poetry
         run: pipx install poetry
       - name: Set up python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         id: setup-python
         with:
           python-version: ${{ env.python-version }}
@@ -120,7 +120,7 @@ jobs:
     needs: release
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: master
@@ -130,7 +130,7 @@ jobs:
           command: build
           args: --release --sdist -o dist --find-interpreter
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels_linux
           path: dist
@@ -138,7 +138,7 @@ jobs:
     needs: release
     runs-on: ubuntu-24.04-arm
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: master
@@ -148,7 +148,7 @@ jobs:
           command: build
           args: --release --sdist -o dist --find-interpreter
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels_linux_arm
           path: dist
@@ -156,7 +156,7 @@ jobs:
     needs: release
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: master
@@ -165,7 +165,7 @@ jobs:
           command: build
           args: --release -o dist --find-interpreter
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels_windows
           path: dist
@@ -173,11 +173,11 @@ jobs:
     needs: release
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
           ref: master
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.10'
       - uses: PyO3/maturin-action@v1
@@ -185,7 +185,7 @@ jobs:
           command: build
           args: --release -o dist --target universal2-apple-darwin --find-interpreter
       - name: Upload wheels
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: wheels_macos
           path: dist
@@ -200,20 +200,20 @@ jobs:
       id-token: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
           persist-credentials: false
           ref: master
       - name: Download artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           path: dist
           merge-multiple: true
       - name: Install poetry
         run: pipx install poetry
       - name: Set up python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         id: setup-python
         with:
           python-version: ${{ env.python-version }}
