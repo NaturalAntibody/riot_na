@@ -17,12 +17,15 @@ jobs:
       - name: Dependency review
         if: ${{ github.ref != 'refs/heads/master' }}
         uses: actions/dependency-review-action@v4
+        with:
+          retry-on-snapshot-warnings: true
       - name: Dependency review - master
         if: ${{ github.ref == 'refs/heads/master' }}
         uses: actions/dependency-review-action@v4
         with:
           head-ref: ${{ github.ref }}
           base-ref: ${{ github.event.before }}
+          retry-on-snapshot-warnings: true
       - name: Setup python
         uses: actions/setup-python@v6
         id: setup-python
