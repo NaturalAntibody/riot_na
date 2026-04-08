@@ -1,6 +1,30 @@
 # CHANGELOG
 
 
+## v5.0.3 (2026-04-08)
+
+### Bug Fixes
+
+- Remove blosum dependency
+  ([`2dde6c1`](https://github.com/NaturalAntibody/riot_na/commit/2dde6c16f03d0f0745962fcb2d769223e278ded1))
+
+### Chores
+
+- Update dependencies
+  ([`3585471`](https://github.com/NaturalAntibody/riot_na/commit/35854716878ca0882c9dd6f7ec2044008cf85981))
+
+### Continuous Integration
+
+- Fix dependency-review action warning
+  ([`8401f9f`](https://github.com/NaturalAntibody/riot_na/commit/8401f9f52639418113dcdd597d78b298917ca850))
+
+- Moved dependency-review to the end of workflow to give github more time for dependency submission
+  ([`9306f0e`](https://github.com/NaturalAntibody/riot_na/commit/9306f0eda2e0b02678e98767b147f4c9e5acf033))
+
+- Upgrade GH actions
+  ([`61ef9ca`](https://github.com/NaturalAntibody/riot_na/commit/61ef9cade96202f1c185b56bc1817cac9a7e8a09))
+
+
 ## v5.0.2 (2026-03-31)
 
 ### Bug Fixes
