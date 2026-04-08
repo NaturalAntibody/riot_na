@@ -1,10 +1,10 @@
 # pylint: skip-file
 # flake8: noqa
-import blosum
 import pytest
 from skbio.alignment import StripedSmithWaterman
 
 from riot_na.alignment.skbio_alignment import align_aa
+from riot_na.data.constants import BLOSUM_62
 from riot_na.data.model import AlignmentEntryAA, AlignmentString, Cigar
 from riot_na.schemes.scheme_alignment import (
     _merge_cigars,
@@ -23,7 +23,7 @@ AA_ALIGNER_PARAMS = {
     "gap_open_penalty": 11,
     "gap_extend_penalty": 1,
     "protein": True,
-    "substitution_matrix": blosum.BLOSUM(62),
+    "substitution_matrix": BLOSUM_62,
 }
 
 

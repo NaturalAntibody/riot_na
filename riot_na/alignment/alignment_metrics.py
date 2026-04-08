@@ -1,9 +1,8 @@
 import math
 from enum import Enum
 
-import blosum  # type: ignore
-
 from riot_na.alignment.alignment_utils import get_cigar_op_groups, unfold_cigar
+from riot_na.data.constants import BLOSUM_62
 from riot_na.data.model import Cigar
 
 # L (Lambda) and K constants are depended on scoring matrix and gap penalties
@@ -27,7 +26,7 @@ def compute_raw_score_aa(
     cigar: Cigar,
     gap_open_penalty=11,
     gap_extend_penalty=1,
-    substitution_matrix=blosum.BLOSUM(62),
+    substitution_matrix=BLOSUM_62,
 ) -> float:
     raw_score = 0
     query_pos = 0
