@@ -14,18 +14,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v6
-      - name: Dependency review
-        if: ${{ github.ref != 'refs/heads/master' }}
-        uses: actions/dependency-review-action@v4
-        with:
-          retry-on-snapshot-warnings: true
-      - name: Dependency review - master
-        if: ${{ github.ref == 'refs/heads/master' }}
-        uses: actions/dependency-review-action@v4
-        with:
-          head-ref: ${{ github.ref }}
-          base-ref: ${{ github.event.before }}
-          retry-on-snapshot-warnings: true
+
       - name: Setup python
         uses: actions/setup-python@v6
         id: setup-python
@@ -90,6 +79,19 @@ jobs:
       - name: Fail on too low coverage
         if: ${{ github.ref != 'refs/heads/master' }}
         run: poetry run coverage report --fail-under=${{ env.min-test-coverage-percent }}
+
+      - name: Dependency review
+        if: ${{ github.ref != 'refs/heads/master' }}
+        uses: actions/dependency-review-action@v4
+        with:
+          retry-on-snapshot-warnings: true
+      - name: Dependency review - master
+        if: ${{ github.ref == 'refs/heads/master' }}
+        uses: actions/dependency-review-action@v4
+        with:
+          head-ref: ${{ github.ref }}
+          base-ref: ${{ github.event.before }}
+          retry-on-snapshot-warnings: true
   release:
     needs: test
     if: ${{ github.ref == 'refs/heads/master' }}
