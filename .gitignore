@@ -39,3 +39,5 @@ dist
 
 # C extensions
 *.so
+
+.github/**/*.md

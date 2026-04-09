@@ -280,6 +280,9 @@ class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
 
     germline_alignment_aa: Optional[str] = None
     sequence_alignment_aa: Optional[str] = None
+    sequence_alignment_aa_extended: Optional[str] = None
+    sequence_start_aa_extended: Optional[int] = None
+    sequence_end_aa_extended: Optional[int] = None
     v_alignment_start_aa: Optional[int] = None
     v_alignment_end_aa: Optional[int] = None
     j_alignment_start_aa: Optional[int] = None
