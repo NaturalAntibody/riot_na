@@ -364,7 +364,7 @@ class RiotNumberingAA:
             if sch_alignment:
                 assert aa_offsets
                 airr_builder.with_aa_region_offsets(aa_offsets)
-                airr_builder.with_aa_scheme_alignment(sch_alignment)
+                airr_builder.with_aa_scheme_alignment(sch_alignment, extend_alignment=extend_alignment)
 
             if numbering:
                 (

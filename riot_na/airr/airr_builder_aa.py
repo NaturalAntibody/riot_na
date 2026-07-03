@@ -38,6 +38,9 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
         self.c_gene_sequence_aa: Optional[str] = None
 
         self.aa_offsets: Optional[RegionOffsetsAA] = None
+        self._scheme_alignment_q_start: Optional[int] = None
+        self._scheme_alignment_q_end: Optional[int] = None
+        self._extend_alignment: bool = False
 
     def with_v_gene_alignment_aa(self, v_aln: AlignmentEntryAA):
         self.v_gene_sequence_aa = v_aln.t_seq
@@ -210,10 +213,13 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
 
         return self
 
-    def with_aa_scheme_alignment(self, alignment: SchemeAlignment):
+    def with_aa_scheme_alignment(self, alignment: SchemeAlignment, extend_alignment: bool = False):
         self.rearrangement.sequence_aa_scheme_cigar = fold_cigar(
             AlignmentString(alignment.alignment_str.replace("S", "").replace("N", ""))
         )
+        self._scheme_alignment_q_start = alignment.q_start
+        self._scheme_alignment_q_end = alignment.q_end
+        self._extend_alignment = extend_alignment
         return self
 
     def with_scheme_residue_mapping(self, mapping: dict[str, str]):
@@ -234,6 +240,17 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
 
         alignment_end = self.j_gene_alignment_aa.q_end if self.j_gene_alignment_aa else self.v_gene_alignment_aa.q_end
         sequence_alignment_aa_segment = self.sequence_aa[self.v_gene_alignment_aa.q_start : alignment_end]
+
+        if (
+            self._extend_alignment
+            and self._scheme_alignment_q_start is not None
+            and self._scheme_alignment_q_end is not None
+        ):
+            self.rearrangement.sequence_start_aa_extended = self._scheme_alignment_q_start + 1
+            self.rearrangement.sequence_end_aa_extended = self._scheme_alignment_q_end
+            self.rearrangement.sequence_alignment_aa_extended = self.sequence_aa[
+                self._scheme_alignment_q_start : self._scheme_alignment_q_end
+            ]
 
         v_germline_segment = self.v_gene_alignment_aa.t_seq[
             self.v_gene_alignment_aa.t_start : self.v_gene_alignment_aa.t_end
