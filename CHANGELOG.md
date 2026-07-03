@@ -1,6 +1,38 @@
 # CHANGELOG
 
 
+## v5.1.0 (2026-07-03)
+
+### Documentation
+
+- Updated README.md - definitions and types for locus and locus_species
+  ([`7584fb3`](https://github.com/NaturalAntibody/riot_na/commit/7584fb328a7316f3c24b2d5b6a6cbc01dadce523))
+
+### Features
+
+- Add extended alignment fields for consistent scheme mapping indexing
+  ([`f1e877a`](https://github.com/NaturalAntibody/riot_na/commit/f1e877aa613a2e0476ffcb744b6b64a9c330f06d))
+
+Add three new optional fields to AirrRearrangementEntryAA: - sequence_start_aa_extended: 1-based
+  start position in sequence_aa when extend_alignment=True - sequence_end_aa_extended: end position
+  in sequence_aa when extend_alignment=True - sequence_alignment_aa_extended: slice of sequence_aa
+  covering the extended range
+
+When extend_alignment=False, these fields are None. When extend_alignment=True, these fields provide
+  alignment boundaries consistent with scheme_residue_mapping and positional_scheme_mapping key
+  space, resolving confusion when using extended alignments with positional mappings.
+
+The extended fields account for residues prepended/appended by force_n_terminus_matches and
+  force_c_terminus_matches during scheme alignment, ensuring: - sequence_alignment_aa_extended
+  aligns with positional_scheme_mapping positions - sequence_start_aa_extended <=
+  v_sequence_start_aa (N-terminus coverage) - sequence_end_aa_extended >= j_sequence_end_aa
+  (C-terminus coverage)
+
+Changes: - Add fields to AirrRearrangementEntryAA data model - Update AirrBuilderAA to store and
+  compute extended fields - Pass extend_alignment flag from riot_numbering.py API - Document fields
+  in README (AA pipeline section) - Add test coverage for extend_alignment behavior
+
+
 ## v5.0.3 (2026-04-08)
 
 ### Bug Fixes
