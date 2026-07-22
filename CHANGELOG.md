@@ -1,6 +1,17 @@
 # CHANGELOG
 
 
+## v5.2.0 (2026-07-22)
+
+### Features
+
+- **api**: Add scheme mapping utils and tests
+  ([`3bec145`](https://github.com/NaturalAntibody/riot_na/commit/3bec1450d7e424cab0dc6274317b46e0f84ee420))
+
+Add helpers to group scheme residues by region and convert insertion positions to IMGT letter
+  notation. Document existing api/utils functions and cover them with integration tests.
+
+
 ## v5.1.0 (2026-07-03)
 
 ### Documentation
