@@ -89,6 +89,9 @@ _IUPAC = {
     "X": "GATC",
     "N": "GATC",
 }
+# Letters accepted when a codon cannot be resolved to a single residue / stop
+# (BioPython ambiguous DNA+RNA alphabets; U is normalized to T first).
+_VALID_NUCLEOTIDES = frozenset("ACGTRYWSMKHBVDN")
 # Degenerate amino-acid codes when an ambiguous codon encodes exactly these sets.
 _DEGENERATE_AA = {
     frozenset({"D", "N"}): "B",
@@ -96,6 +99,12 @@ _DEGENERATE_AA = {
     frozenset({"I", "L"}): "J",
 }
 _GAP = "."
+
+
+def _ambiguous_placeholder(codon: str) -> str:
+    if _VALID_NUCLEOTIDES.issuperset(codon):
+        return "X"
+    raise ValueError(f"Codon {codon!r} is invalid")
 
 
 def _translate_codon(codon: str) -> str:
@@ -124,24 +133,29 @@ def _translate_codon(codon: str) -> str:
 
     if has_stop and not amino_acids:
         return "*"
-    if not has_stop and len(amino_acids) == 1:
+    if has_stop:
+        # Mixed stop + amino acid (e.g. TAN, NNN): X only for valid IUPAC letters.
+        return _ambiguous_placeholder(codon)
+    if len(amino_acids) == 1:
         return next(iter(amino_acids))
-    if not has_stop:
-        degenerate = _DEGENERATE_AA.get(frozenset(amino_acids))
-        if degenerate is not None:
-            return degenerate
+    degenerate = _DEGENERATE_AA.get(frozenset(amino_acids))
+    if degenerate is not None:
+        return degenerate
+    # Multiple amino acids with no tighter degenerate code (e.g. ATX → I/M) → X.
     return "X"
 
 
 def translate(query_sequence: str, coding_frame: int) -> str:
-    """Translate DNA in ``coding_frame`` with the standard genetic code.
+    """Translate DNA/RNA in ``coding_frame`` with the standard genetic code.
 
-    Behaviour matches common translate defaults: stop → ``*``, unresolved /
-    mixed ambiguous codons → ``X``, and gap codon ``...`` → ``.``.
+    Accepts DNA (``T``) and RNA (``U``), including mixed sequences. Uracil is
+    treated as thymine. Stop → ``*``, unresolved / mixed ambiguous codons →
+    ``X``, and gap codon ``...`` → ``.``.
     """
     assert coding_frame in [0, 1, 2]
 
-    query_sequence = query_sequence[coding_frame:].upper()
+    # BioPython Standard table is DNA/RNA-generic; U is equivalent to T.
+    query_sequence = query_sequence[coding_frame:].upper().replace("U", "T")
     n = len(query_sequence) - len(query_sequence) % 3
     return "".join(_translate_codon(query_sequence[i : i + 3]) for i in range(0, n, 3))
 
