@@ -156,6 +156,38 @@ def test_translate_mixed_dna_rna_matches_expected(sequence: str, expected: str):
     assert translate(sequence, 0) == _biopython_translate(sequence)
 
 
+@pytest.mark.parametrize(
+    ("codon", "expected"),
+    [
+        # B = Asp/Asn (D/N)
+        ("RAC", "B"),
+        ("RAT", "B"),
+        ("RAY", "B"),
+        ("RAU", "B"),  # RNA
+        # Z = Glu/Gln (E/Q)
+        ("SAA", "Z"),
+        ("SAG", "Z"),
+        ("SAR", "Z"),
+        # J = Ile/Leu (I/L)
+        ("WTA", "J"),
+        ("WUA", "J"),  # RNA
+        ("MTA", "J"),
+        ("MTC", "J"),
+        ("MTT", "J"),
+        ("MTU", "J"),  # RNA
+        ("MTY", "J"),
+        ("MTW", "J"),
+        ("MTM", "J"),
+        ("MTH", "J"),
+        ("HTA", "J"),
+        ("MUA", "J"),  # RNA
+    ],
+)
+def test_translate_degenerate_amino_acids(codon: str, expected: str):
+    assert translate(codon, 0) == expected
+    assert _biopython_translate(codon) == expected
+
+
 def test_translate_rejects_partial_gap_codon():
     with pytest.raises(ValueError, match="invalid"):
         translate("AT.", 0)
