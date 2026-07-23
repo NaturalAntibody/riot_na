@@ -3,14 +3,13 @@ from functools import partial
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
-from Bio import SeqIO
-from Bio.SeqRecord import SeqRecord
 from skbio.alignment import StripedSmithWaterman  # type: ignore
 
 from riot_na.alignment.skbio_alignment import (
     align_aa,  # type: ignore  # pylint: disable=import-error
 )
 from riot_na.alignment.skbio_alignment import align
+from riot_na.common.fasta import FastaRecord, parse_fasta
 from riot_na.common.gene_match_utils import create_gene_lookup
 from riot_na.common.multi_species_prefiltering import MultiSpeciesPrefiltering
 from riot_na.config import GENE_DB_DIR
@@ -325,7 +324,7 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
             raise ValueError("AA aligner not supported for gene type")
 
 
-def get_gene_parsing_function(gene_type: GermlineGene) -> Callable[[str, SeqRecord], Gene]:
+def get_gene_parsing_function(gene_type: GermlineGene) -> Callable[[Sequence[str], FastaRecord], Gene]:
     match gene_type:
         case GermlineGene.V:
             return lambda description, record: Gene(
@@ -333,7 +332,7 @@ def get_gene_parsing_function(gene_type: GermlineGene) -> Callable[[str, SeqReco
                 locus=Locus[description[1]],
                 reading_frame=int(description[2]),
                 species=Organism[description[3]],
-                sequence=str(record.seq),
+                sequence=record.seq,
             )
         case GermlineGene.D:
             return lambda description, record: Gene(
@@ -341,7 +340,7 @@ def get_gene_parsing_function(gene_type: GermlineGene) -> Callable[[str, SeqReco
                 locus=Locus.IGH,
                 reading_frame=None,
                 species=Organism[description[1]],
-                sequence=str(record.seq),
+                sequence=record.seq,
             )
         case GermlineGene.J:
             return lambda description, record: Gene(
@@ -349,7 +348,7 @@ def get_gene_parsing_function(gene_type: GermlineGene) -> Callable[[str, SeqReco
                 locus=Locus[description[1]],
                 reading_frame=int(description[2]),
                 species=Organism[description[3]],
-                sequence=str(record.seq),
+                sequence=record.seq,
             )
         case GermlineGene.C:
             return lambda description, record: Gene(
@@ -357,17 +356,17 @@ def get_gene_parsing_function(gene_type: GermlineGene) -> Callable[[str, SeqReco
                 locus=Locus[description[1]],
                 reading_frame=None,
                 species=Organism[description[2]],
-                sequence=str(record.seq),
+                sequence=record.seq,
             )
 
 
-def parse_gene_aa(description: Sequence[str], record: SeqRecord, species: Organism):
-    return GeneAA(name=description[0], locus=Locus[description[1]], species=species, sequence=str(record.seq))
+def parse_gene_aa(description: Sequence[str], record: FastaRecord, species: Organism):
+    return GeneAA(name=description[0], locus=Locus[description[1]], species=species, sequence=record.seq)
 
 
 def read_genes(path: Path, parsing_fn):
     result = []
-    for record in SeqIO.parse(path, "fasta"):
+    for record in parse_fasta(path):
         description = record.description.split("\t")
         gene = parsing_fn(description, record)
 
