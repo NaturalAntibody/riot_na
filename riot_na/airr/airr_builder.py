@@ -5,9 +5,9 @@ from riot_na.alignment.alignment_utils import (
     align_sequences,
     fold_cigar,
     has_frameshift,
-    translate,
     unfold_cigar,
 )
+from riot_na.alignment.translate import translate
 from riot_na.data.model import (
     AirrRearrangementEntryNT,
     AlignmentEntryAA,

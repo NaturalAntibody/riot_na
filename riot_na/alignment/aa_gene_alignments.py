@@ -6,7 +6,7 @@ from typing import Optional, Sequence
 
 from skbio.alignment import StripedSmithWaterman  # type: ignore
 
-from riot_na.alignment.alignment_utils import infer_reading_frame, translate
+from riot_na.alignment.alignment_utils import infer_reading_frame
 from riot_na.alignment.gene_aligner import (
     GeneAlignerAA,
     create_aa_c_gene_aligner,
@@ -21,6 +21,7 @@ from riot_na.alignment.segment_gene_aligner import (
     create_aa_v_gene_aligner as create_segment_aa_v_gene_aligner,
 )
 from riot_na.alignment.skbio_alignment import align_aa
+from riot_na.alignment.translate import translate
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
     AlignmentEntryAA,

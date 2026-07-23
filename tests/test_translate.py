@@ -6,7 +6,7 @@ import pytest
 from Bio.Data.CodonTable import TranslationError
 from Bio.Seq import Seq
 
-from riot_na.alignment.alignment_utils import translate
+from riot_na.alignment.translate import translate
 
 # Matches the previous riot_na call: Seq(...).translate(gap=".")
 _GAP = "."
