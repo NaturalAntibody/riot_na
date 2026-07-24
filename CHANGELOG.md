@@ -1,6 +1,52 @@
 # CHANGELOG
 
 
+## v5.3.0 (2026-07-24)
+
+### Bug Fixes
+
+- Added more explicit degenerate aa translation tests
+  ([`fed815c`](https://github.com/NaturalAntibody/riot_na/commit/fed815ccfa7ae11072959f414eb8099971c21275))
+
+- Added uracyl support
+  ([`d131134`](https://github.com/NaturalAntibody/riot_na/commit/d1311347589c41019aed5977afb25215b4c53d1a))
+
+- Drop runtime biopython dependency
+  ([`14face7`](https://github.com/NaturalAntibody/riot_na/commit/14face722017cd25cd3d1140c58996f436ae78df))
+
+Replace SeqIO/Seq.translate with local FASTA parsing and standard-code NT -> AA translation. Keep
+  biopython as a dev baseline for translate regression tests; prune unused dev deps.
+
+### Continuous Integration
+
+- Downgrade mypy
+  ([`b708a03`](https://github.com/NaturalAntibody/riot_na/commit/b708a0354838644e1258dec32ff66db738a189cb))
+
+- Pin pre-commit tools to venv versions
+  ([`a60bb49`](https://github.com/NaturalAntibody/riot_na/commit/a60bb49ea97f7118bea55da8fd4ceb52d502892c))
+
+### Features
+
+- Replace scikit-bio with extracted ssw-aligner
+  ([`2f5316b`](https://github.com/NaturalAntibody/riot_na/commit/2f5316b6ffcdd7f2bc191a2300b7961ee13be3cb))
+
+### Refactoring
+
+- Extracted translation logic to separate module
+  ([`5abb78a`](https://github.com/NaturalAntibody/riot_na/commit/5abb78a2a2adaf659a51e092a0c5a45438235ff2))
+
+- Fixed pre-commit configuration
+  ([`4400ca0`](https://github.com/NaturalAntibody/riot_na/commit/4400ca0efc94c4c557db640cf0bd8d90aee69e25))
+
+- Pre-commit fixes
+  ([`8b776e0`](https://github.com/NaturalAntibody/riot_na/commit/8b776e00c022b9c09874d3980b5621f85fc00427))
+
+### Testing
+
+- Added NGS regression tests
+  ([`32c0b49`](https://github.com/NaturalAntibody/riot_na/commit/32c0b49d5dd3f425e97ab00d921feb33c468d5e8))
+
+
 ## v5.2.0 (2026-07-22)
 
 ### Features
