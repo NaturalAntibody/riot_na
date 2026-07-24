@@ -45,6 +45,7 @@ pytest-icdiff = "^0.9"
 types-psutil = "^5.9.5.17"
 types-tqdm = "^4.66.0.5"
 commitizen = "^4.4.1"
+pandas = "^2.0.0"
 
 [tool.poetry.group.release.dependencies]
 python-semantic-release = "^9.4.0"

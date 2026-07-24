@@ -1,4 +1,8 @@
-from riot_na.alignment.alignment_utils import fold_cigar, get_cigar_op_groups, unfold_cigar
+from riot_na.alignment.alignment_utils import (
+    fold_cigar,
+    get_cigar_op_groups,
+    unfold_cigar,
+)
 
 
 def test_get_cigar_op_groups_parses_multi_digit_groups():
