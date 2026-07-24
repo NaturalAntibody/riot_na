@@ -3,7 +3,7 @@ from functools import partial
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
-from skbio.alignment import StripedSmithWaterman  # type: ignore
+from ssw_aligner import StripedSmithWaterman
 
 from riot_na.alignment.skbio_alignment import (
     align_aa,  # type: ignore  # pylint: disable=import-error

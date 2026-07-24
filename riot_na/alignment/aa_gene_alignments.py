@@ -4,7 +4,7 @@ from dataclasses import asdict
 from pathlib import Path
 from typing import Optional, Sequence
 
-from skbio.alignment import StripedSmithWaterman  # type: ignore
+from ssw_aligner import StripedSmithWaterman
 
 from riot_na.alignment.alignment_utils import infer_reading_frame
 from riot_na.alignment.gene_aligner import (

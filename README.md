@@ -18,7 +18,7 @@ Antibodies are a cornerstone of the immune system, playing a pivotal role in ide
 
 ## Requirements
  - Python ^3.10
- - C compiler (reason: `scikit-bio`)
+ - C compiler (reason: `ssw-aligner`)
 
 ## Quickstart
 ```

@@ -1,4 +1,4 @@
-from skbio.alignment import StripedSmithWaterman  # type: ignore
+from ssw_aligner import StripedSmithWaterman
 
 from riot_na.alignment.skbio_alignment import align
 

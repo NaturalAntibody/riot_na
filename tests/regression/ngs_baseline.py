@@ -2,7 +2,7 @@
 
 Binary format: a single pickle blob with metadata + AIRR rearrangement entries.
 
-Generate baselines (current skbio / riot stack)::
+Generate baselines (current ssw-aligner / riot stack)::
 
     poetry run python -m tests.regression.ngs_baseline generate
     poetry run python -m tests.regression.ngs_baseline generate --limit 100 --ncpu 8
