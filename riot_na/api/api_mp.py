@@ -3,11 +3,11 @@ import multiprocessing as mp
 from pathlib import Path
 from typing import Any, Optional
 
-from Bio import SeqIO
 from psutil import cpu_count
 from tqdm import tqdm
 
 from riot_na.api.riot_numbering import create_riot_aa, create_riot_nt
+from riot_na.common.fasta import FastaRecord, parse_fasta
 from riot_na.common.io import count_fasta_records, write_airr_iter_to_csv
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
@@ -35,11 +35,11 @@ class _WorkerNT:
         self.scheme = scheme
         self.return_all_domains = return_all_domains
 
-    def __call__(self, fasta_record: SeqIO.SeqRecord) -> AirrRearrangementEntryNT | list[AirrRearrangementEntryNT]:
+    def __call__(self, fasta_record: FastaRecord) -> AirrRearrangementEntryNT | list[AirrRearrangementEntryNT]:
         try:
             res = self.numbering.run_on_sequence(
                 fasta_record.description,
-                str(fasta_record.seq),
+                fasta_record.seq,
                 self.scheme,
                 return_all_domains=self.return_all_domains,
             )
@@ -68,11 +68,11 @@ class _WorkerAA:
         self.extend_alignment = extend_alignment
         self.return_all_domains = return_all_domains
 
-    def __call__(self, fasta_record: SeqIO.SeqRecord) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]:
+    def __call__(self, fasta_record: FastaRecord) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]:
         try:
             res = self.numbering.run_on_sequence(
                 fasta_record.description,
-                str(fasta_record.seq),
+                fasta_record.seq,
                 self.scheme,
                 extend_alignment=self.extend_alignment,
                 return_all_domains=self.return_all_domains,
@@ -118,13 +118,16 @@ def run_on_file_mp(  # pylint: disable=too-many-arguments
     return_all_domains: bool = False,
     extend_alignment: bool = False,
 ):
+    if input_format != "fasta":
+        raise ValueError(f"Unsupported input format: {input_format!r}; only 'fasta' is supported")
+
     with mp.Pool(
         processes=n_processes,
         initializer=_worker_initializer,
         initargs=(allowed_species, scheme, db_dir, input_type, return_all_domains, extend_alignment),
     ) as pool:
         result_iter = tqdm(
-            pool.imap(_worker_call, itertools.islice(SeqIO.parse(input_fasta_path, input_format), limit)),
+            pool.imap(_worker_call, itertools.islice(parse_fasta(input_fasta_path), limit)),
             total=count_fasta_records(input_fasta_path, input_format=input_format),
         )
         record_type: Any

@@ -2,8 +2,6 @@ from collections.abc import Iterator
 from dataclasses import replace
 from itertools import groupby
 
-from Bio.Seq import Seq
-
 from riot_na.data.model import AlignmentEntry, AlignmentString, Cigar
 
 
@@ -40,17 +38,6 @@ def has_frameshift(cigar: Cigar) -> bool:
             counter += size
 
     return False
-
-
-def translate(query_sequence: str, coding_frame: int) -> str:
-    assert coding_frame in [0, 1, 2]
-
-    query_sequence = query_sequence[coding_frame:]
-    partial_codon_len = len(query_sequence) % 3
-    if partial_codon_len:
-        query_sequence = query_sequence[:-partial_codon_len]  # To avoid BioPython "Partial codon" warning.
-    coding_dna = Seq(query_sequence)
-    return str(coding_dna.translate(gap="."))
 
 
 def infer_reading_frame(t_start: int, t_frame: int) -> int:

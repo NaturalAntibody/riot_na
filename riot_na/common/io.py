@@ -1,18 +1,17 @@
 from pathlib import Path
 from typing import Iterable, Type
 
-from Bio import SeqIO
-
 from riot_na.common.airr_csv_writer import AirrRearrangementEntryWriter
+from riot_na.common.fasta import parse_fasta
 from riot_na.data.model import AirrRearrangementEntry_co  # type: ignore
 
 
 def read_fasta(path: Path) -> tuple[list[str], list[str]]:
     headers = []
     sequences = []
-    for record in SeqIO.parse(path, "fasta"):
+    for record in parse_fasta(path):
         headers.append(record.description)
-        sequences.append(str(record.seq))
+        sequences.append(record.seq)
     return headers, sequences
 
 

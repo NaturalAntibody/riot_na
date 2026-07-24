@@ -1,7 +1,7 @@
 # pylint: skip-file
 # flake8: noqa
 import pytest
-from skbio.alignment import StripedSmithWaterman
+from ssw_aligner import StripedSmithWaterman
 
 from riot_na.alignment.skbio_alignment import align_aa
 from riot_na.data.constants import BLOSUM_62

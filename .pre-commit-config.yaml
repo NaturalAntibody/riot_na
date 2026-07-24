@@ -1,7 +1,8 @@
+default_stages: [pre-commit]
 default_install_hook_types: ['pre-commit', 'commit-msg']
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.6.0
+    rev: v6.0.0
     hooks:
       - id: trailing-whitespace
       - id: check-yaml
@@ -12,7 +13,7 @@ repos:
       - id: check-case-conflict
 
   - repo: https://github.com/commitizen-tools/commitizen
-    rev: v3.29.0
+    rev: v4.16.5
     hooks:
       - id: commitizen
         stages: [commit-msg]
@@ -22,26 +23,26 @@ repos:
       - id: isort
         name: isort
         entry: isort
-        language: python
+        language: system
         types_or: [python]
         args: ["--profile", "black", "--filter-files"]
       - id: black
         name: black
         entry: black
-        language: python
+        language: system
         types_or: [python, pyi]
       - id: pylint
         name: pylint
         entry: pylint
-        language: python
+        language: system
         types: [ python ]
       - id: flake8
         name: flake8
         entry: flake8
-        language: python
+        language: system
         types: [ python ]
       - id: mypy
         name: mypy
         entry: mypy
-        language: python
+        language: system
         types: [ python ]

@@ -2,7 +2,8 @@ from enum import Enum
 from functools import cache, partial
 from typing import Callable, Literal, Optional
 
-from riot_na.alignment.alignment_utils import translate, unfold_cigar
+from riot_na.alignment.alignment_utils import unfold_cigar
+from riot_na.alignment.translate import translate
 from riot_na.data.model import (
     AirrRearrangementEntry_co,
     AirrRearrangementEntryAA,

@@ -1,5 +1,3 @@
-from typing import Dict, Optional
-
 import pytest
 
 from riot_na import Locus, Organism, Scheme
@@ -38,7 +36,7 @@ class TestMultiDomainAlignments:
             "QIVLIQSPPIMSASPGEKVTLTCSASSSVSSRYLYWYQQKPGSSPKLWIYGTSNLASGVPARFSGSGSGTSFSLTISSMEAEDAASYFCHQWSSFPFTFGSGTKLEIK"
         )
 
-        expected_genes: Dict[str, Dict[str, Optional[str]]] = {
+        expected_genes: dict[str, dict[str, str | None]] = {
             "domain_1": {
                 "v_call": "IGHV-3GZS",
                 "j_call": "IGHJ-2FQV",
@@ -84,7 +82,7 @@ class TestMultiDomainAlignments:
             "EIVLTQSPGTLSLSPGERATLSCRASQRVSSSYLAWYQQKPGQAPRLLIYDASSRATGIPDRFSGSGSGTDFTLTISRLEPEDFAVYYCQQYGQSPYTFGQGTKVEIK"
         )
 
-        expected_genes: Dict[str, Dict[str, Optional[str]]] = {
+        expected_genes: dict[str, dict[str, str | None]] = {
             "domain_1": {
                 "v_call": "IGHV3-30*02",
                 "j_call": "IGHJ4*02",
@@ -132,7 +130,7 @@ class TestMultiDomainAlignments:
             "GACATCCAGATGACCCAGTCTCCATCCTCCCTGTCTGCATCTGTAGGAGACAGAGTCACCATCACTTGCCGGGCAAGTCAGGGCATTAGCAGTTGGCTGGCCTGGTATCAGCAGAAACCAGGGAAAGCCCCTAAGCTCCTGATCTATGCTGCATCCAGTTTGCAAAGTGGGGTCCCATCAAGGTTCAGTGGCAGTGGATCTGGGACAGATTTCACTCTCACCATCAGCAGTCTGCAACCTGAAGATTTTGCAACTTACTACTGTCAGCAAGCTAACAGCTTCCCTTATACGTTCGGCCAAGGGACCAAGGTGGAAATCAAACGG"
         )
 
-        expected_genes: Dict[str, Dict[str, Optional[str]]] = {
+        expected_genes: dict[str, dict[str, str | None]] = {
             "domain_1": {
                 "v_call": "IGHV3-30*03",
                 "d_call": "IGHD3-16*02",
@@ -185,7 +183,7 @@ class TestMultiDomainAlignments:
             "DIQMTQSPSSLSASVGDRVTITCRASQSISSYLNWYQQKPGKAPKLLIYAASSLQSGVPSRFSGSGSGTDFTLTISSLQPEDFATYYCQQSYSTPLT"
         )
 
-        expected_genes: Dict[str, Dict[str, Optional[str]]] = {
+        expected_genes: dict[str, dict[str, str | None]] = {
             "domain_1": {
                 "v_call": "IGHV4-34*01",
                 "j_call": "IGHJ1*01",
@@ -241,7 +239,7 @@ class TestMultiDomainAlignments:
             "RVKFSRSADAPAYQQGQNQLYNELNLGRREEYDVLDKRRGRDPEMGGKPRRKNPQEGLYNELQKDKMAEAYSEIGMKGERRRGKGHDGLYQGLSTATKDTYDALHMQALPPR"
         )
 
-        expected_genes: Dict[str, Dict[str, Optional[str]]] = {
+        expected_genes: dict[str, dict[str, str | None]] = {
             "domain_1": {
                 "v_call": "IGHV1-69*04",
                 "j_call": None,
@@ -287,7 +285,7 @@ class TestMultiDomainAlignments:
             "DIQMTQSPSSLSASVGDRVTITCRASQSISSYLNWYQQKPGKAPKLLIYAASSLQSGVPSRFSGSGSGTDFTLTISSLQPEDFATYYCQQSYSTPLT"
         )
 
-        expected_genes: Dict[str, Dict[str, Optional[str]]] = {
+        expected_genes: dict[str, dict[str, str | None]] = {
             "domain_1": {
                 "v_call": "IGHV3-23*01",
                 "j_call": None,
@@ -344,7 +342,7 @@ class TestMultiDomainAlignments:
             "QSALTQPASVSGSPGQSITISCTGTSSDVGGYNYVSWYQQHPGKAPKLMIYDVSNRPSGVSNRFSGSKSGNTASLTISGLQAEDEADYYCSSYTSSSTLV"
         )
 
-        expected_genes: Dict[str, Dict[str, Optional[str]]] = {
+        expected_genes: dict[str, dict[str, str | None]] = {
             "domain_1": {
                 "v_call": "IGHV1-69*04",
                 "j_call": None,
@@ -414,7 +412,7 @@ class TestMultiDomainAlignments:
             "ASTKGPSVFPLAPSSKSTSGGTAALGCLVKDYFPEPVTVSWNSGALTSGVHTFPAVLQSSGLYSLSSVVTVPSSSLGTQTYICNVNHKPSNTKVDKRVEPKSCDKTHTCPPCPAPELLGGPSVFLFPPKPKDTLMISRTPEVTCVVVDVSHEDPEVKFNWYVDGVEVHNAKTKPREEQYNSTYRVVSVLTVLHQDWLNGKEYKCKVSNKALPAPIEKTISKAKGQPREPQVYTLPPSREEMTKNQVSLTCLVKGFYPSDIAVEWESNGQPENNYKTTPPVLDSDGSFFLYSKLTVDKSRWQQGNVFSCSVMHEALHNHYTQKSLSLSPGK"
         )
 
-        expected_genes: Dict[str, Dict[str, Optional[str]]] = {
+        expected_genes: dict[str, dict[str, str | None]] = {
             "domain_1": {
                 "v_call": "IGHV3-30*02",
                 "j_call": "IGHJ4*02",
@@ -448,7 +446,7 @@ class TestMultiDomainAlignments:
 
         acapatamab_full_sequence = "QVQLVESGGGLVKPGESLRLSCAASGFTFSDYYMYWVRQAPGKCLEWVAIISDGGYYTYYSDIIKGRFTISRDNAKNSLYLQMNSLKAEDTAVYYCARGFPLLRHGAMDYWGQGTLVTVSSGGGGSGGGGSGGGGSDIQMTQSPSSLSASVGDRVTITCKASQNVDTNVAWYQQKPGQAPKSLIYSASYVYWDVPSRFSGSASGTDFTLTISSVQSEDFATYYCQQYDQQLITFGCGTKLEIKSGGGGSEVQLVESGGGLVQPGGSLKLSCAASGFTFNKYAMNWVRQAPGKGLEWVARIRSKYNNYATYYADSVKDRFTISRDDSKNTAYLQMNNLKTEDTAVYYCVRHGNFGNSYISYWAYWGQGTLVTVSSGGGGSGGGGSGGGGSQTVVTQEPSLTVSPGGTVTLTCGSSTGAVTSGNYPNWVQQKPGQAPRGLIGGTKFLAPGTPARFSGSLLGGKAALTLSGVQPEDEAEYYCVLWYSNRWVFGGGTKLTVLGGGGDKTHTCPPCPAPELLGGPSVFLFPPKPKDTLMISRTPEVTCVVVDVSHEDPEVKFNWYVDGVEVHNAKTKPCEEQYGSTYRCVSVLTVLHQDWLNGKEYKCKVSNKALPAPIEKTISKAKGQPREPQVYTLPPSREEMTKNQVSLTCLVKGFYPSDIAVEWESNGQPENNYKTTPPVLDSDGSFFLYSKLTVDKSRWQQGNVFSCSVMHEALHNHYTQKSLSLSPGKGGGGSGGGGSGGGGSGGGGSGGGGSGGGGSDKTHTCPPCPAPELLGGPSVFLFPPKPKDTLMISRTPEVTCVVVDVSHEDPEVKFNWYVDGVEVHNAKTKPCEEQYGSTYRCVSVLTVLHQDWLNGKEYKCKVSNKALPAPIEKTISKAKGQPREPQVYTLPPSREEMTKNQVSLTCLVKGFYPSDIAVEWESNGQPENNYKTTPPVLDSDGSFFLYSKLTVDKSRWQQGNVFSCSVMHEALHNHYTQKSLSLSPGK"
 
-        expected_genes: Dict[str, Dict[str, Optional[str]]] = {
+        expected_genes: dict[str, dict[str, str | None]] = {
             "domain_1": {
                 "v_call": "IGHV-JRQS",
                 "j_call": "IGHJ-EGQA",
