@@ -69,6 +69,55 @@ class VJCAlignerAA:
                 )
         return results
 
+    def produce_aa_alignments_for_genes(
+        self,
+        query: str,
+        v_gene: str,
+        j_gene: str,
+        species: Organism = Organism.HOMO_SAPIENS,
+    ) -> list[AlignmentsAA]:
+        """
+        Align query to the given V and J germlines, skipping prefiltering.
+
+        Germlines are given by their exact names, e.g. IGHV3-7*01 and IGHJ4*02.
+        The J germline is aligned to the part of the query left over by the V alignment,
+        so the J locus follows from the V germline. C genes are not assigned.
+        """
+        v_aligner = self._get_gene_selection_v_aligner()
+        result = AlignmentsAA()
+
+        v_aa_alignments = v_aligner.align_to_genes(query, species, [v_gene])
+        if not v_aa_alignments:
+            return [result]
+
+        v_aa_alignment = v_aa_alignments[0]
+        result.v = v_aa_alignment
+
+        query_j = v_aa_alignment.q_seq[v_aa_alignment.q_end :]
+        if query_j:
+            j_aligner = self._get_j_aligner(species, v_aa_alignment.locus)
+            j_aa_alignments = j_aligner.align_to_genes(query_j, species, [j_gene])
+            if j_aa_alignments:
+                result.j = j_aa_alignments[0]
+
+        return [result]
+
+    def assert_genes_exist(self, v_gene: str, j_gene: str, species: Organism = Organism.HOMO_SAPIENS) -> None:
+        """Fail fast on unknown germline names, without aligning anything."""
+        v_germline = self._get_gene_selection_v_aligner().get_gene(species, v_gene)
+        self._get_j_aligner(species, v_germline.locus).get_gene(species, j_gene)
+
+    def _get_gene_selection_v_aligner(self) -> GeneAlignerAA:
+        assert isinstance(
+            self.v_aligner, GeneAlignerAA
+        ), "Selecting germlines by name is not supported in multiple domains mode"
+        return self.v_aligner
+
+    def _get_j_aligner(self, species: Organism, locus: Locus) -> GeneAlignerAA:
+        j_aligner = self.j_aligners.get(species, {}).get(locus)
+        assert j_aligner is not None, f"No J gene database for {species.value} {locus.value}"
+        return j_aligner
+
     def _produce_vjc_aa_alignment(self, v_aa_segment_alignment: AlignmentSegment) -> AlignmentsAA:
         result = AlignmentsAA()
         result.segment_start = v_aa_segment_alignment.segment_start
