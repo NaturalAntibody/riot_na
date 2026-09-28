@@ -240,6 +240,10 @@ class RiotNumberingAA:
         query_sequence: str,
         scheme: Scheme = ...,
         extend_alignment: bool = ...,
+        *,
+        v_gene: Optional[str] = ...,
+        j_gene: Optional[str] = ...,
+        species: Organism = ...,
     ) -> AirrRearrangementEntryAA: ...
 
     @overload
@@ -250,6 +254,10 @@ class RiotNumberingAA:
         scheme: Scheme = ...,
         extend_alignment: bool = ...,
         return_all_domains: Literal[True] = ...,
+        *,
+        v_gene: Optional[str] = ...,
+        j_gene: Optional[str] = ...,
+        species: Organism = ...,
     ) -> list[AirrRearrangementEntryAA]: ...
 
     @overload
@@ -260,6 +268,10 @@ class RiotNumberingAA:
         scheme: Scheme = ...,
         extend_alignment: bool = ...,
         return_all_domains: Literal[False] = ...,
+        *,
+        v_gene: Optional[str] = ...,
+        j_gene: Optional[str] = ...,
+        species: Organism = ...,
     ) -> AirrRearrangementEntryAA: ...
 
     @overload
@@ -270,6 +282,10 @@ class RiotNumberingAA:
         scheme: Scheme = ...,
         extend_alignment: bool = ...,
         return_all_domains: bool = ...,
+        *,
+        v_gene: Optional[str] = ...,
+        j_gene: Optional[str] = ...,
+        species: Organism = ...,
     ) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]: ...
 
     def run_on_sequence(
@@ -279,6 +295,9 @@ class RiotNumberingAA:
         scheme: Scheme = Scheme.IMGT,
         extend_alignment: bool = True,
         return_all_domains: bool = False,
+        v_gene: Optional[str] = None,
+        j_gene: Optional[str] = None,
+        species: Organism = Organism.HOMO_SAPIENS,
     ) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]:  # pylint: disable=too-many-statements
         """
         Align and number amino acid sequence.
@@ -294,11 +313,17 @@ class RiotNumberingAA:
         This option appends missing amino acids, so the result covers full gene sequence. Beware that
         those query fragments are not truly a part of alignemnt and are shown only for convenience!
         - return_all_domains: If True, return all domains of multiple domain proteins.
+        - v_gene, j_gene : Align to these exact germlines (e.g. IGHV3-7*01, IGHJ4*02) instead of
+        searching the germline database. Both have to be given together. Gene databases are not
+        prefiltered then, but alignment thresholds still apply.
+        - species : Species of the selected germlines (default human). Used only together with
+        v_gene and j_gene.
 
         Returns:
         -----------
         AirrRearrangementEntryAA object with alignment results (Extended AIRR format)
         """
+        assert (v_gene is None) == (j_gene is None), "Both v_gene and j_gene have to be specified"
         query_sequence = query_sequence.upper()
         sequence_aa = query_sequence
         sch_alignment = None
@@ -310,7 +335,12 @@ class RiotNumberingAA:
         segment_end = -1
 
         # produce alignments for v,j,c
-        alignments = self.vjc_aligner_aa.produce_aa_alignments(query_sequence)
+        if v_gene and j_gene:
+            alignments = self.vjc_aligner_aa.produce_aa_alignments_for_genes(
+                query_sequence, v_gene=v_gene, j_gene=j_gene, species=species
+            )
+        else:
+            alignments = self.vjc_aligner_aa.produce_aa_alignments(query_sequence)
 
         results = []
 
