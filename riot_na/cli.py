@@ -153,7 +153,7 @@ def run_riot(  # pylint: disable=too-many-arguments
                 )
 
         if output_file:
-            write_airr_iter_to_csv(output_file, record_type, result if not multiple_domains else [result])
+            write_airr_iter_to_csv(output_file, record_type, [result] if not multiple_domains else result)
         else:
             if not multiple_domains:
                 print(result.__dict__)
