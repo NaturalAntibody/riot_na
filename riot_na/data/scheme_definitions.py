@@ -1,7 +1,7 @@
 from functools import cache
 from typing import Final, TypedDict
 
-from riot_na.data.model import ChainType, Scheme, ShortRegion
+from riot_na.data.model import ChainType, CScheme, Scheme, ShortRegion
 
 # Number of scheme positions for each chain type
 IMGT_POSITIONS: Final[int] = 128
@@ -20,6 +20,42 @@ CHOTHIA_INDEL_POSITIONS_HEAVY: Final[list[int]] = [31, 52, 100]
 CHOTHIA_INDEL_POSITIONS_LIGHT: Final[list[int]] = [30, 52, 95]
 MARTIN_INDEL_POSITIONS_HEAVY: Final[list[int]] = [31, 52, 100]
 MARTIN_INDEL_POSITIONS_LIGHT: Final[list[int]] = [30, 52, 95]
+
+
+# Constant region scheme positions, in sequence order. The C scheme mappings of germlines
+# (scheme_mappings/<species>/<c_scheme>/c_scheme_mapping.csv) are cigars over these positions.
+EU_C_POSITIONS_HEAVY: Final[tuple[str, ...]] = tuple(str(position) for position in range(118, 448))
+# EU numbering is defined for kappa light chains only
+EU_C_POSITIONS_LIGHT: Final[tuple[str, ...]] = tuple(str(position) for position in range(108, 215))
+KABAT_C_POSITIONS_HEAVY: Final[tuple[str, ...]] = tuple(str(position) for position in range(114, 479))
+# lambda C starts at Kabat 107A, written as 107.1 like other insertions
+KABAT_C_POSITIONS_LIGHT: Final[tuple[str, ...]] = ("107.1", *(str(position) for position in range(108, 217)))
+
+# IMGT unique numbering for C-DOMAIN, positions 129 and 130 are used by CHS of CH3
+IMGT_C_DOMAIN_POSITIONS: Final[tuple[str, ...]] = (
+    *(f"1.{i}" for i in range(8, 0, -1)),
+    *(str(i) for i in range(1, 16)),
+    *(f"15.{i}" for i in range(1, 4)),
+    *(str(i) for i in range(16, 32)),
+    *(str(i) for i in range(34, 46)),
+    *(f"45.{i}" for i in range(1, 8)),
+    *(str(i) for i in range(77, 85)),
+    *(f"84.{i}" for i in range(1, 8)),
+    *(f"85.{i}" for i in range(7, 0, -1)),
+    *(str(i) for i in range(85, 97)),
+    "96.1",
+    "96.2",
+    *(str(i) for i in range(97, 131)),
+)
+# hinge positions are IMGT exon numbering; IGHG3 hinge is encoded by 4 exons (H1-H4), other IGHG by one (H)
+IMGT_C_POSITIONS_HEAVY: Final[tuple[str, ...]] = (
+    *(f"CH1_{position}" for position in IMGT_C_DOMAIN_POSITIONS),
+    *(f"H_{i}" for i in range(1, 16)),
+    *(f"H{exon}_{i}" for exon, exon_length in ((1, 17), (2, 15), (3, 15), (4, 15)) for i in range(1, exon_length + 1)),
+    *(f"CH2_{position}" for position in IMGT_C_DOMAIN_POSITIONS),
+    *(f"CH3_{position}" for position in IMGT_C_DOMAIN_POSITIONS),
+)
+IMGT_C_POSITIONS_LIGHT: Final[tuple[str, ...]] = tuple(f"CL_{position}" for position in IMGT_C_DOMAIN_POSITIONS)
 
 
 # Region position ranges
@@ -160,3 +196,21 @@ def get_indels_positions(scheme: Scheme, chain_type: ChainType) -> list[int]:
             return MARTIN_INDEL_POSITIONS_LIGHT
 
     raise ValueError(f"Unknown scheme {scheme}")
+
+
+def get_c_scheme_positions(c_scheme: CScheme, chain_type: ChainType) -> tuple[str, ...]:
+    match c_scheme, chain_type:
+        case CScheme.EU, ChainType.HEAVY:
+            return EU_C_POSITIONS_HEAVY
+        case CScheme.EU, ChainType.LIGHT:
+            return EU_C_POSITIONS_LIGHT
+        case CScheme.KABAT, ChainType.HEAVY:
+            return KABAT_C_POSITIONS_HEAVY
+        case CScheme.KABAT, ChainType.LIGHT:
+            return KABAT_C_POSITIONS_LIGHT
+        case CScheme.IMGT, ChainType.HEAVY:
+            return IMGT_C_POSITIONS_HEAVY
+        case CScheme.IMGT, ChainType.LIGHT:
+            return IMGT_C_POSITIONS_LIGHT
+
+    raise ValueError(f"Unknown C scheme {c_scheme} or chain type {chain_type}")

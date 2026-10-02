@@ -14,6 +14,7 @@ from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
     AirrRearrangementEntryAA,
     AirrRearrangementEntryNT,
+    CScheme,
     InputType,
     Organism,
     Scheme,
@@ -34,12 +35,14 @@ class _WorkerNT:
         scheme: Scheme = Scheme.IMGT,
         db_dir: Path = GENE_DB_DIR,
         return_all_domains: bool = False,
+        c_scheme: Optional[CScheme] = None,
     ) -> None:
         self.numbering = create_riot_nt(
             allowed_species=allowed_species, db_dir=db_dir, return_all_domains=return_all_domains
         )
         self.scheme = scheme
         self.return_all_domains = return_all_domains
+        self.c_scheme = c_scheme
 
     def __call__(self, fasta_record: FastaRecord) -> AirrRearrangementEntryNT | list[AirrRearrangementEntryNT]:
         try:
@@ -48,6 +51,7 @@ class _WorkerNT:
                 fasta_record.seq,
                 self.scheme,
                 return_all_domains=self.return_all_domains,
+                c_scheme=self.c_scheme,
             )
         except Exception as exc:
             print(fasta_record.description)
@@ -58,7 +62,7 @@ class _WorkerNT:
         return res
 
 
-class _WorkerAA:
+class _WorkerAA:  # pylint: disable=too-many-instance-attributes
     def __init__(
         self,
         allowed_species: Optional[tuple[Organism, ...]] = None,
@@ -68,6 +72,7 @@ class _WorkerAA:
         extend_alignment: bool = False,
         v_gene: Optional[str] = None,
         j_gene: Optional[str] = None,
+        c_scheme: Optional[CScheme] = None,
     ) -> None:
         self.numbering = create_riot_aa(
             allowed_species=allowed_species, db_dir=db_dir, return_all_domains=return_all_domains
@@ -78,6 +83,7 @@ class _WorkerAA:
         self.v_gene = v_gene
         self.j_gene = j_gene
         self.species = gene_species(allowed_species)
+        self.c_scheme = c_scheme
 
     def __call__(self, fasta_record: FastaRecord) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]:
         try:
@@ -90,6 +96,7 @@ class _WorkerAA:
                 v_gene=self.v_gene,
                 j_gene=self.j_gene,
                 species=self.species,
+                c_scheme=self.c_scheme,
             )
         except Exception as exc:
             print(fasta_record.description)
@@ -109,13 +116,14 @@ def _worker_initializer(
     extend_alignment: bool = False,
     v_gene: Optional[str] = None,
     j_gene: Optional[str] = None,
+    c_scheme: Optional[CScheme] = None,
 ):
     global worker  # pylint: disable=global-statement,global-variable-undefined
     if input_type == InputType.NT:
-        worker = _WorkerNT(allowed_species, scheme, db_dir, return_all_domains)  # type: ignore
+        worker = _WorkerNT(allowed_species, scheme, db_dir, return_all_domains, c_scheme)  # type: ignore
     else:
         worker = _WorkerAA(  # type: ignore
-            allowed_species, scheme, db_dir, return_all_domains, extend_alignment, v_gene, j_gene
+            allowed_species, scheme, db_dir, return_all_domains, extend_alignment, v_gene, j_gene, c_scheme
         )
 
 
@@ -137,6 +145,7 @@ def run_on_file_mp(  # pylint: disable=too-many-arguments
     extend_alignment: bool = False,
     v_gene: Optional[str] = None,
     j_gene: Optional[str] = None,
+    c_scheme: Optional[CScheme] = None,
 ):
     if input_format != "fasta":
         raise ValueError(f"Unsupported input format: {input_format!r}; only 'fasta' is supported")
@@ -152,7 +161,17 @@ def run_on_file_mp(  # pylint: disable=too-many-arguments
     with mp.Pool(
         processes=n_processes,
         initializer=_worker_initializer,
-        initargs=(allowed_species, scheme, db_dir, input_type, return_all_domains, extend_alignment, v_gene, j_gene),
+        initargs=(
+            allowed_species,
+            scheme,
+            db_dir,
+            input_type,
+            return_all_domains,
+            extend_alignment,
+            v_gene,
+            j_gene,
+            c_scheme,
+        ),
     ) as pool:
         result_iter = tqdm(
             pool.imap(_worker_call, itertools.islice(parse_fasta(input_fasta_path), limit)),
