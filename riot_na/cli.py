@@ -12,6 +12,7 @@ from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
     AirrRearrangementEntryAA,
     AirrRearrangementEntryNT,
+    CScheme,
     InputType,
     Organism,
     Scheme,
@@ -29,6 +30,15 @@ from riot_na.data.model import (
     type=click.Choice(Scheme),  # type: ignore
     default=Scheme.IMGT,
     help="Which numbering scheme should be used: imgt, kabat, chothia, martin. Default IMGT",
+)
+@click.option(
+    "--c-scheme",
+    type=click.Choice(CScheme),  # type: ignore
+    default=None,
+    help=(
+        "Numbering scheme of the constant region: eu, kabat, imgt. Only human IGHG1-4, IGKC and IGLC constant regions "
+        "are numbered, EU numbering is not defined for IGLC. Default no constant region numbering."
+    ),
 )
 @click.option(
     "--species",
@@ -88,6 +98,7 @@ def run_riot(  # pylint: disable=too-many-arguments
     sequence: Optional[str],
     output_file: Optional[Path],
     scheme: Scheme,
+    c_scheme: Optional[CScheme],
     species: Optional[Organism],
     input_type: InputType,
     ncpu: int,
@@ -121,6 +132,7 @@ def run_riot(  # pylint: disable=too-many-arguments
             return_all_domains=multiple_domains,
             v_gene=v_gene,
             j_gene=j_gene,
+            c_scheme=c_scheme,
         )
         end = time.perf_counter()
         elapsed_time = end - start
@@ -135,7 +147,11 @@ def run_riot(  # pylint: disable=too-many-arguments
                 )
                 record_type = AirrRearrangementEntryNT if not multiple_domains else SegmentedAirrRearrangementEntryNT
                 result = numbering_nt.run_on_sequence(
-                    header="-", query_sequence=sequence, scheme=scheme, return_all_domains=multiple_domains
+                    header="-",
+                    query_sequence=sequence,
+                    scheme=scheme,
+                    return_all_domains=multiple_domains,
+                    c_scheme=c_scheme,
                 )
             case InputType.AA:
                 numbering_aa = create_riot_aa(
@@ -150,6 +166,7 @@ def run_riot(  # pylint: disable=too-many-arguments
                     return_all_domains=multiple_domains,
                     v_gene=v_gene,
                     j_gene=j_gene,
+                    c_scheme=c_scheme,
                 )
 
         if output_file:

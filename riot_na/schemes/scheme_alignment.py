@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, Optional, Sequence
 
 from riot_na.alignment.alignment_utils import unfold_cigar
 from riot_na.config import GENE_DB_DIR
@@ -11,13 +11,14 @@ from riot_na.data.model import (
     AlignmentString,
     ChainType,
     Cigar,
+    CScheme,
     Locus,
     Organism,
     Scheme,
     SchemeAlignment,
 )
 from riot_na.data.scheme_definitions import get_legal_positions
-from riot_na.data.scheme_mapping_facade import SchemeMappingFacade
+from riot_na.data.scheme_mapping_facade import CSchemeMappingFacade, SchemeMappingFacade
 from riot_na.schemes.collapse_alignment import collapse_alignment_str, collapse_ins_del
 from riot_na.schemes.smooth_alignment import smooth_cdr_junctions
 
@@ -340,12 +341,65 @@ def scheme_alignment(
     )
 
 
-def get_scheme_residue_mapping(numbering: IntermediateNumbering) -> dict[str, str]:
+def clip_to_gene_scheme_alignment(
+    query_gene_alignment_str: AlignmentString, gene_scheme_alignment_str: AlignmentString
+) -> AlignmentString:
+    # germline residues past the end of the gene scheme alignment (e.g. membrane exons of C genes) have no
+    # scheme positions, drop the part of the query aligned to them
+    numbered_gene_length = gene_scheme_alignment_str.count("M") + gene_scheme_alignment_str.count("I")
+    gene_position = 0
+
+    for i, op in enumerate(query_gene_alignment_str):
+        if gene_position == numbered_gene_length:
+            return AlignmentString(query_gene_alignment_str[:i])
+        if op in {"M", "D", "N"}:
+            gene_position = gene_position + 1
+
+    return query_gene_alignment_str
+
+
+def c_scheme_alignment(
+    c_alignment: AlignmentEntryAA,
+    c_gene_scheme_alignment_str: AlignmentString,
+    c_scheme: CScheme,
+    query_offset: int = 0,
+) -> SchemeAlignment:
+    """
+    Align query C region to the C scheme. query_offset is the position of the C alignment query
+    (the query left after J alignment) in the whole query.
+    """
+    c_query_gene_alignment_str = collapse_alignment_str(unfold_cigar(c_alignment.cigar))
+    # unaligned query residues before the C alignment are not numbered, unlike V no S ops are added
+    c_query_gene_alignment_str = AlignmentString(c_alignment.t_start * "N" + c_query_gene_alignment_str)
+    c_query_gene_alignment_str = clip_to_gene_scheme_alignment(c_query_gene_alignment_str, c_gene_scheme_alignment_str)
+
+    c_query_scheme_alignment_str = _merge_cigars(c_query_gene_alignment_str, c_gene_scheme_alignment_str)
+    collapsed_c_query_scheme_alignment_str = collapse_alignment_str(c_query_scheme_alignment_str, ordered=True)
+
+    q_start = query_offset + c_alignment.q_start
+    q_end = q_start + c_query_gene_alignment_str.count("M") + c_query_gene_alignment_str.count("I")
+
+    return SchemeAlignment(
+        target_id=c_scheme.value,
+        q_start=q_start,
+        q_end=q_end,
+        alignment_str=collapsed_c_query_scheme_alignment_str,
+    )
+
+
+def get_scheme_residue_mapping(
+    numbering: IntermediateNumbering, scheme_positions: Optional[Sequence[str]] = None
+) -> dict[str, str]:
+    """
+    scheme_positions - labels of scheme positions (1-based numbering indices), by default positions are labeled
+    with their indices
+    """
     result: dict[str, str] = {}
 
     for scheme_id, residues in numbering.items():
+        scheme_position = scheme_positions[scheme_id - 1] if scheme_positions else str(scheme_id)
         for residue, insertion in residues:
-            scheme_id_str = str(scheme_id) if not insertion else f"{scheme_id}.{insertion}"
+            scheme_id_str = scheme_position if not insertion else f"{scheme_position}.{insertion}"
             result[scheme_id_str] = residue
 
     return result
@@ -418,6 +472,10 @@ class SchemeAligner:
         for scheme in Scheme:
             self.scheme_mapping_facades[scheme] = SchemeMappingFacade(scheme, allowed_species, db_dir)
 
+        self.c_scheme_mapping_facades: dict[CScheme, CSchemeMappingFacade] = {
+            c_scheme: CSchemeMappingFacade(c_scheme, db_dir) for c_scheme in CScheme
+        }
+
     def align_to_scheme(
         self, aa_alignments: AlignmentsAA, scheme: Scheme, extend_alignment: bool = True
     ) -> Optional[SchemeAlignment]:
@@ -454,6 +512,24 @@ class SchemeAligner:
         )
 
         return sch_alignment
+
+    def align_c_to_scheme(self, aa_alignments: AlignmentsAA, c_scheme: CScheme) -> Optional[SchemeAlignment]:
+        """
+        Align C region to the C scheme. Returns None if there is no C alignment or the C gene has no scheme mapping.
+        """
+        if not (aa_alignments.v and aa_alignments.j and aa_alignments.c):
+            return None
+
+        c_gene_scheme_alignment_str = self.c_scheme_mapping_facades[c_scheme].get_mapping(
+            aa_alignments.c.species, aa_alignments.c.target_id
+        )
+        if c_gene_scheme_alignment_str is None:
+            return None
+
+        # C is aligned to the query left after V and J alignments
+        c_query_offset = aa_alignments.v.q_end + aa_alignments.j.q_end
+
+        return c_scheme_alignment(aa_alignments.c, c_gene_scheme_alignment_str, c_scheme, c_query_offset)
 
 
 if __name__ == "__main__":

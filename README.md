@@ -69,6 +69,11 @@ Options:
   --scheme [KABAT|CHOTHIA|IMGT|MARTIN]
                                   Which numbering scheme should be used: IMGT,
                                   KABAT, CHOTHIA, MARTIN. Default IMGT
+  --c-scheme [eu|kabat|imgt]      Numbering scheme of the constant region: eu,
+                                  kabat, imgt. Only human IGHG1-4, IGKC and
+                                  IGLC constant regions are numbered, EU
+                                  numbering is not defined for IGLC. Default no
+                                  constant region numbering.
   --species [HOMO_SAPIENS|MUS_MUSCULUS|CUSTOM]
                                   Which species germline sequences should be
                                   used. Default is all species.
@@ -109,6 +114,10 @@ riot_na -f input.fasta -o results.csv
 Align amino acid sequences to chosen germlines instead of searching the database:
 ```
 riot_na -f input.fasta -o results.csv --input-type AA --v-gene "IGHV3-23*01" --j-gene "IGHJ4*02"
+```
+Number variable domains in Kabat and IgG constant regions in EU:
+```
+riot_na -f input.fasta -o results.csv --scheme kabat --c-scheme eu
 ```
 ### API Nucleotides
 
@@ -161,6 +170,38 @@ airr_result: AirrRearrangementEntryAA = riot_aa.run_on_sequence(
 Germline names are matched exactly, against the germlines of `allowed_species` the numbering was
 created with, and unknown names are rejected. If more species have a germline of the same name,
 the human one is used.
+
+### Constant region numbering
+
+Constant regions of human IgG heavy chains (IGHG1-4: CH1, hinge, CH2 and CH3) and of kappa (IGKC) and lambda
+(IGLC1, IGLC2, IGLC3, IGLC6, IGLC7) light chains can be numbered with `c_scheme`, independently of the variable
+domain `scheme`, both for nucleotide and amino acid sequences:
+
+- `CScheme.EU` - EU index (heavy CH1 starts at 118, N297 is the CH2 glycosylation site, kappa CL is 108-214).
+  EU numbering is not defined for lambda chains, so they are not numbered,
+- `CScheme.KABAT` - Kabat numbering of the constant region (heavy CH1 starts at 114, kappa CL is 108-214, lambda CL
+  is 107A-215 with 107A written as `107.1`),
+- `CScheme.IMGT` - IMGT unique numbering for C-DOMAIN, positions are prefixed with the domain: `CH1_1.4`, `H_1`
+  (hinge exon numbering, IGHG3 hinge exons are `H1_` - `H4_`), `CH2_84.4`, `CH3_125`, `CL_1.4` (kappa and lambda).
+
+```python
+from riot_na import create_riot_aa, CScheme, Scheme
+
+riot_aa = create_riot_aa()
+airr_result = riot_aa.run_on_sequence(header="my_sequence", query_sequence=igg1_heavy_chain, scheme=Scheme.KABAT, c_scheme=CScheme.EU)
+airr_result.c_scheme_residue_mapping  # {"118": "A", "119": "S", ..., "297": "N", ..., "445": "P"}
+```
+
+Numbering follows the IMGT correspondence between C numberings
+(https://www.imgt.org/IMGTScientificChart/Numbering/Hu_IGHGnber.html,
+https://www.imgt.org/IMGTScientificChart/Numbering/Hu_IGKCnber.html and
+https://www.imgt.org/IMGTScientificChart/Numbering/Hu_IGLCnber.html, lambda genes other than IGLC1 take IGLC1
+positions). In EU and Kabat, IGHG2 lacks G236
+(EU), and IGHG3 hinge residues without positions are insertions (EU 218.1-218.2 and 228.1-228.45,
+Kabat 241.1-241.45, which are 241A-241SS in Kabat's notation). Query insertions relative to the germline take unused scheme
+positions next to them if there are any, otherwise they are numbered like `297.1`. C germlines in the
+database are membrane-bound forms, so C-terminal G446 and K447 of secreted chains are not numbered. Scheme mappings
+are generated with `notebooks/data_processing/c_scheme_mappings.py`.
 
 ### Caching
 We provide two cached wrappers for `create_riot_nt()` and `crate_riot_aa()` functions - `get_or_create_riot_nt()` | `get_or_create_riot_aa()`. They can be used exactly the same way as base functions:
@@ -378,6 +419,9 @@ Attributes:
 | **sequence_aa_scheme_cigar**    | string                                      | CIGAR string defining sequence_aa to scheme alignment.                                                                                                                                                                                                                                                                                                                                           |
 | **scheme_residue_mapping**      | json string                                 | Scheme numbering of sequence_alignment_aa - positions not present in this sequence are not included.                                                                                                                                                                                                                                                                                             |
 | **positional_scheme_mapping**   | json string                                 | Mapping from absolute residue position in sequence_alignment_aa (0-based) to corresponding scheme position.                                                                                                                                                                                                                                                                                      |
+| **c_numbering_scheme**          | enum ["eu", "kabat", "imgt"]                | Numbering scheme of the constant region. Present only when c_scheme is set and the constant region is numbered (human IGHG1-4, IGKC, IGLC).                                                                                                                                                                                                                                                                   |
+| **c_scheme_residue_mapping**    | json string                                 | Scheme numbering of the constant region - positions not present in this sequence are not included.                                                                                                                                                                                                                                                                                              |
+| **c_positional_scheme_mapping** | json string                                 | Mapping from absolute residue position (0-based, same key space as positional_scheme_mapping) to corresponding constant region scheme position.                                                                                                                                                                                                                                                  |
 | **sequence_start_aa_extended**  | integer                                     | Start position (1-based) of the extend_alignment-adjusted span in sequence_aa. Present only when extend_alignment=True; includes residues prepended by force_n_terminus_matches that are absent from sequence_alignment_aa.                                                                                                                                                                      |
 | **sequence_end_aa_extended**    | integer                                     | End position of the extend_alignment-adjusted span in sequence_aa. Present only when extend_alignment=True; may extend beyond sequence_alignment_aa when force_c_terminus_matches adds residues at the J end.                                                                                                                                                                                    |
 | **sequence_alignment_aa_extended** | string                                   | Slice of sequence_aa from sequence_start_aa_extended to sequence_end_aa_extended. Consistent with scheme_residue_mapping and positional_scheme_mapping key space. Present only when extend_alignment=True.                                                                                                                                                                                       |
@@ -503,6 +547,9 @@ Airr data format was developed for nucleotide sequences. For the amino acid pipe
 | sequence_aa_scheme_cigar    | string                                      | CIGAR string defining sequence_alignment_aa to scheme alignment.                                                                                                                                                                                                                                      |
 | scheme_residue_mapping      | json string                                 | Scheme numbering of sequence_alignment_aa - positions not present in this sequence are not included.                                                                                                                                                                                                  |
 | positional_scheme_mapping   | json string                                 | Mapping from absolute residue position in sequence_alignment_aa (0-based) to corresponding scheme position.                                                                                                                                                                                           |
+| c_numbering_scheme          | enum ["eu", "kabat", "imgt"]                | Numbering scheme of the constant region. Present only when c_scheme is set and the constant region is numbered (human IGHG1-4, IGKC, IGLC).                                                                                                                                                                        |
+| c_scheme_residue_mapping    | json string                                 | Scheme numbering of the constant region - positions not present in this sequence are not included.                                                                                                                                                                                                   |
+| c_positional_scheme_mapping | json string                                 | Mapping from absolute residue position (0-based, same key space as positional_scheme_mapping) to corresponding constant region scheme position.                                                                                                                                                       |
 | exc                         | string                                      | Exception (if any) thrown during ANARCI numbering.                                                                                                                                                                                                                                                    |
 | additional_validation_flags | json string                                 | JSON string containing additional validation flags.                                                                                                                                                                                                                                                   |
 | query_sequence              | string                                      | The query sequence. (Optional: only available with --multiple-domains flag enabled)                                                                                                                                                                                                                   |
