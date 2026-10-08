@@ -129,16 +129,6 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
 
         if c_aln is not None:
             assert self.v_gene_alignment_aa is not None
-            assert self.j_gene_alignment_aa is not None
-            assert self.j_gene_alignment_aa.q_end is not None
-            assert self.j_gene_alignment_aa.q_start is not None
-            assert self.j_gene_alignment_aa.t_start is not None
-            assert self.j_gene_alignment_aa.t_end is not None
-            assert self.j_gene_alignment_aa.target_id is not None
-            assert self.j_gene_alignment_aa.cigar is not None
-            assert self.j_gene_alignment_aa.e_value is not None
-            assert self.j_gene_alignment_aa.seq_identity is not None
-            assert self.j_gene_alignment_aa.alignment_score is not None
             assert self.v_gene_alignment_aa.q_end is not None
             assert self.v_gene_alignment_aa.q_start is not None
             assert self.v_gene_alignment_aa.t_start is not None
@@ -148,9 +138,9 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
             assert self.v_gene_alignment_aa.e_value is not None
             assert self.v_gene_alignment_aa.seq_identity is not None
             assert self.v_gene_alignment_aa.alignment_score is not None
-            # offset c_aln by the end of j_gene_alignment_aa
-
-            c_gene_alignment_aa = offset_alignments(self.j_gene_alignment_aa.q_end, c_aln)
+            # offset c_aln by the end of j_gene_alignment_aa or v_gene_alignment_aa, if J was not found
+            c_offset = self.j_gene_alignment_aa.q_end if self.j_gene_alignment_aa else self.v_gene_alignment_aa.q_end
+            c_gene_alignment_aa = offset_alignments(c_offset, c_aln)
             self.c_gene_alignment_aa = c_gene_alignment_aa
             self.rearrangement.c_call = c_gene_alignment_aa.target_id
 

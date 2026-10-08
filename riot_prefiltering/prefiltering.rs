@@ -8,7 +8,7 @@ use crate::model::{
 use ahash::{AHashMap, RandomState};
 use bio::alphabets::dna;
 use itertools::Itertools;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 const RANDOM_SEED: usize = 42;
 
@@ -161,8 +161,7 @@ impl Prefiltering {
         let forward_segments = self.find_non_overlapping_segments(&query_bytes, false);
         let reverse_segments = self.find_non_overlapping_segments(&rev_comp_query_bytes, true);
 
-        // Combine and select best non-overlapping segments
-        let combined_segments = self.select_best_non_overlapping_segments(forward_segments, reverse_segments);
+        let combined_segments = self.select_strand_segments(forward_segments, reverse_segments);
 
         let rev_comp_query = std::str::from_utf8(&rev_comp_query_bytes)
             .unwrap()
@@ -457,91 +456,77 @@ impl Prefiltering {
         self.filter_segments_by_length(merged_segments)
     }
 
-    /// Combine segments from forward and reverse complement orientations
-    fn select_best_non_overlapping_segments(
+    /// Select segments of the strand with the higher total coverage.
+    /// All domains of a query are on the same strand, so segments of the other strand are spurious.
+    /// Segments of both strands can't be combined either, as their positions refer to different sequences.
+    pub(crate) fn select_strand_segments(
         &self,
         forward_segments: Vec<SegmentMatch>,
         reverse_segments: Vec<SegmentMatch>,
     ) -> Vec<SegmentMatch> {
-        // Combine all segments
-        let mut all_segments = forward_segments;
-        all_segments.extend(reverse_segments);
+        let forward_coverage: Coverage = forward_segments.iter().map(|segment| segment.coverage).sum();
+        let reverse_coverage: Coverage = reverse_segments.iter().map(|segment| segment.coverage).sum();
 
-        // Use simple segment extension to capture wider coverage
-        let merged_segments = self.merge_overlapping_segments(all_segments);
-        self.filter_segments_by_length(merged_segments)
+        if reverse_coverage > forward_coverage {
+            reverse_segments
+        } else {
+            forward_segments
+        }
     }
 
 
-    /// Simple segment extension - merge overlapping segments by extending boundaries
-    fn merge_overlapping_segments(&self, segments: Vec<SegmentMatch>) -> Vec<SegmentMatch> {
-        if segments.is_empty() {
-            return vec![];
-        }
-
-        // Sort segments by segment start position (not query_start)
+    /// Merge gene segments of the same domain into one segment per domain.
+    /// Gene segments are merged in decreasing coverage, so each domain is seeded by its best matching gene.
+    /// A gene segment overlapping a domain adds its genes to the domain, but extends the domain boundaries
+    /// only if its coverage is at least half of the domain coverage. Otherwise a weak, spurious gene segment
+    /// spanning two adjacent domains would merge them into one.
+    pub(crate) fn merge_overlapping_segments(&self, segments: Vec<SegmentMatch>) -> Vec<SegmentMatch> {
         let mut sorted_segments = segments;
-        sorted_segments.sort_by(|a, b| a.segment_start.cmp(&b.segment_start));
+        sorted_segments.sort_by(|a, b| b.coverage.cmp(&a.coverage));
 
-        let mut extended_segments = Vec::new();
-        let mut segments_iter = sorted_segments.into_iter();
-        let mut current_segment = segments_iter.next().unwrap();
+        let mut domain_segments: Vec<SegmentMatch> = Vec::new();
 
-        for next_segment in segments_iter {
-            // Check if segments overlap in the query sequence
-            // Segments overlap if: next_segment.query_start <= current_segment.query_end
-            if next_segment.segment_start <= current_segment.query_end {
-                // Extend current segment to include the next one
-                current_segment = self.extend_segment_boundaries(current_segment, next_segment);
-            } else {
-                // No overlap - keep current and start with next
-                extended_segments.push(current_segment);
-                current_segment = next_segment;
-            }
-        }
-        // Don't forget the last segment
-        extended_segments.push(current_segment);
+        for segment in sorted_segments {
+            let overlapping_domain = domain_segments
+                .iter_mut()
+                .map(|domain| (query_overlap(domain, &segment), domain))
+                .filter(|(overlap, _)| *overlap > 0)
+                .max_by_key(|(overlap, _)| *overlap)
+                .map(|(_, domain)| domain);
 
-        // Filter matching_genes to top n by coverage for each extended segment
-        for segment in &mut extended_segments {
-            // Keep only the top_n genes
-            if segment.matching_genes.len() > self.top_n {
-                segment.matching_genes.sort();
-                segment.matching_genes.truncate(self.top_n);
-                segment.recalculate_bounds_and_coverage();
+            match overlapping_domain {
+                Some(domain) => {
+                    if 2 * segment.coverage >= domain.coverage {
+                        domain.query_start = domain.query_start.min(segment.query_start);
+                        domain.query_end = domain.query_end.max(segment.query_end);
+                        domain.segment_start = domain.segment_start.min(segment.segment_start);
+                        domain.min_target_start = domain.min_target_start.min(segment.min_target_start);
+                        domain.max_target_start = domain.max_target_start.max(segment.max_target_start);
+                    }
+                    domain.matching_genes.extend(segment.matching_genes);
+                }
+                None => domain_segments.push(segment),
             }
         }
 
-        extended_segments
-    }
+        domain_segments.sort_by_key(|segment| segment.segment_start);
 
-    /// Extend segment range to include another segment's coverage
-    fn extend_segment_boundaries(&self, seg1: SegmentMatch, seg2: SegmentMatch) -> SegmentMatch {
-        // Extend the query boundaries to cover both segments
-        let query_start = seg1.query_start.min(seg2.query_start);
-        let query_end = seg1.query_end.max(seg2.query_end);
-        let coverage = seg1.coverage.max(seg2.coverage);
-        let min_target_start = seg1.min_target_start.min(seg2.min_target_start);
-        let max_target_start = seg1.max_target_start.max(seg2.max_target_start);
-        let segment_start = seg1.segment_start.min(seg2.segment_start);
-
-        // Combine all genes from both segments
-        let mut all_genes = seg1.matching_genes;
-        all_genes.extend(seg2.matching_genes);
-        all_genes.dedup();
-        all_genes.sort();
-
-        SegmentMatch {
-            query_start: query_start,
-            query_end: query_end,
-            coverage: coverage,
-            match_count: all_genes.len(),
-            matching_genes: all_genes,
-            min_target_start: min_target_start,
-            max_target_start: max_target_start,
-            segment_start: segment_start,
+        for segment in &mut domain_segments {
+            // Keep the best match of each gene and only the top_n genes
+            segment.matching_genes.sort();
+            let mut seen_genes = HashSet::new();
+            segment.matching_genes.retain(|gene| seen_genes.insert(gene.gene_id.clone()));
+            segment.matching_genes.truncate(self.top_n);
+            segment.recalculate_bounds_and_coverage();
         }
+
+        domain_segments
     }
+}
+
+/// Length of the overlap of query ranges of two segments
+fn query_overlap(a: &SegmentMatch, b: &SegmentMatch) -> usize {
+    a.query_end.min(b.query_end).saturating_sub(a.query_start.max(b.query_start))
 }
 
 
