@@ -517,7 +517,7 @@ class SchemeAligner:
         """
         Align C region to the C scheme. Returns None if there is no C alignment or the C gene has no scheme mapping.
         """
-        if not (aa_alignments.v and aa_alignments.j and aa_alignments.c):
+        if not (aa_alignments.v and aa_alignments.c):
             return None
 
         c_gene_scheme_alignment_str = self.c_scheme_mapping_facades[c_scheme].get_mapping(
@@ -526,8 +526,8 @@ class SchemeAligner:
         if c_gene_scheme_alignment_str is None:
             return None
 
-        # C is aligned to the query left after V and J alignments
-        c_query_offset = aa_alignments.v.q_end + aa_alignments.j.q_end
+        # C is aligned to the query left after V and J alignments (or V alignment, if J was not found)
+        c_query_offset = aa_alignments.v.q_end + (aa_alignments.j.q_end if aa_alignments.j else 0)
 
         return c_scheme_alignment(aa_alignments.c, c_gene_scheme_alignment_str, c_scheme, c_query_offset)
 

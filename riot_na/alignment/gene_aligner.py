@@ -134,8 +134,8 @@ AA_ALIGNER_PARAMS = {
 }
 
 
-class GeneAlignerAA:
-    def __init__(
+class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         genes: Sequence[GeneAA],
         kmer_size: int,
@@ -145,6 +145,8 @@ class GeneAlignerAA:
         e_value_threshold: Optional[float] = None,
         alignment_length_threshold: Optional[int] = None,
         max_cdr3_length: Optional[int] = None,
+        min_seq_identity: Optional[float] = None,
+        min_internal_alignment_length: Optional[int] = None,
     ) -> None:
         # Initialize the base prefiltering directly with species-aware keys
         self.prefiltering = MultiSpeciesPrefiltering(genes, kmer_size, distance_threshold, top_n, modulo_n)
@@ -156,6 +158,8 @@ class GeneAlignerAA:
         self.e_value_threshold = e_value_threshold
         self.alignment_length_threshold = alignment_length_threshold
         self.max_cdr3_length = max_cdr3_length
+        self.min_seq_identity = min_seq_identity
+        self.min_internal_alignment_length = min_internal_alignment_length
 
     def get_gene(self, species: Organism, gene_id: str) -> GeneAA:
         """Look up a germline by its exact name, e.g. IGHV3-7*01."""
@@ -196,6 +200,14 @@ class GeneAlignerAA:
                     continue
             if self.max_cdr3_length is not None:
                 if alignment.q_start > self.max_cdr3_length:
+                    continue
+            if self.min_seq_identity is not None:
+                assert alignment.seq_identity is not None
+                if alignment.seq_identity < self.min_seq_identity:
+                    continue
+            if self.min_internal_alignment_length is not None:
+                # alignments shorter than that have to start at the beginning of the germline
+                if alignment.t_start > 0 and alignment_length < self.min_internal_alignment_length:
                     continue
 
             result.append(
@@ -353,6 +365,10 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 "modulo_n": int(os.environ.get("MODULO_N_C_AA", 2)),
                 "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_C_AA", 4)),
                 "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_C_AA", 0.05)),
+                # filter out matches of non antibody regions following V region, e.g. proline rich CAR hinges
+                # to IgG and IgA hinges. Short C regions (e.g. CH1 fragments in Fabs) start at the C germline start.
+                "min_seq_identity": float(os.environ.get("MIN_SEQ_IDENTITY_C_AA", 0.4)),
+                "min_internal_alignment_length": int(os.environ.get("MIN_INTERNAL_ALIGNMENT_LENGTH_C_AA", 30)),
             }
         case _:
             raise ValueError("AA aligner not supported for gene type")

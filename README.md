@@ -291,6 +291,8 @@ For a pure Python solution (without the use of `cachetools` package) you can che
 ## Multidomains support
 RIOT's multidomains support allows detection and numbering of multiple immunoglobulin domains within a single protein sequence, such as therapeutic antibodies containing both heavy chain (VH) and light chain (VL) domains. When enabled with the --multiple-domains flag (or return_all_domains=True in the API), RIOT returns separate numbering results for each detected domain rather than just the best single match. The system automatically identifies domain boundaries, truncates sequences at the beginning of each V gene segment, and provides additional metadata including the original query sequence and segment start/end positions for each domain. This is particularly useful for analyzing therapeutic constructs like bispecific antibodies, CAR-T constructs, or other multi-domain fusion proteins where each immunoglobulin domain needs independent numbering and analysis.
 
+Each domain is reported with the constant region following it (up to the next domain). Constant regions are searched among C genes of all loci, so they are also assigned (and numbered with `c_scheme`) when they follow a variable domain of another locus, e.g. in VL-CH1 and VH-CL chains of CrossMabs or in scFv-Fc fusions, and when the J gene is not found. This applies to single domain mode as well. In the API, `return_all_domains=True` has to be passed both to `create_riot_aa` / `create_riot_nt` and to `run_on_sequence`.
+
 ## Germline database
 RIOT uses OGRDB as a primary source of germline alleles. Database version as of 22.01.2024 was used.
 C genes are imported from igblast FTP site fhttps://ftp.ncbi.nih.gov/blast/executables/igblast/release/database/ncbi_human_c_genes.tar

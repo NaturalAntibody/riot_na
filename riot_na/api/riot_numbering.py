@@ -14,6 +14,10 @@ from riot_na.alignment.aa_gene_alignments import (
     create_vjc_alignment_translator_aa,
 )
 from riot_na.alignment.nt_gene_alignments import VDJCAlignerNT, create_vdjc_aligner_nt
+from riot_na.alignment.segment_gene_aligner import (
+    SegmentGeneAligner,
+    SegmentGeneAlignerAA,
+)
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
     AirrRearrangementEntryAA,
@@ -37,6 +41,11 @@ from riot_na.schemes.scheme_alignment import (
     get_scheme_residue_mapping,
     produce_numbering,
     sort_imgt_numbering,
+)
+
+MULTIPLE_DOMAINS_NOT_ENABLED = (
+    "return_all_domains requires numbering created with return_all_domains=True, "
+    "e.g. create_riot_aa(return_all_domains=True)"
 )
 
 
@@ -138,7 +147,8 @@ class RiotNumberingNT:
         - header : Fasta sequence header, usually this is simply sequence ID.
         - query_sequence : Nucleotide sequence to number.
         - scheme : Which numbering scheme to use (default IMGT).
-        - return_all_domains: If True, return all domains of multiple domain proteins.
+        - return_all_domains: If True, return all domains of multiple domain proteins. Requires numbering created
+        with return_all_domains=True, which returns the best scoring domain only if return_all_domains is False.
         - extend_alignment: Extend alignments to cover full sequence.
         - c_scheme : Numbering scheme of the constant region (eu, kabat or imgt). Only human IGHG1-4, IGKC and IGLC
         constant regions are numbered, EU numbering is not defined for IGLC. By default constant region is not numbered.
@@ -147,6 +157,8 @@ class RiotNumberingNT:
         -----------
         AirrRearrangementEntryNT object with alignment results (Extended AIRR format)
         """
+        if return_all_domains and not isinstance(self.vdjc_aligner.v_aligner, SegmentGeneAligner):
+            raise ValueError(MULTIPLE_DOMAINS_NOT_ENABLED)
         query_sequence = query_sequence.upper().replace("U", "T")
         sequence = ""
         segment_start = -1
@@ -367,7 +379,8 @@ class RiotNumberingAA:
         to the germline sequence at 5' or / and 3' ends the result may not show that part of the gene.
         This option appends missing amino acids, so the result covers full gene sequence. Beware that
         those query fragments are not truly a part of alignemnt and are shown only for convenience!
-        - return_all_domains: If True, return all domains of multiple domain proteins.
+        - return_all_domains: If True, return all domains of multiple domain proteins. Requires numbering created
+        with return_all_domains=True, which returns the best scoring domain only if return_all_domains is False.
         - v_gene, j_gene : Align to these exact germlines (e.g. IGHV3-7*01, IGHJ4*02) instead of
         searching the germline database. Both have to be given together. Gene databases are not
         prefiltered then, but alignment thresholds still apply.
@@ -381,6 +394,8 @@ class RiotNumberingAA:
         AirrRearrangementEntryAA object with alignment results (Extended AIRR format)
         """
         assert (v_gene is None) == (j_gene is None), "Both v_gene and j_gene have to be specified"
+        if return_all_domains and not isinstance(self.vjc_aligner_aa.v_aligner, SegmentGeneAlignerAA):
+            raise ValueError(MULTIPLE_DOMAINS_NOT_ENABLED)
         query_sequence = query_sequence.upper()
         sequence_aa = query_sequence
         sch_alignment = None

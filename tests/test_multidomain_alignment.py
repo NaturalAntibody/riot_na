@@ -59,15 +59,15 @@ class TestMultiDomainAlignments:
         assert len(results) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
         for i, domain in enumerate(results):
             assert (
-                domain.locus == expected_genes[f"domain_{i+1}"]["locus"]
-            ), f"Expected locus {expected_genes[f'domain_{i+1}']['locus']}, got {domain.locus}"
+                domain.locus == expected_genes[f"domain_{i + 1}"]["locus"]
+            ), f"Expected locus {expected_genes[f'domain_{i + 1}']['locus']}, got {domain.locus}"
 
             assert (
-                domain.v_call == expected_genes[f"domain_{i+1}"]["v_call"]
-            ), f"Expected V call {expected_genes[f'domain_{i+1}']['v_call']}, got {domain.v_call}"
+                domain.v_call == expected_genes[f"domain_{i + 1}"]["v_call"]
+            ), f"Expected V call {expected_genes[f'domain_{i + 1}']['v_call']}, got {domain.v_call}"
             assert (
-                domain.j_call == expected_genes[f"domain_{i+1}"]["j_call"]
-            ), f"Expected J call {expected_genes[f'domain_{i+1}']['j_call']}, got {domain.j_call}"
+                domain.j_call == expected_genes[f"domain_{i + 1}"]["j_call"]
+            ), f"Expected J call {expected_genes[f'domain_{i + 1}']['j_call']}, got {domain.j_call}"
 
     def test_scfv_anti_cd19_amino_acid(self, riot_aa: RiotNumberingAA):
         """Test scFv construct (anti-CD19) - VH-linker-VL format (amino acid)."""
@@ -106,17 +106,17 @@ class TestMultiDomainAlignments:
 
         for i, domain in enumerate(results):
             assert (
-                domain.locus == expected_genes[f"domain_{i+1}"]["locus"]
-            ), f"Expected locus {expected_genes[f'domain_{i+1}']['locus']}, got {domain.locus}"
+                domain.locus == expected_genes[f"domain_{i + 1}"]["locus"]
+            ), f"Expected locus {expected_genes[f'domain_{i + 1}']['locus']}, got {domain.locus}"
             assert (
-                domain.v_call == expected_genes[f"domain_{i+1}"]["v_call"]
-            ), f"Expected V call {expected_genes[f'domain_{i+1}']['v_call']}, got {domain.v_call}"
+                domain.v_call == expected_genes[f"domain_{i + 1}"]["v_call"]
+            ), f"Expected V call {expected_genes[f'domain_{i + 1}']['v_call']}, got {domain.v_call}"
             assert (
-                domain.j_call == expected_genes[f"domain_{i+1}"]["j_call"]
-            ), f"Expected J call {expected_genes[f'domain_{i+1}']['j_call']}, got {domain.j_call}"
+                domain.j_call == expected_genes[f"domain_{i + 1}"]["j_call"]
+            ), f"Expected J call {expected_genes[f'domain_{i + 1}']['j_call']}, got {domain.j_call}"
             assert (
-                domain.c_call == expected_genes[f"domain_{i+1}"]["c_call"]
-            ), f"Expected C call {expected_genes[f'domain_{i+1}']['c_call']}, got {domain.c_call}"
+                domain.c_call == expected_genes[f"domain_{i + 1}"]["c_call"]
+            ), f"Expected C call {expected_genes[f'domain_{i + 1}']['c_call']}, got {domain.c_call}"
 
     def test_scfv_anti_her2_nucleotide(self, riot_nt: RiotNumberingNT):
         """Test scFv construct (anti-HER2) - nucleotide sequence."""
@@ -156,20 +156,20 @@ class TestMultiDomainAlignments:
 
             for i, domain in enumerate(result):
                 assert (
-                    domain.locus == expected_genes[f"domain_{i+1}"]["locus"]
-                ), f"Expected locus {expected_genes[f'domain_{i+1}']['locus']}, got {domain.locus}"
+                    domain.locus == expected_genes[f"domain_{i + 1}"]["locus"]
+                ), f"Expected locus {expected_genes[f'domain_{i + 1}']['locus']}, got {domain.locus}"
                 assert (
-                    domain.v_call == expected_genes[f"domain_{i+1}"]["v_call"]
-                ), f"Expected V call {expected_genes[f'domain_{i+1}']['v_call']}, got {domain.v_call}"
+                    domain.v_call == expected_genes[f"domain_{i + 1}"]["v_call"]
+                ), f"Expected V call {expected_genes[f'domain_{i + 1}']['v_call']}, got {domain.v_call}"
                 assert (
-                    domain.d_call == expected_genes[f"domain_{i+1}"]["d_call"]
-                ), f"Expected D call {expected_genes[f'domain_{i+1}']['d_call']}, got {domain.d_call}"
+                    domain.d_call == expected_genes[f"domain_{i + 1}"]["d_call"]
+                ), f"Expected D call {expected_genes[f'domain_{i + 1}']['d_call']}, got {domain.d_call}"
                 assert (
-                    domain.j_call == expected_genes[f"domain_{i+1}"]["j_call"]
-                ), f"Expected J call {expected_genes[f'domain_{i+1}']['j_call']}, got {domain.j_call}"
+                    domain.j_call == expected_genes[f"domain_{i + 1}"]["j_call"]
+                ), f"Expected J call {expected_genes[f'domain_{i + 1}']['j_call']}, got {domain.j_call}"
                 assert (
-                    domain.c_call == expected_genes[f"domain_{i+1}"]["c_call"]
-                ), f"Expected C call {expected_genes[f'domain_{i+1}']['c_call']}, got {domain.c_call}"
+                    domain.c_call == expected_genes[f"domain_{i + 1}"]["c_call"]
+                ), f"Expected C call {expected_genes[f'domain_{i + 1}']['c_call']}, got {domain.c_call}"
 
     def test_simple_scfv_with_constant_region(self, riot_aa: RiotNumberingAA):
         """Test a simpler scFv with part of constant region for better recognition."""
@@ -208,17 +208,17 @@ class TestMultiDomainAlignments:
         assert len(results) == 2, "Should detect 2 domains"
         for i, domain in enumerate(results):
             assert (
-                domain.locus == expected_genes[f"domain_{i+1}"]["locus"]
-            ), f"Expected locus {expected_genes[f'domain_{i+1}']['locus']}, got {domain.locus}"
+                domain.locus == expected_genes[f"domain_{i + 1}"]["locus"]
+            ), f"Expected locus {expected_genes[f'domain_{i + 1}']['locus']}, got {domain.locus}"
             assert (
-                domain.v_call == expected_genes[f"domain_{i+1}"]["v_call"]
-            ), f"Expected V call {expected_genes[f'domain_{i+1}']['v_call']}, got {domain.v_call}"
+                domain.v_call == expected_genes[f"domain_{i + 1}"]["v_call"]
+            ), f"Expected V call {expected_genes[f'domain_{i + 1}']['v_call']}, got {domain.v_call}"
             assert (
-                domain.j_call == expected_genes[f"domain_{i+1}"]["j_call"]
-            ), f"Expected J call {expected_genes[f'domain_{i+1}']['j_call']}, got {domain.j_call}"
+                domain.j_call == expected_genes[f"domain_{i + 1}"]["j_call"]
+            ), f"Expected J call {expected_genes[f'domain_{i + 1}']['j_call']}, got {domain.j_call}"
             assert (
-                domain.c_call == expected_genes[f"domain_{i+1}"]["c_call"]
-            ), f"Expected C call {expected_genes[f'domain_{i+1}']['c_call']}, got {domain.c_call}"
+                domain.c_call == expected_genes[f"domain_{i + 1}"]["c_call"]
+            ), f"Expected C call {expected_genes[f'domain_{i + 1}']['c_call']}, got {domain.c_call}"
 
     def test_car_t_construct_with_multiple_domains(self, riot_aa: RiotNumberingAA):
         """Test CAR-T receptor construct with multiple functional domains."""
@@ -261,17 +261,17 @@ class TestMultiDomainAlignments:
         assert len(result) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
         for i, domain in enumerate(result):
             assert (
-                domain.locus == expected_genes[f"domain_{i+1}"]["locus"]
-            ), f"Expected locus {expected_genes[f'domain_{i+1}']['locus']}, got {domain.locus}"
+                domain.locus == expected_genes[f"domain_{i + 1}"]["locus"]
+            ), f"Expected locus {expected_genes[f'domain_{i + 1}']['locus']}, got {domain.locus}"
             assert (
-                domain.v_call == expected_genes[f"domain_{i+1}"]["v_call"]
-            ), f"Expected V call {expected_genes[f'domain_{i+1}']['v_call']}, got {domain.v_call}"
+                domain.v_call == expected_genes[f"domain_{i + 1}"]["v_call"]
+            ), f"Expected V call {expected_genes[f'domain_{i + 1}']['v_call']}, got {domain.v_call}"
             assert (
-                domain.j_call == expected_genes[f"domain_{i+1}"]["j_call"]
-            ), f"Expected J call {expected_genes[f'domain_{i+1}']['j_call']}, got {domain.j_call}"
+                domain.j_call == expected_genes[f"domain_{i + 1}"]["j_call"]
+            ), f"Expected J call {expected_genes[f'domain_{i + 1}']['j_call']}, got {domain.j_call}"
             assert (
-                domain.c_call == expected_genes[f"domain_{i+1}"]["c_call"]
-            ), f"Expected C call {expected_genes[f'domain_{i+1}']['c_call']}, got {domain.c_call}"
+                domain.c_call == expected_genes[f"domain_{i + 1}"]["c_call"]
+            ), f"Expected C call {expected_genes[f'domain_{i + 1}']['c_call']}, got {domain.c_call}"
 
     def test_diabody_construct(self, riot_aa: RiotNumberingAA):
         """Test diabody construct (VH-VL with short linker for dimerization)."""
@@ -308,17 +308,17 @@ class TestMultiDomainAlignments:
         assert len(result) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
         for i, domain in enumerate(result):
             assert (
-                domain.locus == expected_genes[f"domain_{i+1}"]["locus"]
-            ), f"Expected locus {expected_genes[f'domain_{i+1}']['locus']}, got {domain.locus}"
+                domain.locus == expected_genes[f"domain_{i + 1}"]["locus"]
+            ), f"Expected locus {expected_genes[f'domain_{i + 1}']['locus']}, got {domain.locus}"
             assert (
-                domain.v_call == expected_genes[f"domain_{i+1}"]["v_call"]
-            ), f"Expected V call {expected_genes[f'domain_{i+1}']['v_call']}, got {domain.v_call}"
+                domain.v_call == expected_genes[f"domain_{i + 1}"]["v_call"]
+            ), f"Expected V call {expected_genes[f'domain_{i + 1}']['v_call']}, got {domain.v_call}"
             assert (
-                domain.j_call == expected_genes[f"domain_{i+1}"]["j_call"]
-            ), f"Expected J call {expected_genes[f'domain_{i+1}']['j_call']}, got {domain.j_call}"
+                domain.j_call == expected_genes[f"domain_{i + 1}"]["j_call"]
+            ), f"Expected J call {expected_genes[f'domain_{i + 1}']['j_call']}, got {domain.j_call}"
             assert (
-                domain.c_call == expected_genes[f"domain_{i+1}"]["c_call"]
-            ), f"Expected C call {expected_genes[f'domain_{i+1}']['c_call']}, got {domain.c_call}"
+                domain.c_call == expected_genes[f"domain_{i + 1}"]["c_call"]
+            ), f"Expected C call {expected_genes[f'domain_{i + 1}']['c_call']}, got {domain.c_call}"
 
     def test_trispecific_antibody_construct(self, riot_aa: RiotNumberingAA):
         """Test trispecific antibody construct with three different binding domains."""
@@ -389,17 +389,17 @@ class TestMultiDomainAlignments:
         assert len(result) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
         for i, domain in enumerate(result):
             assert (
-                domain.locus == expected_genes[f"domain_{i+1}"]["locus"]
-            ), f"Expected locus for domain {i+1} {expected_genes[f'domain_{i+1}']['locus']}, got {domain.locus}"
+                domain.locus == expected_genes[f"domain_{i + 1}"]["locus"]
+            ), f"Expected locus for domain {i + 1} {expected_genes[f'domain_{i + 1}']['locus']}, got {domain.locus}"
             assert (
-                domain.v_call == expected_genes[f"domain_{i+1}"]["v_call"]
-            ), f"Expected V call for domain {i+1} {expected_genes[f'domain_{i+1}']['v_call']}, got {domain.v_call}"
+                domain.v_call == expected_genes[f"domain_{i + 1}"]["v_call"]
+            ), f"Expected V call for domain {i + 1} {expected_genes[f'domain_{i + 1}']['v_call']}, got {domain.v_call}"
             assert (
-                domain.j_call == expected_genes[f"domain_{i+1}"]["j_call"]
-            ), f"Expected J call for domain {i+1} {expected_genes[f'domain_{i+1}']['j_call']}, got {domain.j_call}"
+                domain.j_call == expected_genes[f"domain_{i + 1}"]["j_call"]
+            ), f"Expected J call for domain {i + 1} {expected_genes[f'domain_{i + 1}']['j_call']}, got {domain.j_call}"
             assert (
-                domain.c_call == expected_genes[f"domain_{i+1}"]["c_call"]
-            ), f"Expected C call for domain {i+1} {expected_genes[f'domain_{i+1}']['c_call']}, got {domain.c_call}"
+                domain.c_call == expected_genes[f"domain_{i + 1}"]["c_call"]
+            ), f"Expected C call for domain {i + 1} {expected_genes[f'domain_{i + 1}']['c_call']}, got {domain.c_call}"
 
     def test_trastuzumab_therapeutic_antibody(self, riot_aa: RiotNumberingAA):
         """Test a therapeutic antibody sequence (based on trastuzumab)."""
@@ -429,17 +429,17 @@ class TestMultiDomainAlignments:
         assert len(result) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
         for i, domain in enumerate(result):
             assert (
-                domain.locus == expected_genes[f"domain_{i+1}"]["locus"]
-            ), f"Expected locus for domain {i+1} {expected_genes[f'domain_{i+1}']['locus']}, got {domain.locus}"
+                domain.locus == expected_genes[f"domain_{i + 1}"]["locus"]
+            ), f"Expected locus for domain {i + 1} {expected_genes[f'domain_{i + 1}']['locus']}, got {domain.locus}"
             assert (
-                domain.v_call == expected_genes[f"domain_{i+1}"]["v_call"]
-            ), f"Expected V call for domain {i+1} {expected_genes[f'domain_{i+1}']['v_call']}, got {domain.v_call}"
+                domain.v_call == expected_genes[f"domain_{i + 1}"]["v_call"]
+            ), f"Expected V call for domain {i + 1} {expected_genes[f'domain_{i + 1}']['v_call']}, got {domain.v_call}"
             assert (
-                domain.j_call == expected_genes[f"domain_{i+1}"]["j_call"]
-            ), f"Expected J call for domain {i+1} {expected_genes[f'domain_{i+1}']['j_call']}, got {domain.j_call}"
+                domain.j_call == expected_genes[f"domain_{i + 1}"]["j_call"]
+            ), f"Expected J call for domain {i + 1} {expected_genes[f'domain_{i + 1}']['j_call']}, got {domain.j_call}"
             assert (
-                domain.c_call == expected_genes[f"domain_{i+1}"]["c_call"]
-            ), f"Expected C call for domain {i+1} {expected_genes[f'domain_{i+1}']['c_call']}, got {domain.c_call}"
+                domain.c_call == expected_genes[f"domain_{i + 1}"]["c_call"]
+            ), f"Expected C call for domain {i + 1} {expected_genes[f'domain_{i + 1}']['c_call']}, got {domain.c_call}"
 
     def test_acapatamab_therapeutic_antibody(self, riot_aa: RiotNumberingAA):
         """Test a therapeutic antibody sequence (based on acapatamab)."""
@@ -468,7 +468,8 @@ class TestMultiDomainAlignments:
             "domain_4": {
                 "v_call": "IGLV7-43*01",
                 "j_call": "IGLJ3*02",
-                "c_call": "IGLC6",
+                # scFv VL is followed by the IgG1 hinge and Fc
+                "c_call": "IGHG1",
                 "locus": Locus.IGL.value,
             },
         }
@@ -480,7 +481,7 @@ class TestMultiDomainAlignments:
         assert isinstance(result, list), "Should return list when return_all_domains=True"
         assert len(result) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
         for i, domain in enumerate(result):
-            domain_key = f"domain_{i+1}"
+            domain_key = f"domain_{i + 1}"
             expected = expected_genes[domain_key]
             assert (
                 domain.locus == expected["locus"]
@@ -494,3 +495,10 @@ class TestMultiDomainAlignments:
             assert (
                 domain.c_call == expected["c_call"]
             ), f"Expected C call for {domain_key} {expected['c_call']}, got {domain.c_call}"
+
+
+def test_return_all_domains_requires_multiple_domains_numbering():
+    with pytest.raises(ValueError, match="return_all_domains"):
+        get_or_create_riot_aa().run_on_sequence("", "EVQLVESGGGLVQPGGSLRLSCAAS", return_all_domains=True)
+    with pytest.raises(ValueError, match="return_all_domains"):
+        get_or_create_riot_nt().run_on_sequence("", "GAGGTGCAGCTGGTGGAGTCTGGG", return_all_domains=True)
