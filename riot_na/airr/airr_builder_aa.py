@@ -11,6 +11,7 @@ from riot_na.data.model import (
     AirrRearrangementEntryAA,
     AlignmentEntryAA,
     AlignmentString,
+    CScheme,
     RegionOffsetsAA,
     Scheme,
     SchemeAlignment,
@@ -228,6 +229,14 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
 
     def with_positional_scheme_mapping(self, mapping: dict[int, str]):
         self.rearrangement.positional_scheme_mapping = mapping
+        return self
+
+    def with_c_scheme_numbering(
+        self, c_scheme: CScheme, residue_mapping: dict[str, str], positional_mapping: dict[int, str]
+    ):
+        self.rearrangement.c_numbering_scheme = c_scheme.value
+        self.rearrangement.c_scheme_residue_mapping = residue_mapping
+        self.rearrangement.c_positional_scheme_mapping = positional_mapping
         return self
 
     def with_scheme_alignment_exc(self, exc: str):

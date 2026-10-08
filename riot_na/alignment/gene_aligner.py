@@ -23,6 +23,7 @@ from riot_na.data.model import (
     GermlineGene,
     Locus,
     Organism,
+    SpeciesGeneMatch,
     SpeciesPrefilteringResult,
 )
 
@@ -149,11 +150,18 @@ class GeneAlignerAA:
         self.prefiltering = MultiSpeciesPrefiltering(genes, kmer_size, distance_threshold, top_n, modulo_n)
 
         self.gene_lookup = create_gene_lookup(genes)
+        self.gene_by_species_name = {(gene.species, gene.name): gene for gene in genes}
         self.db_length = sum(len(gene.sequence) for gene in genes)
 
         self.e_value_threshold = e_value_threshold
         self.alignment_length_threshold = alignment_length_threshold
         self.max_cdr3_length = max_cdr3_length
+
+    def get_gene(self, species: Organism, gene_id: str) -> GeneAA:
+        """Look up a germline by its exact name, e.g. IGHV3-7*01."""
+        gene = self.gene_by_species_name.get((species, gene_id))
+        assert gene is not None, f"Gene {gene_id} not found in {species.value} germline database"
+        return gene
 
     def _prefilter(self, query: str) -> SpeciesPrefilteringResult:
         """Prefilter genes and return species-aware gene matches."""
@@ -214,6 +222,32 @@ class GeneAlignerAA:
         prefiltering_result = self._prefilter(query)
         alignments = self._align_sequences(query, prefiltering_result)
         return [AlignmentSegment(alignments)]
+
+    def align_to_genes(self, query: str, species: Organism, gene_ids: Sequence[str]) -> Sequence[AlignmentEntryAA]:
+        """
+        Align query to explicitly selected germlines, skipping prefiltering.
+
+        Alignment thresholds are applied just like in the regular, prefiltered path,
+        so a poorly matching germline may yield no alignment at all.
+        """
+        gene_matches = []
+
+        for gene_id in gene_ids:
+            gene = self.get_gene(species, gene_id)
+            gene_matches.append(
+                SpeciesGeneMatch(
+                    species_gene_id=f"{gene.species.value}|{gene.locus.value}|{gene.name}",
+                    gene_id=gene.name,
+                    rev_comp=False,
+                    coverage=0,
+                    species=gene.species,
+                    locus=gene.locus,
+                )
+            )
+
+        prefiltering_result = SpeciesPrefilteringResult(query=query, rev_comp_query="", top_matches=gene_matches)
+
+        return self._align_sequences(query, prefiltering_result)
 
 
 def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> dict:
