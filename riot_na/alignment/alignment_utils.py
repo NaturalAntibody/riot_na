@@ -62,7 +62,9 @@ def offset_alignments(offset: int, aln: AlignmentEntry) -> AlignmentEntry:
     return replace(aln, q_start=aln.q_start + offset, q_end=aln.q_end + offset)
 
 
-def select_c_alignment(c_alignments: Sequence[Optional[AlignmentEntry]], v_locus: Locus) -> Optional[AlignmentEntry]:
+def select_c_alignment(
+    c_alignments: Sequence[Optional[AlignmentEntry]], v_locus: Optional[Locus]
+) -> Optional[AlignmentEntry]:
     """
     Select the best of C alignments to C genes of different loci. C region can follow V region of another locus
     in engineered antibodies (e.g. VL-CH1 in CrossMabs), so C genes of all loci are aligned.

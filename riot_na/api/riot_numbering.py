@@ -1,7 +1,7 @@
 # pylint: disable=too-many-branches, too-many-statements
 
 from pathlib import Path
-from typing import Literal, Optional, overload
+from typing import Literal, Optional, cast, overload
 
 from cachetools import cached
 
@@ -13,20 +13,35 @@ from riot_na.alignment.aa_gene_alignments import (
     create_vjc_aligner_aa,
     create_vjc_alignment_translator_aa,
 )
+from riot_na.alignment.constant_region_aligner import ConstantRegionAligner
+from riot_na.alignment.gene_aligner import GeneAlignerAA
 from riot_na.alignment.nt_gene_alignments import VDJCAlignerNT, create_vdjc_aligner_nt
 from riot_na.alignment.segment_gene_aligner import (
     SegmentGeneAligner,
     SegmentGeneAlignerAA,
+)
+from riot_na.api.chain_annotation import (
+    VDomainSpan,
+    align_constant_domains_aa,
+    align_constant_domains_nt,
+    annotate_constant_domains,
+    chain_layout,
+    reverse_complement,
 )
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
     AirrRearrangementEntryAA,
     AirrRearrangementEntryNT,
     AlignmentsAA,
+    AlignmentsNT,
+    ChainAnnotation,
     ChainType,
     CScheme,
+    Locus,
     Organism,
     Scheme,
+    SegmentedAirrRearrangementEntryAA,
+    SegmentedAirrRearrangementEntryNT,
 )
 from riot_na.schemes.region_offsets import (
     infer_aa_region_offsets,
@@ -38,7 +53,6 @@ from riot_na.schemes.scheme_alignment import (
     fix_imgt_cdrs_numbering,
     get_positional_scheme_mapping,
     get_scheme_residue_mapping,
-    produce_c_numbering,
     produce_numbering,
     sort_imgt_numbering,
 )
@@ -47,6 +61,43 @@ MULTIPLE_DOMAINS_NOT_ENABLED = (
     "return_all_domains requires numbering created with return_all_domains=True, "
     "e.g. create_riot_aa(return_all_domains=True)"
 )
+CHAIN_ANNOTATION_NOT_ENABLED = (
+    "annotate_chain requires numbering created with return_all_domains=True, "
+    "e.g. create_riot_aa(return_all_domains=True)"
+)
+
+
+def create_constant_region_aligner(
+    c_aligners: Optional[dict[Organism, dict[Locus, GeneAlignerAA]]], scheme_aligner: SchemeAligner
+) -> Optional[ConstantRegionAligner]:
+    if not c_aligners:
+        return None
+    return ConstantRegionAligner(c_aligners, scheme_aligner.c_scheme_mapping_facades[CScheme.IMGT])
+
+
+def v_domain_span_aa(alignments: AlignmentsAA) -> VDomainSpan:
+    assert alignments.v
+    segment_start = alignments.segment_start or 0
+    # J is aligned to the query left after V alignment
+    v_domain_end = alignments.v.q_end + (alignments.j.q_end if alignments.j else 0)
+    return VDomainSpan(
+        segment_start + alignments.v.q_start,
+        segment_start + v_domain_end,
+        alignments.v.species,
+        alignments.v.locus,
+    )
+
+
+def v_domain_span_nt(alignments: AlignmentsNT) -> VDomainSpan:
+    assert alignments.v
+    segment_start = alignments.segment_start or 0
+    v_domain_end = alignments.j.q_end if alignments.j else alignments.v.q_end
+    return VDomainSpan(
+        segment_start + alignments.v.q_start,
+        segment_start + v_domain_end,
+        alignments.v.species,
+        alignments.v.locus,
+    )
 
 
 def number_c_region(
@@ -54,21 +105,14 @@ def number_c_region(
 ) -> Optional[tuple[dict[str, str], dict[int, str]]]:
     """
     Number C region of the query. Returns scheme residue mapping and positional scheme mapping
-    or None if the C gene has no scheme mapping.
+    or None if there is no C alignment or the C gene has no scheme mapping.
     """
-    c_sch_alignment = scheme_aligner.align_c_to_scheme(aa_alignments, c_scheme)
-    if not c_sch_alignment:
+    if not (aa_alignments.v and aa_alignments.c):
         return None
 
-    assert aa_alignments.c
-    chain_type = ChainType.from_locus(aa_alignments.c.locus)
-
-    c_scheme_residue_mapping = produce_c_numbering(query, c_sch_alignment, c_scheme, chain_type)
-    if not c_scheme_residue_mapping:
-        return None
-
-    c_positional_scheme_mapping = get_positional_scheme_mapping(c_scheme_residue_mapping, c_sch_alignment.q_start)
-    return c_scheme_residue_mapping, c_positional_scheme_mapping
+    # C is aligned to the query left after V and J alignments (or V alignment, if J was not found)
+    c_query_offset = aa_alignments.v.q_end + (aa_alignments.j.q_end if aa_alignments.j else 0)
+    return scheme_aligner.number_c_alignment(query, aa_alignments.c, c_scheme, c_query_offset)
 
 
 class RiotNumberingNT:
@@ -81,6 +125,9 @@ class RiotNumberingNT:
         self.vdjc_aligner = vdjc_aligner_nt
         self.vjc_alignment_translator_aa = vjc_alignment_translator_aa
         self.scheme_aligner = scheme_aligner
+        self.constant_region_aligner = create_constant_region_aligner(
+            vjc_alignment_translator_aa.c_aligners, scheme_aligner
+        )
 
     @overload
     def run_on_sequence(
@@ -159,6 +206,101 @@ class RiotNumberingNT:
         if return_all_domains and not isinstance(self.vdjc_aligner.v_aligner, SegmentGeneAligner):
             raise ValueError(MULTIPLE_DOMAINS_NOT_ENABLED)
         query_sequence = query_sequence.upper().replace("U", "T")
+        # produce alignments for v,d,j,c
+        alignments = self.vdjc_aligner.produce_nt_alignments(query_sequence)
+        results = self._build_airr_entries(
+            header, query_sequence, alignments, scheme, extend_alignment, return_all_domains, c_scheme
+        )
+
+        if not results:
+            results = [
+                (
+                    AirrBuilder(header, "", scheme).build()
+                    if not return_all_domains
+                    else SegmentedAirrBuilder(header, "", scheme, query_sequence).build()
+                )
+            ]
+
+        if return_all_domains:
+            return results
+
+        return sorted(results)[-1]
+
+    def annotate_chain(
+        self,
+        header: str,
+        query_sequence: str,
+        scheme: Scheme = Scheme.IMGT,
+        extend_alignment: bool = True,
+        c_scheme: Optional[CScheme] = None,
+    ) -> ChainAnnotation[SegmentedAirrRearrangementEntryNT]:
+        """
+        Annotate all domains of a nucleotide chain in sequence order: rearrangements (V domains, as returned with
+        return_all_domains=True) and constant domains. Constant domains are searched for in all parts of the chain not
+        covered by V domains, in all reading frames (and both strands, if the chain has no V domains).
+        Requires numbering created with return_all_domains=True.
+
+        Parameters:
+        -----------
+        - header : Fasta sequence header, usually this is simply sequence ID.
+        - query_sequence : Nucleotide sequence to annotate.
+        - scheme : Numbering scheme of V domains (default IMGT).
+        - extend_alignment: Extend alignments to cover full sequence.
+        - c_scheme : Numbering scheme of constant domains (eu, kabat or imgt). By default constant domains are not
+        numbered.
+
+        Returns:
+        -----------
+        ChainAnnotation with rearrangements and constant domains. Constant domain positions are nucleotide positions
+        in the chain sequence, which is reverse complemented if the chain is on the reverse strand.
+        """
+        if not isinstance(self.vdjc_aligner.v_aligner, SegmentGeneAligner) or not self.constant_region_aligner:
+            raise ValueError(CHAIN_ANNOTATION_NOT_ENABLED)
+        query_sequence = query_sequence.upper().replace("U", "T")
+
+        alignments = [alignment for alignment in self.vdjc_aligner.produce_nt_alignments(query_sequence) if alignment.v]
+        rearrangements = self._build_airr_entries(
+            header, query_sequence, alignments, scheme, extend_alignment, True, c_scheme
+        )
+        v_domains = [v_domain_span_nt(alignment) for alignment in alignments]
+
+        if alignments:
+            assert alignments[0].v
+            rev_comp = alignments[0].v.rev_comp
+            sequence = reverse_complement(query_sequence) if rev_comp else query_sequence
+            domain_alignments = align_constant_domains_nt(self.constant_region_aligner, sequence, v_domains)
+        else:
+            # without V domains the chain is on the strand with better constant domain alignments
+            rev_comp, sequence, domain_alignments = max(
+                (
+                    (rev_comp, sequence, align_constant_domains_nt(self.constant_region_aligner, sequence, []))
+                    for rev_comp, sequence in ((False, query_sequence), (True, reverse_complement(query_sequence)))
+                ),
+                key=lambda strand: sum(
+                    domain_alignment.domain_alignment.alignment.alignment_score or 0 for domain_alignment in strand[2]
+                ),
+            )
+
+        constant_domains = annotate_constant_domains(self.scheme_aligner, domain_alignments, v_domains, c_scheme)
+        return ChainAnnotation(
+            sequence_header=header,
+            sequence=sequence,
+            rev_comp=rev_comp,
+            layout=chain_layout(len(sequence), v_domains, constant_domains),
+            rearrangements=cast(list[SegmentedAirrRearrangementEntryNT], rearrangements),
+            constant_domains=constant_domains,
+        )
+
+    def _build_airr_entries(  # pylint: disable=too-many-locals
+        self,
+        header: str,
+        query_sequence: str,
+        alignments: list[AlignmentsNT],
+        scheme: Scheme,
+        extend_alignment: bool,
+        return_all_domains: bool,
+        c_scheme: Optional[CScheme],
+    ) -> list[AirrRearrangementEntryNT]:
         sequence = ""
         segment_start = -1
         segment_end = -1
@@ -169,9 +311,6 @@ class RiotNumberingNT:
         positional_scheme_mapping = None
         numbering = None
         scheme_alignment_exc = None
-
-        # produce alignments for v,d,j,c
-        alignments = self.vdjc_aligner.produce_nt_alignments(query_sequence)
 
         # Query might have been reverse complemented during V alignment.
         results = []
@@ -274,25 +413,14 @@ class RiotNumberingNT:
             result = airr_builder.build()
             results.append(result)
 
-        if not results:
-            results = [
-                (
-                    AirrBuilder(header, sequence, scheme).build()
-                    if not return_all_domains
-                    else SegmentedAirrBuilder(header, sequence, scheme, query_sequence).build()
-                )
-            ]
-
-        if return_all_domains:
-            return results
-
-        return sorted(results)[-1]
+        return results
 
 
 class RiotNumberingAA:
     def __init__(self, vjc_aligner_aa: VJCAlignerAA, scheme_aligner: SchemeAligner):
         self.vjc_aligner_aa = vjc_aligner_aa
         self.scheme_aligner = scheme_aligner
+        self.constant_region_aligner = create_constant_region_aligner(vjc_aligner_aa.c_aligners, scheme_aligner)
 
     @overload
     def run_on_sequence(
@@ -390,6 +518,90 @@ class RiotNumberingAA:
         if return_all_domains and not isinstance(self.vjc_aligner_aa.v_aligner, SegmentGeneAlignerAA):
             raise ValueError(MULTIPLE_DOMAINS_NOT_ENABLED)
         query_sequence = query_sequence.upper()
+        # produce alignments for v,j,c
+        if v_gene and j_gene:
+            alignments = self.vjc_aligner_aa.produce_aa_alignments_for_genes(
+                query_sequence, v_gene=v_gene, j_gene=j_gene
+            )
+        else:
+            alignments = self.vjc_aligner_aa.produce_aa_alignments(query_sequence)
+
+        results = self._build_airr_entries(
+            header, query_sequence, alignments, scheme, extend_alignment, return_all_domains, c_scheme
+        )
+
+        if not results:
+            results = [
+                (
+                    AirrBuilderAA(header, query_sequence, scheme).build()
+                    if not return_all_domains
+                    else SegmentedAirrBuilderAA(header, query_sequence, scheme, query_sequence).build()
+                )
+            ]
+
+        if return_all_domains:
+            return results
+
+        return sorted(results)[-1]
+
+    def annotate_chain(
+        self,
+        header: str,
+        query_sequence: str,
+        scheme: Scheme = Scheme.IMGT,
+        extend_alignment: bool = True,
+        c_scheme: Optional[CScheme] = None,
+    ) -> ChainAnnotation[SegmentedAirrRearrangementEntryAA]:
+        """
+        Annotate all domains of an amino acid chain in sequence order: rearrangements (V domains, as returned with
+        return_all_domains=True) and constant domains. Constant domains are searched for in all parts of the chain
+        not covered by V domains. Requires numbering created with return_all_domains=True.
+
+        Parameters:
+        -----------
+        - header : Fasta sequence header, usually this is simply sequence ID.
+        - query_sequence : Amino acid sequence to annotate.
+        - scheme : Numbering scheme of V domains (default IMGT).
+        - extend_alignment: Extend alignments of V domains to cover full sequence.
+        - c_scheme : Numbering scheme of constant domains (eu, kabat or imgt). By default constant domains are not
+        numbered.
+
+        Returns:
+        -----------
+        ChainAnnotation with rearrangements and constant domains.
+        """
+        if not isinstance(self.vjc_aligner_aa.v_aligner, SegmentGeneAlignerAA) or not self.constant_region_aligner:
+            raise ValueError(CHAIN_ANNOTATION_NOT_ENABLED)
+        query_sequence = query_sequence.upper()
+
+        alignments = [
+            alignment for alignment in self.vjc_aligner_aa.produce_aa_alignments(query_sequence) if alignment.v
+        ]
+        rearrangements = self._build_airr_entries(
+            header, query_sequence, alignments, scheme, extend_alignment, True, c_scheme
+        )
+        v_domains = [v_domain_span_aa(alignment) for alignment in alignments]
+        domain_alignments = align_constant_domains_aa(self.constant_region_aligner, query_sequence, v_domains)
+        constant_domains = annotate_constant_domains(self.scheme_aligner, domain_alignments, v_domains, c_scheme)
+        return ChainAnnotation(
+            sequence_header=header,
+            sequence=query_sequence,
+            rev_comp=False,
+            layout=chain_layout(len(query_sequence), v_domains, constant_domains),
+            rearrangements=cast(list[SegmentedAirrRearrangementEntryAA], rearrangements),
+            constant_domains=constant_domains,
+        )
+
+    def _build_airr_entries(  # pylint: disable=too-many-locals
+        self,
+        header: str,
+        query_sequence: str,
+        alignments: list[AlignmentsAA],
+        scheme: Scheme,
+        extend_alignment: bool,
+        return_all_domains: bool,
+        c_scheme: Optional[CScheme],
+    ) -> list[AirrRearrangementEntryAA]:
         sequence_aa = query_sequence
         sch_alignment = None
         aa_offsets = None
@@ -398,14 +610,6 @@ class RiotNumberingAA:
         scheme_alignment_exc = None
         segment_start = -1
         segment_end = -1
-
-        # produce alignments for v,j,c
-        if v_gene and j_gene:
-            alignments = self.vjc_aligner_aa.produce_aa_alignments_for_genes(
-                query_sequence, v_gene=v_gene, j_gene=j_gene
-            )
-        else:
-            alignments = self.vjc_aligner_aa.produce_aa_alignments(query_sequence)
 
         results = []
 
@@ -482,19 +686,7 @@ class RiotNumberingAA:
             result = airr_builder.build()
             results.append(result)
 
-        if not results:
-            results = [
-                (
-                    AirrBuilderAA(header, sequence_aa, scheme).build()
-                    if not return_all_domains
-                    else SegmentedAirrBuilderAA(header, sequence_aa, scheme, query_sequence).build()
-                )
-            ]
-
-        if return_all_domains:
-            return results
-
-        return sorted(results)[-1]
+        return results
 
 
 def create_riot_nt(
