@@ -17,7 +17,7 @@ from riot_na.data.model import (
     Scheme,
     SchemeAlignment,
 )
-from riot_na.data.scheme_definitions import get_legal_positions
+from riot_na.data.scheme_definitions import get_c_scheme_positions, get_legal_positions
 from riot_na.data.scheme_mapping_facade import CSchemeMappingFacade, SchemeMappingFacade
 from riot_na.schemes.collapse_alignment import collapse_alignment_str, collapse_ins_del
 from riot_na.schemes.smooth_alignment import smooth_cdr_junctions
@@ -513,23 +513,30 @@ class SchemeAligner:
 
         return sch_alignment
 
-    def align_c_to_scheme(self, aa_alignments: AlignmentsAA, c_scheme: CScheme) -> Optional[SchemeAlignment]:
+    def number_c_alignment(
+        self, query: str, c_alignment: AlignmentEntryAA, c_scheme: CScheme, query_offset: int = 0
+    ) -> Optional[tuple[dict[str, str], dict[int, str]]]:
         """
-        Align C region to the C scheme. Returns None if there is no C alignment or the C gene has no scheme mapping.
+        Number C region of the query aligned to a C germline. query_offset is the position of the C alignment query
+        in the whole query. Returns scheme residue mapping and positional scheme mapping or None if the C gene has
+        no scheme mapping.
         """
-        if not (aa_alignments.v and aa_alignments.c):
-            return None
-
         c_gene_scheme_alignment_str = self.c_scheme_mapping_facades[c_scheme].get_mapping(
-            aa_alignments.c.species, aa_alignments.c.target_id
+            c_alignment.species, c_alignment.target_id
         )
         if c_gene_scheme_alignment_str is None:
             return None
 
-        # C is aligned to the query left after V and J alignments (or V alignment, if J was not found)
-        c_query_offset = aa_alignments.v.q_end + (aa_alignments.j.q_end if aa_alignments.j else 0)
+        c_sch_alignment = c_scheme_alignment(c_alignment, c_gene_scheme_alignment_str, c_scheme, query_offset)
+        c_scheme_positions = get_c_scheme_positions(c_scheme, ChainType.from_locus(c_alignment.locus))
 
-        return c_scheme_alignment(aa_alignments.c, c_gene_scheme_alignment_str, c_scheme, c_query_offset)
+        c_numbering = produce_numbering(query, c_sch_alignment.alignment_str, c_sch_alignment.q_start)
+        c_scheme_residue_mapping = get_scheme_residue_mapping(c_numbering, c_scheme_positions)
+        if not c_scheme_residue_mapping:
+            return None
+
+        c_positional_scheme_mapping = get_positional_scheme_mapping(c_scheme_residue_mapping, c_sch_alignment.q_start)
+        return c_scheme_residue_mapping, c_positional_scheme_mapping
 
 
 if __name__ == "__main__":

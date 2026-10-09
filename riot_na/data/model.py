@@ -407,6 +407,54 @@ AirrRearrangementEntry_co = TypeVar(
 )
 
 
+@dataclass
+class ConstantDomain:  # pylint: disable=too-many-instance-attributes
+    """
+    Constant domain of a chain. Sequence positions refer to the chain sequence: nucleotide positions for nucleotide
+    chains (c_positional_scheme_mapping keys are positions of the first codon nucleotides), amino acid positions
+    for amino acid chains.
+    """
+
+    # CH1, H (hinge), CH2, CH3, CL or C (constant region of a C gene without domain definitions)
+    domain: str
+    c_call: str
+    locus: str
+    species: str
+    sequence_start: int  # 1-based closed interval
+    sequence_end: int
+    sequence_aa: str
+    germline_start_aa: int  # 1-based closed interval in the C germline
+    germline_end_aa: int
+    cigar_aa: Cigar
+    identity_aa: float
+    # index of the rearrangement (V domain) the constant domain follows, None if no V domain precedes it
+    rearrangement_index: Optional[int] = None
+    c_numbering_scheme: Optional[str] = None
+    c_scheme_residue_mapping: Optional[dict[str, str]] = None
+    c_positional_scheme_mapping: Optional[dict[int, str]] = None
+
+
+SegmentedAirrRearrangementEntry = TypeVar(
+    "SegmentedAirrRearrangementEntry", SegmentedAirrRearrangementEntryNT, SegmentedAirrRearrangementEntryAA
+)
+
+
+@dataclass
+class ChainAnnotation(Generic[SegmentedAirrRearrangementEntry]):
+    """
+    Domains of a chain in sequence order: rearrangements (V domains) and constant domains.
+    """
+
+    sequence_header: str
+    # reverse complemented, if the chain is on the reverse strand
+    sequence: str
+    rev_comp: bool
+    # e.g. VH-CH1-H-CH2-CH3-[15]-VH-[20]-VK, [n] - n unannotated residues (nucleotides for nucleotide chains)
+    layout: str
+    rearrangements: list[SegmentedAirrRearrangementEntry]
+    constant_domains: list[ConstantDomain]
+
+
 def serialize_airr_entry(entry: AirrRearrangementEntry_co) -> dict[str, str]:
     entry_dict = entry.__dict__
     entry_dict["scheme_residue_mapping"] = entry_dict["scheme_residue_mapping"] and base64_encode(

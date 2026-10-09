@@ -293,6 +293,27 @@ RIOT's multidomains support allows detection and numbering of multiple immunoglo
 
 Each domain is reported with the constant region following it (up to the next domain). Constant regions are searched among C genes of all loci, so they are also assigned (and numbered with `c_scheme`) when they follow a variable domain of another locus, e.g. in VL-CH1 and VH-CL chains of CrossMabs or in scFv-Fc fusions, and when the J gene is not found. This applies to single domain mode as well. In the API, `return_all_domains=True` has to be passed both to `create_riot_aa` / `create_riot_nt` and to `run_on_sequence`.
 
+### Chain annotation
+
+`annotate_chain` (API only, requires numbering created with `return_all_domains=True`) returns all domains of a chain in sequence order: rearrangements (V domains, the same AIRR records as with `return_all_domains=True`) and constant domains (CH1, H - hinge, CH2, CH3, CL). Unlike the C fields of rearrangements, constant domains are searched for in all parts of the chain not covered by V domains, so it annotates:
+
+- constant regions without a preceding V domain, e.g. Fc chains of knobs-into-holes bispecifics or N-terminal Fc fusions,
+- repeated constant regions, e.g. two Fc regions of a single chain Fc,
+- hybrid constant regions, every domain is assigned its own gene (e.g. IgG2 CH1 and hinge with IgG4 CH2 and CH3),
+- constant domains of other species than the V domain, e.g. human Fc fused to an alpaca VHH.
+
+Every constant domain is numbered separately with `c_scheme` and assigned the rearrangement it follows (`rearrangement_index`, `None` if no V domain precedes it). C genes without domain definitions (e.g. IGHM, IGHA, alpaca C genes) are reported as a single `C` domain. Nucleotide chains are searched in all reading frames (and both strands, if the chain has no V domains), constant domain positions are nucleotide positions of the chain.
+
+```python
+from riot_na import create_riot_aa, CScheme
+
+riot_aa = create_riot_aa(return_all_domains=True)
+chain = riot_aa.annotate_chain(header="IgG-scFv", query_sequence=igg_scfv_heavy_chain, c_scheme=CScheme.EU)
+chain.layout  # "VH-CH1-H-CH2-CH3-[15]-VH-[20]-VK", [n] - n unannotated residues (nucleotides for nucleotide chains)
+chain.rearrangements  # AIRR records of the VH, VH and VK domains
+chain.constant_domains[2]  # ConstantDomain(domain="CH2", c_call="IGHG1", rearrangement_index=0, c_scheme_residue_mapping={"231": "A", ...}, ...)
+```
+
 ## Germline database
 RIOT uses OGRDB as a primary source of germline alleles. Database version as of 22.01.2024 was used.
 C genes are imported from igblast FTP site fhttps://ftp.ncbi.nih.gov/blast/executables/igblast/release/database/ncbi_human_c_genes.tar

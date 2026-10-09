@@ -17,6 +17,8 @@ from riot_na.data.scheme_definitions import Regions, ChainRegions
 from riot_na.data.model import (
     AirrRearrangementEntryNT,
     AirrRearrangementEntryAA,
+    ChainAnnotation,
+    ConstantDomain,
     ShortRegion,
     ChainType,
     Scheme,
@@ -43,6 +45,8 @@ __all__ = [
     "ChainRegions",
     "AirrRearrangementEntryNT",
     "AirrRearrangementEntryAA",
+    "ChainAnnotation",
+    "ConstantDomain",
     "ShortRegion",
     "ChainType",
     "Scheme",
