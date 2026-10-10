@@ -12,7 +12,7 @@ from riot_na.alignment.constant_region_aligner import (
     QueryInterval,
 )
 from riot_na.alignment.translate import translate
-from riot_na.data.model import ConstantDomain, CScheme, Locus, Organism
+from riot_na.data.model import ChainDomain, ConstantDomain, CScheme, Locus, Organism
 from riot_na.schemes.scheme_alignment import SchemeAligner
 
 V_DOMAIN_NAMES = {Locus.IGH: "VH", Locus.IGK: "VK", Locus.IGL: "VL"}
@@ -148,28 +148,36 @@ def align_constant_domains_nt(
     return sorted(selected, key=lambda domain_alignment: domain_alignment.start)
 
 
-def chain_layout(
-    sequence_length: int, v_domains: Sequence[VDomainSpan], constant_domains: Sequence[ConstantDomain]
-) -> str:
+def chain_domains(v_domains: Sequence[VDomainSpan], constant_domains: Sequence[ConstantDomain]) -> list[ChainDomain]:
+    """V and constant domains of a chain in sequence order."""
+    domains = [
+        ChainDomain(V_DOMAIN_NAMES[v_domain.locus], v_domain.start + 1, v_domain.end, rearrangement_index=i)
+        for i, v_domain in enumerate(v_domains)
+    ] + [
+        ChainDomain(
+            constant_domain.domain,
+            constant_domain.sequence_start,
+            constant_domain.sequence_end,
+            rearrangement_index=constant_domain.rearrangement_index,
+            constant_domain_index=i,
+        )
+        for i, constant_domain in enumerate(constant_domains)
+    ]
+    return sorted(domains, key=lambda domain: (domain.sequence_start, domain.sequence_end))
+
+
+def chain_layout(sequence_length: int, domains: Sequence[ChainDomain]) -> str:
     """
     Domains of a chain in sequence order, e.g. VH-CH1-H-CH2-CH3-[15]-VH-[20]-VK, [n] - n unannotated residues
     (nucleotides for nucleotide chains).
     """
-    domains = sorted(
-        [(v_domain.start, v_domain.end, V_DOMAIN_NAMES[v_domain.locus]) for v_domain in v_domains]
-        + [
-            (constant_domain.sequence_start - 1, constant_domain.sequence_end, constant_domain.domain)
-            for constant_domain in constant_domains
-        ]
-    )
-
     layout = []
     position = 0
-    for start, end, name in domains:
-        if start > position:
-            layout.append(f"[{start - position}]")
-        layout.append(name)
-        position = max(position, end)
+    for domain in domains:
+        if domain.sequence_start - 1 > position:
+            layout.append(f"[{domain.sequence_start - 1 - position}]")
+        layout.append(domain.domain)
+        position = max(position, domain.sequence_end)
 
     if sequence_length > position:
         layout.append(f"[{sequence_length - position}]")
