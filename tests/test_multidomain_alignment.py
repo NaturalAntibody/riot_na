@@ -1,6 +1,7 @@
 import pytest
 
 from riot_na import Locus, Organism, Scheme
+from riot_na.alignment.segment_gene_aligner import align_segments
 from riot_na.api.riot_numbering import (
     RiotNumberingAA,
     RiotNumberingNT,
@@ -8,6 +9,7 @@ from riot_na.api.riot_numbering import (
     get_or_create_riot_aa,
     get_or_create_riot_nt,
 )
+from riot_na.data.model import AlignmentEntryAA, Cigar, SegmentMatch
 
 
 class TestMultiDomainAlignments:
@@ -502,3 +504,54 @@ def test_return_all_domains_requires_multiple_domains_numbering():
         get_or_create_riot_aa().run_on_sequence("", "EVQLVESGGGLVQPGGSLRLSCAAS", return_all_domains=True)
     with pytest.raises(ValueError, match="return_all_domains"):
         get_or_create_riot_nt().run_on_sequence("", "GAGGTGCAGCTGGTGGAGTCTGGG", return_all_domains=True)
+
+
+@pytest.mark.parametrize(
+    "v_starts, segment_starts, expected_segments",
+    [
+        # projected start after the actual V start (e.g. indel before the first k-mer match)
+        ([1], [7], [(1, 130)]),
+        ([0, 125], [0, 130], [(0, 125), (125, 250)]),
+        # V starts are searched only after k-mer matches of the preceding segment (ending at 98)
+        ([0, 95], [0, 105], [(0, 98), (98, 250)]),
+        # reads starting inside V domains
+        ([-5], [0], [(0, 130)]),
+    ],
+    ids=["single-domain", "second-domain", "preceding-segment", "truncated-read"],
+)
+def test_segment_starts_cover_v_domain_starts(
+    v_starts: list[int], segment_starts: list[int], expected_segments: list[tuple[int, int]]
+):
+    query_length = 250 if len(v_starts) > 1 else 130
+    segments = [
+        SegmentMatch(segment_start, 100, max(segment_start, 0) + 10, segment_start + 98, 50, 10, [])
+        for segment_start in segment_starts
+    ]
+    v_domain_starts = dict(zip(map(id, segments), v_starts))
+
+    def align_segment(segment: SegmentMatch, start: int, end: int) -> list[AlignmentEntryAA]:
+        # alignment of a V gene starting at the V domain start, cut at the start of the aligned query part
+        v_start = v_domain_starts[id(segment)]
+        q_start, t_start = max(v_start - start, 0), max(start - v_start, 0)
+        return [
+            AlignmentEntryAA(
+                "V",
+                100.0,
+                1.0,
+                0.0,
+                q_start,
+                end - start,
+                t_start,
+                98,
+                Cigar(""),
+                Organism.HOMO_SAPIENS,
+                Locus.IGH,
+                "",
+                "",
+            )
+        ]
+
+    segment_alignments = align_segments(segments, query_length, align_segment, max_start_extension=10)
+    assert [
+        (segment_alignment.segment_start, segment_alignment.segment_end) for segment_alignment in segment_alignments
+    ] == expected_segments

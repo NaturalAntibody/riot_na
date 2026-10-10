@@ -497,17 +497,28 @@ impl Prefiltering {
             match overlapping_domain {
                 Some(domain) => {
                     if 2 * segment.coverage >= domain.coverage {
-                        domain.query_start = domain.query_start.min(segment.query_start);
-                        domain.query_end = domain.query_end.max(segment.query_end);
-                        domain.segment_start = domain.segment_start.min(segment.segment_start);
-                        domain.min_target_start = domain.min_target_start.min(segment.min_target_start);
-                        domain.max_target_start = domain.max_target_start.max(segment.max_target_start);
+                        extend_domain_bounds(domain, &segment);
                     }
                     domain.matching_genes.extend(segment.matching_genes);
                 }
                 None => domain_segments.push(segment),
             }
         }
+
+        // Gene segments of one domain split by an indel (k-mer matches on two diagonals) can seed two domains,
+        // which overlap once extended by other gene segments. Overlapping domains are one domain.
+        domain_segments.sort_by_key(|segment| segment.query_start);
+        let mut domain_segments = domain_segments.into_iter().fold(Vec::<SegmentMatch>::new(), |mut domains, domain| {
+            match domains.last_mut() {
+                Some(previous) if query_overlap(previous, &domain) > 0 => {
+                    extend_domain_bounds(previous, &domain);
+                    previous.coverage = previous.coverage.max(domain.coverage);
+                    previous.matching_genes.extend(domain.matching_genes);
+                }
+                _ => domains.push(domain),
+            }
+            domains
+        });
 
         domain_segments.sort_by_key(|segment| segment.segment_start);
 
@@ -522,6 +533,15 @@ impl Prefiltering {
 
         domain_segments
     }
+}
+
+/// Extend the domain boundaries to cover the segment
+fn extend_domain_bounds(domain: &mut SegmentMatch, segment: &SegmentMatch) {
+    domain.query_start = domain.query_start.min(segment.query_start);
+    domain.query_end = domain.query_end.max(segment.query_end);
+    domain.segment_start = domain.segment_start.min(segment.segment_start);
+    domain.min_target_start = domain.min_target_start.min(segment.min_target_start);
+    domain.max_target_start = domain.max_target_start.max(segment.max_target_start);
 }
 
 /// Length of the overlap of query ranges of two segments

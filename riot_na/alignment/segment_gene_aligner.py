@@ -35,6 +35,10 @@ from riot_na.data.model import (
     SpeciesPrefilteringSegmentResult,
 )
 
+# V alignments cut at segment starts are searched for up to this many positions before them
+MAX_SEGMENT_START_EXTENSION_NT = 30
+MAX_SEGMENT_START_EXTENSION_AA = 10
+
 
 class SegmentGeneAligner:
     """
@@ -181,6 +185,7 @@ class SegmentGeneAligner:
             lambda segment, start, end: self._align_segment_genes(
                 segment, query[start:end], prefiltering_result.rev_comp_query[start:end]
             ),
+            MAX_SEGMENT_START_EXTENSION_NT,
         )
 
 
@@ -320,6 +325,7 @@ class SegmentGeneAlignerAA:
             prefiltering_result.segments,
             len(query),
             lambda segment, start, end: self._align_segment_genes_aa(segment, query[start:end]),
+            MAX_SEGMENT_START_EXTENSION_AA,
         )
 
 
@@ -327,28 +333,56 @@ def align_segments(
     segments: Sequence[SegmentMatch],
     query_length: int,
     align_segment: Callable[[SegmentMatch, int, int], Sequence[AlignmentEntry]],
+    max_start_extension: int = 0,
 ) -> list[AlignmentSegment[AlignmentEntry]]:
     """
     Align each segment from its start to the start of the next segment.
 
     Segments are aligned starting from the last one, so a segment without alignments (e.g. a spurious
     prefiltering match in a constant region) is dropped and the preceding segment extends over it.
+
+    Segment starts are projected V gene starts of prefiltering matches, which can be after actual V gene starts
+    (e.g. if there is an indel before the first match). If the germline start of the best V alignment is projected
+    before the segment start, the segment starts at the projected germline start of the best V alignment found up to
+    max_start_extension positions before (but after prefiltering matches of the preceding segment).
     """
     segment_alignments: list[AlignmentSegment[AlignmentEntry]] = []
     segment_end = query_length
 
-    for segment in reversed(segments):
-        if segment.segment_start >= segment_end:
+    for index in reversed(range(len(segments))):
+        segment = segments[index]
+        segment_start = segment.segment_start
+        if segment_start >= segment_end:
             continue
 
-        alignments = align_segment(segment, segment.segment_start, segment_end)
+        alignments = align_segment(segment, segment_start, segment_end)
+        if alignments and _germline_start_before_query(_best_alignment(alignments)):
+            earliest_start = max(segment_start - max_start_extension, segments[index - 1].query_end if index else 0)
+            extended_alignments = (
+                align_segment(segment, earliest_start, segment_end) if earliest_start < segment_start else []
+            )
+            if extended_alignments:
+                best_alignment = _best_alignment(extended_alignments)
+                v_start = earliest_start + max(best_alignment.q_start - best_alignment.t_start, 0)
+                if v_start < segment_start:
+                    segment_start = v_start
+                    alignments = align_segment(segment, segment_start, segment_end)
+
         if alignments:
             segment_alignments.append(
-                AlignmentSegment(segment_start=segment.segment_start, segment_end=segment_end, alignments=alignments)
+                AlignmentSegment(segment_start=segment_start, segment_end=segment_end, alignments=alignments)
             )
-            segment_end = segment.segment_start
+            segment_end = segment_start
 
     return segment_alignments[::-1]
+
+
+def _best_alignment(alignments: Sequence[AlignmentEntry]) -> AlignmentEntry:
+    return max(alignments, key=lambda alignment: alignment.alignment_score or 0)
+
+
+def _germline_start_before_query(alignment: AlignmentEntry) -> bool:
+    return alignment.t_start > alignment.q_start
 
 
 def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> dict:

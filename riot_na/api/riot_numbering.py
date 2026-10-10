@@ -29,7 +29,7 @@ from riot_na.api.chain_annotation import (
     chain_layout,
     reverse_complement,
 )
-from riot_na.api.molecule_annotation import pair_binding_sites
+from riot_na.api.molecule_annotation import PairingTarget, pair_binding_sites
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
     AirrRearrangementEntryAA,
@@ -303,7 +303,7 @@ class RiotNumberingNT:
         scheme: Scheme = Scheme.IMGT,
         extend_alignment: bool = True,
         c_scheme: Optional[CScheme] = None,
-        pairs: Optional[Sequence[tuple[str, str]]] = None,
+        pairs: Optional[Sequence[tuple[PairingTarget, PairingTarget]]] = None,
     ) -> MoleculeAnnotation[SegmentedAirrRearrangementEntryNT]:
         """
         Annotate all chains of a molecule (annotate_chain) and pair their V domains into binding sites:
@@ -318,8 +318,12 @@ class RiotNumberingNT:
         - extend_alignment: Extend alignments of V domains to cover full sequence.
         - c_scheme : Numbering scheme of constant domains (eu, kabat or imgt). By default constant domains are not
         numbered.
-        - pairs : Chain ID pairs which Fab arms pair, e.g. [("HC1", "LC1"), ("HC2", "LC2")]. Fab arms of other chains
-        are not considered as their partners. By default Fab arms with more than one possible partner are ambiguous.
+        - pairs : Pairing hints, pairs of chains or V domains (chain ID and domain index, 1-based position among all
+        domains of the chain) which pair, e.g. [("HC1", "LC1"), ("HC2", "LC2")] or [(("HC", 1), "LC1"), (("HC", 3),
+        "LC2")]. V domains given in pairs pair only with V domains they are given with, except light chain Fab arms
+        (followed by CL), which can be shared by heavy chains. By default V domains with more than one possible partner
+        are ambiguous and V domains not paired by their format (e.g. V domain only chains) are single domains or
+        unpaired.
 
         Returns:
         -----------
@@ -651,7 +655,7 @@ class RiotNumberingAA:
         scheme: Scheme = Scheme.IMGT,
         extend_alignment: bool = True,
         c_scheme: Optional[CScheme] = None,
-        pairs: Optional[Sequence[tuple[str, str]]] = None,
+        pairs: Optional[Sequence[tuple[PairingTarget, PairingTarget]]] = None,
     ) -> MoleculeAnnotation[SegmentedAirrRearrangementEntryAA]:
         """
         Annotate all chains of a molecule (annotate_chain) and pair their V domains into binding sites:
@@ -666,8 +670,12 @@ class RiotNumberingAA:
         - extend_alignment: Extend alignments of V domains to cover full sequence.
         - c_scheme : Numbering scheme of constant domains (eu, kabat or imgt). By default constant domains are not
         numbered.
-        - pairs : Chain ID pairs which Fab arms pair, e.g. [("HC1", "LC1"), ("HC2", "LC2")]. Fab arms of other chains
-        are not considered as their partners. By default Fab arms with more than one possible partner are ambiguous.
+        - pairs : Pairing hints, pairs of chains or V domains (chain ID and domain index, 1-based position among all
+        domains of the chain) which pair, e.g. [("HC1", "LC1"), ("HC2", "LC2")] or [(("HC", 1), "LC1"), (("HC", 3),
+        "LC2")]. V domains given in pairs pair only with V domains they are given with, except light chain Fab arms
+        (followed by CL), which can be shared by heavy chains. By default V domains with more than one possible partner
+        are ambiguous and V domains not paired by their format (e.g. V domain only chains) are single domains or
+        unpaired.
 
         Returns:
         -----------

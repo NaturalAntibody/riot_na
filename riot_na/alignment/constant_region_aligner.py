@@ -48,6 +48,8 @@ CH3 = "CH3"
 SECRETED_TAIL = "GK"
 # shortest query fragment searched for constant domains, as short as the shortest C alignment
 MIN_INTERVAL_LENGTH = 4
+# constant region fragments (shorter than min_internal_alignment_length) start at most this many residues after V domains
+MAX_FRAGMENT_OFFSET = 3
 
 
 @dataclass(frozen=True)
@@ -58,6 +60,8 @@ class QueryInterval:
     species: Organism
     # C genes of this locus win ties, it is the locus of the preceding V domain
     locus: Optional[Locus] = None
+    # the interval starts at the end of a V domain, so it can start with a constant region fragment
+    follows_v_domain: bool = False
 
 
 @dataclass(frozen=True)
@@ -157,7 +161,7 @@ class ConstantRegionAligner:  # pylint: disable=too-many-instance-attributes
                 remaining_interval
                 for remaining_interval in (
                     replace(interval, end=domain_alignment.query_start),
-                    replace(interval, start=domain_alignment.query_end),
+                    replace(interval, start=domain_alignment.query_end, follows_v_domain=False),
                 )
                 if remaining_interval.end - remaining_interval.start >= MIN_INTERVAL_LENGTH
             ]
@@ -177,7 +181,15 @@ class ConstantRegionAligner:  # pylint: disable=too-many-instance-attributes
                 if alignment is not None:
                     candidates.append(self._to_germline_alignment(query, interval.start, domain, alignment))
 
-        return max(candidates, key=lambda candidate: rank(candidate, interval), default=None)
+        return max(
+            (
+                candidate
+                for candidate in candidates
+                if not is_fragment(candidate) or follows_v_domain(candidate, interval)
+            ),
+            key=lambda candidate: rank(candidate, interval),
+            default=None,
+        )
 
     def _to_germline_alignment(
         self, query: str, query_offset: int, domain: str, domain_alignment: AlignmentEntryAA
@@ -316,15 +328,31 @@ class ConstantRegionAligner:  # pylint: disable=too-many-instance-attributes
         return replace(domain_alignment, query_end=domain_alignment.query_end + tail_length)
 
 
+def is_fragment(domain_alignment: ConstantDomainAlignment) -> bool:
+    """
+    Short alignments (allowed only from the start of C genes) are constant region fragments, e.g. C gene starts
+    of sequencing reads or CH1 derived linkers.
+    """
+    alignment = domain_alignment.alignment
+    return alignment.t_end - alignment.t_start < get_aa_aligner_params(GermlineGene.C)["min_internal_alignment_length"]
+
+
+def follows_v_domain(domain_alignment: ConstantDomainAlignment, interval: QueryInterval) -> bool:
+    """
+    Constant region fragments follow V domains (J-C junction), elsewhere (e.g. in leader sequences and untranslated
+    regions) short alignments are spurious.
+    """
+    return interval.follows_v_domain and domain_alignment.query_start - interval.start <= MAX_FRAGMENT_OFFSET
+
+
 def rank(domain_alignment: ConstantDomainAlignment, interval: QueryInterval) -> tuple[bool, float, float, bool]:
     """
     Alignments to single domains and to whole C genes are compared, so alignments (except short C gene fragments)
     are ranked by identity before score, e.g. a human Fc is assigned human CH2 and CH3, not a whole alpaca C gene.
     """
     alignment = domain_alignment.alignment
-    min_internal_alignment_length = get_aa_aligner_params(GermlineGene.C)["min_internal_alignment_length"]
     return (
-        alignment.t_end - alignment.t_start >= min_internal_alignment_length,
+        not is_fragment(domain_alignment),
         alignment.seq_identity or 0,
         alignment.alignment_score or 0,
         alignment.locus == interval.locus,

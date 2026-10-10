@@ -341,6 +341,25 @@ mod prefiltering_tests {
     }
 
     #[test]
+    fn test_domain_split_by_indel_is_merged() {
+        let prefiltering = Prefiltering::new(HashMap::new(), 3, 4, 12, 1, Some(60), None);
+
+        // k-mer matches before and after a 6 residue insertion are on two diagonals of each gene,
+        // the best diagonal of the best gene ends before the insertion
+        let segments = prefiltering.merge_overlapping_segments(vec![
+            gene_segment("VH", 0, 57, 0, 48),
+            gene_segment("VH_ALLELE", 60, 107, 54, 43),
+            // extends the first domain over the second
+            gene_segment("VH_OTHER", 20, 87, 20, 40),
+        ]);
+
+        assert_eq!(segments.len(), 1);
+        assert_eq!((segments[0].segment_start, segments[0].query_start, segments[0].query_end), (0, 0, 107));
+        let genes: Vec<&str> = segments[0].matching_genes.iter().map(|gene| gene.gene_id.as_str()).collect();
+        assert_eq!(genes, vec!["VH", "VH_ALLELE", "VH_OTHER"]);
+    }
+
+    #[test]
     fn test_kmer_index_construction() {
         // Test that the kmer index is built correctly
         let mut genes = HashMap::new();
