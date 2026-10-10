@@ -169,6 +169,15 @@ def test_constant_domains_preceding_v_domains(riot_aa: RiotNumberingAA):
     assert {domain.rearrangement_index for domain in chain.constant_domains} == {None}
 
 
+def test_constant_region_fragments_follow_v_domains(riot_aa: RiotNumberingAA):
+    ck_start = C_GERMLINES_AA["IGKC"][:12]
+
+    # CL fragment of the J-C junction (CL derived linker), and in front of the V domain
+    assert riot_aa.annotate_chain("", VK + ck_start).layout == "VK-CL"
+    assert riot_aa.annotate_chain("", ck_start + LINKER + VK).layout == "[27]-VK"
+    assert riot_aa.annotate_chain("", VK + LINKER + ck_start).layout == "VK-[27]"
+
+
 def test_tandem_fabs(riot_aa: RiotNumberingAA):
     query = VH + IGHG1[:98] + LINKER + VH + IGHG1
     chain = riot_aa.annotate_chain("", query)

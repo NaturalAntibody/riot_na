@@ -382,9 +382,10 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_C_AA", 4)),
                 "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_C_AA", 0.05)),
                 # filter out matches of non antibody regions following V region, e.g. proline rich CAR hinges
-                # to IgG and IgA hinges. Short C regions (e.g. CH1 fragments in Fabs) start at the C germline start.
+                # to IgG and IgA hinges. Short C regions (e.g. CH1 fragments in Fabs) start at the C germline start,
+                # shorter internal matches are Ig fold similarities (e.g. of V domains following scFv V domains to CL)
                 "min_seq_identity": float(os.environ.get("MIN_SEQ_IDENTITY_C_AA", 0.4)),
-                "min_internal_alignment_length": int(os.environ.get("MIN_INTERNAL_ALIGNMENT_LENGTH_C_AA", 30)),
+                "min_internal_alignment_length": int(os.environ.get("MIN_INTERNAL_ALIGNMENT_LENGTH_C_AA", 50)),
             }
         case _:
             raise ValueError("AA aligner not supported for gene type")

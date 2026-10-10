@@ -71,11 +71,11 @@ def constant_region_intervals(
     start, species, locus = 0, default_species, None
     for v_domain in v_domains:
         if v_domain.start > start:
-            intervals.append(QueryInterval(start, v_domain.start, species, locus))
+            intervals.append(QueryInterval(start, v_domain.start, species, locus, follows_v_domain=locus is not None))
         start, species, locus = max(start, v_domain.end), v_domain.species, v_domain.locus
 
     if sequence_length > start:
-        intervals.append(QueryInterval(start, sequence_length, species, locus))
+        intervals.append(QueryInterval(start, sequence_length, species, locus, follows_v_domain=locus is not None))
     return intervals
 
 
@@ -90,6 +90,7 @@ def split_at_stop_codons(intervals: Sequence[QueryInterval], translation: str) -
             if translation[position] == STOP_CODON:
                 split_intervals.append(replace(interval, start=start, end=position))
                 start = position + 1
+                interval = replace(interval, follows_v_domain=False)
         split_intervals.append(replace(interval, start=start))
     return [interval for interval in split_intervals if interval.end > interval.start]
 
