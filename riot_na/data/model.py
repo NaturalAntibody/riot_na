@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, unique
 from typing import Generic, Optional, Sequence, TypeVar
 
@@ -434,6 +434,20 @@ class ConstantDomain:  # pylint: disable=too-many-instance-attributes
     c_positional_scheme_mapping: Optional[dict[int, str]] = None
 
 
+@dataclass
+class ChainDomain:
+    """Domain of a chain: V domain (rearrangement) or constant domain."""
+
+    # VH, VK, VL (V domains) or CH1, H, CH2, CH3, CL, C (constant domains)
+    domain: str
+    sequence_start: int  # 1-based closed interval
+    sequence_end: int
+    # V domains: index of their rearrangement, constant domains: index of the rearrangement they follow
+    rearrangement_index: Optional[int] = None
+    # constant domains: index of the constant domain
+    constant_domain_index: Optional[int] = None
+
+
 SegmentedAirrRearrangementEntry = TypeVar(
     "SegmentedAirrRearrangementEntry", SegmentedAirrRearrangementEntryNT, SegmentedAirrRearrangementEntryAA
 )
@@ -453,6 +467,37 @@ class ChainAnnotation(Generic[SegmentedAirrRearrangementEntry]):
     layout: str
     rearrangements: list[SegmentedAirrRearrangementEntry]
     constant_domains: list[ConstantDomain]
+    # V and constant domains in sequence order
+    domains: list[ChainDomain]
+
+
+@dataclass(frozen=True)
+class VDomainRef:
+    """V domain of a molecule: rearrangement of a chain."""
+
+    chain_id: str
+    rearrangement_index: int
+
+
+@dataclass
+class BindingSite:
+    binding_site_id: int
+    # Fab, Fv (V domains stacked on Fab V domains, e.g. outer Fv of DVD-Ig), scFv, diabody, single domain or unpaired
+    binding_site_type: str
+    heavy_domain: Optional[VDomainRef] = None
+    light_domain: Optional[VDomainRef] = None
+    # binding site with more than one possible partner V domain, they are listed in candidates
+    ambiguous: bool = False
+    candidates: list[VDomainRef] = field(default_factory=list)
+    # residues between V domains of scFv and diabodies
+    linker_length: Optional[int] = None
+
+
+@dataclass
+class MoleculeAnnotation(Generic[SegmentedAirrRearrangementEntry]):
+    molecule_id: str
+    chains: dict[str, ChainAnnotation[SegmentedAirrRearrangementEntry]]
+    binding_sites: list[BindingSite]
 
 
 def serialize_airr_entry(entry: AirrRearrangementEntry_co) -> dict[str, str]:

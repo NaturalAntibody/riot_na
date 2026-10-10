@@ -1,7 +1,7 @@
 # pylint: disable=too-many-branches, too-many-statements
 
 from pathlib import Path
-from typing import Literal, Optional, cast, overload
+from typing import Literal, Mapping, Optional, Sequence, cast, overload
 
 from cachetools import cached
 
@@ -25,9 +25,11 @@ from riot_na.api.chain_annotation import (
     align_constant_domains_aa,
     align_constant_domains_nt,
     annotate_constant_domains,
+    chain_domains,
     chain_layout,
     reverse_complement,
 )
+from riot_na.api.molecule_annotation import pair_binding_sites
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
     AirrRearrangementEntryAA,
@@ -38,6 +40,7 @@ from riot_na.data.model import (
     ChainType,
     CScheme,
     Locus,
+    MoleculeAnnotation,
     Organism,
     Scheme,
     SegmentedAirrRearrangementEntryAA,
@@ -282,13 +285,54 @@ class RiotNumberingNT:
             )
 
         constant_domains = annotate_constant_domains(self.scheme_aligner, domain_alignments, v_domains, c_scheme)
+        domains = chain_domains(v_domains, constant_domains)
         return ChainAnnotation(
             sequence_header=header,
             sequence=sequence,
             rev_comp=rev_comp,
-            layout=chain_layout(len(sequence), v_domains, constant_domains),
+            layout=chain_layout(len(sequence), domains),
             rearrangements=cast(list[SegmentedAirrRearrangementEntryNT], rearrangements),
             constant_domains=constant_domains,
+            domains=domains,
+        )
+
+    def annotate_molecule(
+        self,
+        molecule_id: str,
+        chains: Mapping[str, str],
+        scheme: Scheme = Scheme.IMGT,
+        extend_alignment: bool = True,
+        c_scheme: Optional[CScheme] = None,
+        pairs: Optional[Sequence[tuple[str, str]]] = None,
+    ) -> MoleculeAnnotation[SegmentedAirrRearrangementEntryNT]:
+        """
+        Annotate all chains of a molecule (annotate_chain) and pair their V domains into binding sites:
+        scFv, diabodies, Fab (including domain crossovers and V domains stacked on them), single domains.
+        Requires numbering created with return_all_domains=True.
+
+        Parameters:
+        -----------
+        - molecule_id : Molecule ID, chain headers are molecule_id|chain_id.
+        - chains : Nucleotide sequences of the molecule chains by chain ID, every distinct chain once.
+        - scheme : Numbering scheme of V domains (default IMGT).
+        - extend_alignment: Extend alignments of V domains to cover full sequence.
+        - c_scheme : Numbering scheme of constant domains (eu, kabat or imgt). By default constant domains are not
+        numbered.
+        - pairs : Chain ID pairs which Fab arms pair, e.g. [("HC1", "LC1"), ("HC2", "LC2")]. Fab arms of other chains
+        are not considered as their partners. By default Fab arms with more than one possible partner are ambiguous.
+
+        Returns:
+        -----------
+        MoleculeAnnotation with chain annotations and binding sites.
+        """
+        chain_annotations = {
+            chain_id: self.annotate_chain(f"{molecule_id}|{chain_id}", sequence, scheme, extend_alignment, c_scheme)
+            for chain_id, sequence in chains.items()
+        }
+        return MoleculeAnnotation(
+            molecule_id=molecule_id,
+            chains=chain_annotations,
+            binding_sites=pair_binding_sites(chain_annotations, residue_length=3, pairs=pairs),
         )
 
     def _build_airr_entries(  # pylint: disable=too-many-locals
@@ -583,13 +627,54 @@ class RiotNumberingAA:
         v_domains = [v_domain_span_aa(alignment) for alignment in alignments]
         domain_alignments = align_constant_domains_aa(self.constant_region_aligner, query_sequence, v_domains)
         constant_domains = annotate_constant_domains(self.scheme_aligner, domain_alignments, v_domains, c_scheme)
+        domains = chain_domains(v_domains, constant_domains)
         return ChainAnnotation(
             sequence_header=header,
             sequence=query_sequence,
             rev_comp=False,
-            layout=chain_layout(len(query_sequence), v_domains, constant_domains),
+            layout=chain_layout(len(query_sequence), domains),
             rearrangements=cast(list[SegmentedAirrRearrangementEntryAA], rearrangements),
             constant_domains=constant_domains,
+            domains=domains,
+        )
+
+    def annotate_molecule(
+        self,
+        molecule_id: str,
+        chains: Mapping[str, str],
+        scheme: Scheme = Scheme.IMGT,
+        extend_alignment: bool = True,
+        c_scheme: Optional[CScheme] = None,
+        pairs: Optional[Sequence[tuple[str, str]]] = None,
+    ) -> MoleculeAnnotation[SegmentedAirrRearrangementEntryAA]:
+        """
+        Annotate all chains of a molecule (annotate_chain) and pair their V domains into binding sites:
+        scFv, diabodies, Fab (including domain crossovers and V domains stacked on them), single domains.
+        Requires numbering created with return_all_domains=True.
+
+        Parameters:
+        -----------
+        - molecule_id : Molecule ID, chain headers are molecule_id|chain_id.
+        - chains : Amino acid sequences of the molecule chains by chain ID, every distinct chain once.
+        - scheme : Numbering scheme of V domains (default IMGT).
+        - extend_alignment: Extend alignments of V domains to cover full sequence.
+        - c_scheme : Numbering scheme of constant domains (eu, kabat or imgt). By default constant domains are not
+        numbered.
+        - pairs : Chain ID pairs which Fab arms pair, e.g. [("HC1", "LC1"), ("HC2", "LC2")]. Fab arms of other chains
+        are not considered as their partners. By default Fab arms with more than one possible partner are ambiguous.
+
+        Returns:
+        -----------
+        MoleculeAnnotation with chain annotations and binding sites.
+        """
+        chain_annotations = {
+            chain_id: self.annotate_chain(f"{molecule_id}|{chain_id}", sequence, scheme, extend_alignment, c_scheme)
+            for chain_id, sequence in chains.items()
+        }
+        return MoleculeAnnotation(
+            molecule_id=molecule_id,
+            chains=chain_annotations,
+            binding_sites=pair_binding_sites(chain_annotations, residue_length=1, pairs=pairs),
         )
 
     def _build_airr_entries(  # pylint: disable=too-many-locals

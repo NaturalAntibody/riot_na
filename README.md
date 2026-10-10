@@ -316,7 +316,41 @@ chain = riot_aa.annotate_chain(header="IgG-scFv", query_sequence=igg_scfv_heavy_
 chain.layout  # "VH-CH1-H-CH2-CH3-[15]-VH-[20]-VK", [n] - n unannotated residues (nucleotides for nucleotide chains)
 chain.rearrangements  # AIRR records of the VH, VH and VK domains
 chain.constant_domains[2]  # ConstantDomain(domain="CH2", c_call="IGHG1", rearrangement_index=0, c_scheme_residue_mapping={"231": "A", ...}, ...)
+chain.domains  # V and constant domains in sequence order (ChainDomain)
 ```
+
+### Molecule annotation
+
+`annotate_molecule` (API only, requires numbering created with `return_all_domains=True`) annotates all chains of a molecule (`annotate_chain`, with headers `molecule_id|chain_id`) and pairs their V domains into binding sites:
+
+- `scFv` - adjacent heavy and light V domains of a chain joined by a linker of at least 12 residues,
+- `diabody` - the same with a shorter linker, paired with V domains of another copy of the chain or, if two chains have such V domains, of the other chain,
+- `Fab` - V domain followed by CH1 paired with V domain followed by CL, one of them heavy and the other light, so domain crossovers (CrossMab) are paired too. Fab arms of one chain pair only if joined by a linker of at least 20 residues (single chain Fab). If there are as many CH1 as CL arms, every CL arm pairs with one CH1 arm (e.g. FIT-Ig), otherwise a light chain can pair with many heavy chains (common light chain),
+- `Fv` - V domains stacked in front of Fab V domains (e.g. outer V domains of DVD-Ig), paired by their position,
+- `single domain` - other heavy V domains (e.g. VHH), other light V domains are `unpaired`.
+
+Pass every distinct chain once. Fab arms with more than one possible partner (e.g. bispecific antibodies with two different heavy and light chains) are `ambiguous`, their possible partners are listed as `candidates`. `pairs` gives the chains which Fab arms pair.
+
+```python
+from pathlib import Path
+from riot_na import create_riot_aa, CScheme
+from riot_na.common.io import write_binding_sites_csv, write_molecule_layout_csv, write_molecules_json
+
+riot_aa = create_riot_aa(return_all_domains=True)
+molecule = riot_aa.annotate_molecule(
+    molecule_id="bispecific",
+    chains={"HC1": heavy_chain_1, "HC2": heavy_chain_2, "LC1": light_chain_1, "LC2": light_chain_2},
+    c_scheme=CScheme.EU,
+    pairs=[("HC1", "LC1"), ("HC2", "LC2")],
+)
+molecule.binding_sites  # [BindingSite(binding_site_id=1, binding_site_type="Fab", heavy_domain=VDomainRef("HC1", 0), light_domain=VDomainRef("LC1", 0), ...), ...]
+
+write_molecule_layout_csv(Path("layout.csv"), [molecule])  # one row per domain of every chain, with binding sites of V domains
+write_binding_sites_csv(Path("binding_sites.csv"), [molecule])  # one row per binding site
+write_molecules_json(Path("molecules.json"), [molecule])  # all details, including AIRR records and constant domain numbering
+```
+
+V domains are referred to by chain and domain index (1-based position among all domains of the chain) in the CSV files. AIRR records of the chains have `sequence_header` `molecule_id|chain_id`.
 
 ## Germline database
 RIOT uses OGRDB as a primary source of germline alleles. Database version as of 22.01.2024 was used.
