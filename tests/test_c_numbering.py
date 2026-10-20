@@ -1,5 +1,6 @@
 import csv
 from pathlib import Path
+from string import ascii_uppercase
 
 import pytest
 from click.testing import CliRunner
@@ -69,55 +70,87 @@ def assert_positional_mapping_consistent(query: str, airr: AirrRearrangementEntr
         assert query[position] == airr.c_scheme_residue_mapping[scheme_position]
 
 
-def imgt_table_numbering(gene: str, c_scheme: CScheme) -> dict[str, str]:
+def imgt_table_rows(gene: str) -> list[dict[str, str]]:
     with IMGT_TABLE_PATH.open() as table_file:
-        rows = [row for row in csv.DictReader(table_file, delimiter="\t") if row["gene"] == gene]
+        return [row for row in csv.DictReader(table_file, delimiter="\t") if row["gene"] == gene]
 
+
+def kabat_insertion_position(kabat: str) -> str:
+    # lettered Kabat positions are insertions, numbered like other insertions: 107A - 107.1, 241AA - 241.27
+    number = kabat.rstrip(ascii_uppercase)
+    letters = kabat[len(number) :]
+    if not letters:
+        return kabat
+    return f"{number}.{ascii_uppercase.index(letters[0]) + 1 + 26 * (len(letters) - 1)}"
+
+
+def imgt_table_positions(rows: list[dict[str, str]], c_scheme: CScheme) -> list[str]:
+    """Scheme positions of IMGT table residues in riot notation."""
     match c_scheme:
-        case CScheme.EU:
-            return {row["eu"]: row["residue"] for row in rows if row["eu"] != "-"}
-        case CScheme.KABAT:
-            # Kabat 107A is written as 107.1
-            return {row["kabat"].replace("A", ".1"): row["residue"] for row in rows}
         case CScheme.IMGT:
-            return {f"{row['region']}_{row['imgt_position']}": row["residue"] for row in rows}
+            return [f"{row['region']}_{row['imgt_position']}" for row in rows]
+        case CScheme.KABAT:
+            return [kabat_insertion_position(row["kabat"]) for row in rows]
+        case CScheme.EU:
+            # residues without EU position are insertions after the preceding position
+            positions: list[str] = []
+            last_position, insertions = "", 0
+            for row in rows:
+                if row["eu"] == "-":
+                    insertions += 1
+                    positions.append(f"{last_position}.{insertions}")
+                else:
+                    last_position, insertions = row["eu"], 0
+                    positions.append(row["eu"])
+            return positions
 
 
 @pytest.mark.parametrize("c_scheme", list(CScheme))
-def test_ighg1_numbering_follows_imgt_table(riot_aa: RiotNumberingAA, c_scheme: CScheme):
-    query = VH + secreted_ighg("IGHG1")
+@pytest.mark.parametrize("gene, v_domain", [("IGHG1", VH), ("IGKC", VK), ("IGLC1", VL)])
+def test_canonical_c_sequences_follow_imgt_tables(
+    riot_aa: RiotNumberingAA, gene: str, v_domain: str, c_scheme: CScheme
+):
+    """
+    Number sequences of IMGT tables of correspondence between C numberings (Hu_IGHGnber, Hu_IGKCnber,
+    Hu_IGLCnber), every residue has to get its table position.
+    """
+    rows = imgt_table_rows(gene)
+    canonical_sequence = "".join(row["residue"] for row in rows)
+    query = v_domain + canonical_sequence
     airr = riot_aa.run_on_sequence("", query, Scheme.KABAT, c_scheme=c_scheme)
-
-    assert airr.c_call == "IGHG1"
-    assert airr.c_numbering_scheme == c_scheme.value
-    # germline is membrane-bound, so CHS (EU 446-447) is not aligned
-    assert airr.c_scheme_residue_mapping == dict(list(imgt_table_numbering("IGHG1", c_scheme).items())[:-2])
-    assert_positional_mapping_consistent(query, airr)
-    # V numbering is not affected
-    assert airr.numbering_scheme == Scheme.KABAT.value
-    assert airr.scheme_residue_mapping and "113" in airr.scheme_residue_mapping
-
-
-@pytest.mark.parametrize("c_scheme", list(CScheme))
-@pytest.mark.parametrize(
-    "gene, query", [("IGKC", VK + C_GERMLINES_AA["IGKC"]), ("IGLC1", VL + C_GERMLINES_AA["IGLC1"])]
-)
-def test_light_chain_numbering_follows_imgt_table(riot_aa: RiotNumberingAA, gene: str, query: str, c_scheme: CScheme):
-    airr = riot_aa.run_on_sequence("", query, Scheme.KABAT, c_scheme=c_scheme)
-    expected = imgt_table_numbering(gene, c_scheme)
 
     assert airr.c_call == gene
-    if not expected:
+    if c_scheme == CScheme.EU and gene == "IGLC1":
         # EU numbering is not defined for lambda chains
         assert airr.c_numbering_scheme is None
         assert airr.c_scheme_residue_mapping is None
         return
 
+    expected = list(zip(imgt_table_positions(rows, c_scheme), canonical_sequence))
+    if gene == "IGHG1":
+        # germline is membrane-bound, so CHS (EU 446-447) is not aligned
+        expected = expected[:-2]
+
     assert airr.c_numbering_scheme == c_scheme.value
-    assert airr.c_scheme_residue_mapping == expected
+    assert airr.c_scheme_residue_mapping and list(airr.c_scheme_residue_mapping.items()) == expected
     assert_positional_mapping_consistent(query, airr)
-    # Kabat numbering continues the variable domain one
-    assert airr.scheme_residue_mapping and list(airr.scheme_residue_mapping)[-1] == "107"
+    # V numbering is not affected
+    assert airr.numbering_scheme == Scheme.KABAT.value
+    assert airr.scheme_residue_mapping and list(airr.scheme_residue_mapping)[-1] in ("113", "107")
+
+
+@pytest.mark.parametrize("c_scheme", list(CScheme))
+@pytest.mark.parametrize("gene", ["IGHG2", "IGHG3", "IGHG4"])
+def test_ighg_hinges_follow_imgt_tables(riot_aa: RiotNumberingAA, gene: str, c_scheme: CScheme):
+    # IMGT tables give positions of IGHG2-4 hinges only, they follow CH1 of 98 residues
+    rows = imgt_table_rows(gene)
+    query = VH + secreted_ighg(gene)
+    airr = riot_aa.run_on_sequence("", query, c_scheme=c_scheme)
+
+    assert airr.c_call == gene
+    assert airr.c_scheme_residue_mapping
+    hinge = list(airr.c_scheme_residue_mapping.items())[98 : 98 + len(rows)]
+    assert hinge == list(zip(imgt_table_positions(rows, c_scheme), (row["residue"] for row in rows)))
 
 
 @pytest.mark.parametrize("gene", LIGHT_GENES[2:])
@@ -129,7 +162,7 @@ def test_lambda_numbering(riot_aa: RiotNumberingAA, gene: str):
         assert airr.c_call == gene
         assert airr.c_scheme_residue_mapping
         assert list(airr.c_scheme_residue_mapping.values()) == list(C_GERMLINES_AA[gene])
-        assert list(airr.c_scheme_residue_mapping) == list(imgt_table_numbering("IGLC1", c_scheme))
+        assert list(airr.c_scheme_residue_mapping) == imgt_table_positions(imgt_table_rows("IGLC1"), c_scheme)
 
 
 @pytest.mark.parametrize(
@@ -143,7 +176,13 @@ def test_lambda_numbering(riot_aa: RiotNumberingAA, gene: str):
             ["221", "236"],
         ),
         ("IGHG2", CScheme.KABAT, {"246": "P", "247": "V", "248": "A", "250": "G"}, ["249"]),
-        ("IGHG2", CScheme.IMGT, {"H_12": "P", "CH2_1.5": "P", "CH2_1.3": "P", "CH2_1.1": "A"}, ["CH2_1.4", "H_13"]),
+        # insertions before CH2 position 1 are numbered towards it
+        (
+            "IGHG2",
+            CScheme.IMGT,
+            {"H_12": "P", "CH2_1.5": "A", "CH2_1.4": "P", "CH2_1.3": "P", "CH2_1.2": "V", "CH2_1.1": "A"},
+            ["CH2_1.6", "H_13"],
+        ),
         # IGHG3 hinge has 47 residues without EU positions
         (
             "IGHG3",
@@ -310,6 +349,34 @@ def test_c_scheme_mappings(c_scheme: CScheme):
         assert facade.get_mapping(Organism.MUS_MUSCULUS, gene) == mapping
 
     assert facade.get_mapping(Organism.HOMO_SAPIENS, "IGHM") is None
+
+
+@pytest.mark.parametrize(
+    "c_scheme, gene, mapping_start",
+    [
+        # residues on IMGT positions with a dot are insertions: CH1 1.4-1.1, CL 1.5-1.1 of lambda
+        (CScheme.IMGT, "IGHG1", "IIIIMMMMMMMMMMMMMMM"),
+        (CScheme.IMGT, "IGKC", "IIIIMMMMMMMMMMMMMMM"),
+        (CScheme.IMGT, "IGLC2", "IIIIIMMMMMMMMMMMMMM"),
+        # lambda C starts with Kabat 107A, an insertion after missing 107
+        (CScheme.KABAT, "IGLC2", "DIMMMMMMMMMMMMMMMMM"),
+        (CScheme.KABAT, "IGKC", "DMMMMMMMMMMMMMMMMMM"),
+        (CScheme.EU, "IGKC", "MMMMMMMMMMMMMMMMMMM"),
+    ],
+)
+def test_c_scheme_mapping_operations(c_scheme: CScheme, gene: str, mapping_start: str):
+    mapping = CSchemeMappingFacade(c_scheme).get_mapping(Organism.HOMO_SAPIENS, gene)
+    assert mapping and mapping.startswith(mapping_start)
+
+
+def test_imgt_c_scheme_mapping_insertions():
+    mapping = CSchemeMappingFacade(CScheme.IMGT).get_mapping(Organism.HOMO_SAPIENS, "IGHG1")
+    assert mapping
+    # CH1: 1.4-1.1, 45.1-45.3, 84.1-84.4 and 85.4-85.1; CH2: 1.6-1.1, 15.1-15.2, 45.1-45.4, 84.1-84.4 and 85.4-85.1;
+    # CH3: 1.4-1.1, 45.1-45.4, 84.1-84.4 and 85.4-85.1
+    assert mapping.count("I") == 15 + 20 + 16
+    # residues before CH2 position 1 follow missing positions of IGHG3 hinge exons
+    assert "M" + 62 * "D" + 6 * "I" + "M" in mapping
 
 
 def test_c_numbering_csv_output(riot_aa: RiotNumberingAA, tmp_path: Path):

@@ -195,13 +195,17 @@ airr_result.c_scheme_residue_mapping  # {"118": "A", "119": "S", ..., "297": "N"
 Numbering follows the IMGT correspondence between C numberings
 (https://www.imgt.org/IMGTScientificChart/Numbering/Hu_IGHGnber.html,
 https://www.imgt.org/IMGTScientificChart/Numbering/Hu_IGKCnber.html and
-https://www.imgt.org/IMGTScientificChart/Numbering/Hu_IGLCnber.html, lambda genes other than IGLC1 take IGLC1
-positions). In EU and Kabat, IGHG2 lacks G236
-(EU), and IGHG3 hinge residues without positions are insertions (EU 218.1-218.2 and 228.1-228.45,
-Kabat 241.1-241.45, which are 241A-241SS in Kabat's notation). Query insertions relative to the germline take unused scheme
-positions next to them if there are any, otherwise they are numbered like `297.1`. C germlines in the
-database are membrane-bound forms, so C-terminal G446 and K447 of secreted chains are not numbered. Scheme mappings
-are generated with `notebooks/data_processing/c_scheme_mappings.py`.
+https://www.imgt.org/IMGTScientificChart/Numbering/Hu_IGLCnber.html). The tables number one gene of each isotype, so
+CH domains of IGHG2-4 take IGHG1 positions and IGLC2-7 take IGLC1 positions. IMGT positions with a dot are
+insertions: 1.x precede position 1 and are numbered towards it, insertions between 84 and 85 are split into 84.x
+and 85.x (the odd one goes to 84), the others follow their position. Lettered Kabat positions (107A, 241A-241SS)
+are insertions too and are written like other insertions (107.1, 241.1-241.45). In EU and Kabat, IGHG2 lacks G236
+(EU), and IGHG3 hinge residues without EU positions are insertions (218.1-218.2 and 228.1-228.45). In IMGT, the
+residues of IGHG2 before CH2 position 1 are numbered 1.5-1.1 (IMGT protein display places the missing one at 1.4).
+A query residue inserted relative to the germline takes an unused scheme position next to it if there is one,
+otherwise it is numbered as an insertion, e.g. `297.1`. C germlines in the database are membrane-bound forms, so
+C-terminal G446 and K447 of secreted chains are not numbered. Scheme mappings are generated with
+`python -m notebooks.data_processing.c_scheme_mappings`.
 
 ### Caching
 We provide two cached wrappers for `create_riot_nt()` and `crate_riot_aa()` functions - `get_or_create_riot_nt()` | `get_or_create_riot_aa()`. They can be used exactly the same way as base functions:

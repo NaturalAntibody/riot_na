@@ -24,7 +24,6 @@ from riot_na.data.model import (
     Organism,
     Scheme,
 )
-from riot_na.data.scheme_definitions import get_c_scheme_positions
 from riot_na.schemes.region_offsets import (
     infer_aa_region_offsets,
     infer_nt_region_offsets,
@@ -35,6 +34,7 @@ from riot_na.schemes.scheme_alignment import (
     fix_imgt_cdrs_numbering,
     get_positional_scheme_mapping,
     get_scheme_residue_mapping,
+    produce_c_numbering,
     produce_numbering,
     sort_imgt_numbering,
 )
@@ -52,10 +52,9 @@ def number_c_region(
         return None
 
     assert aa_alignments.c
-    c_scheme_positions = get_c_scheme_positions(c_scheme, ChainType.from_locus(aa_alignments.c.locus))
+    chain_type = ChainType.from_locus(aa_alignments.c.locus)
 
-    c_numbering = produce_numbering(query, c_sch_alignment.alignment_str, c_sch_alignment.q_start)
-    c_scheme_residue_mapping = get_scheme_residue_mapping(c_numbering, c_scheme_positions)
+    c_scheme_residue_mapping = produce_c_numbering(query, c_sch_alignment, c_scheme, chain_type)
     if not c_scheme_residue_mapping:
         return None
 

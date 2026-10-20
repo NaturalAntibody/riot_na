@@ -17,7 +17,11 @@ from riot_na.data.model import (
     Scheme,
     SchemeAlignment,
 )
-from riot_na.data.scheme_definitions import get_legal_positions
+from riot_na.data.scheme_definitions import (
+    IMGT_C_DOMAINS,
+    get_c_scheme_positions,
+    get_legal_positions,
+)
 from riot_na.data.scheme_mapping_facade import CSchemeMappingFacade, SchemeMappingFacade
 from riot_na.schemes.collapse_alignment import collapse_alignment_str, collapse_ins_del
 from riot_na.schemes.smooth_alignment import smooth_cdr_junctions
@@ -373,8 +377,9 @@ def c_scheme_alignment(
     c_query_gene_alignment_str = AlignmentString(c_alignment.t_start * "N" + c_query_gene_alignment_str)
     c_query_gene_alignment_str = clip_to_gene_scheme_alignment(c_query_gene_alignment_str, c_gene_scheme_alignment_str)
 
+    # germline insertions next to germline deletions (e.g. Kabat 107A of lambda C after missing 107) are kept,
+    # so unlike V the alignment is not collapsed
     c_query_scheme_alignment_str = _merge_cigars(c_query_gene_alignment_str, c_gene_scheme_alignment_str)
-    collapsed_c_query_scheme_alignment_str = collapse_alignment_str(c_query_scheme_alignment_str, ordered=True)
 
     q_start = query_offset + c_alignment.q_start
     q_end = q_start + c_query_gene_alignment_str.count("M") + c_query_gene_alignment_str.count("I")
@@ -383,8 +388,67 @@ def c_scheme_alignment(
         target_id=c_scheme.value,
         q_start=q_start,
         q_end=q_end,
-        alignment_str=collapsed_c_query_scheme_alignment_str,
+        alignment_str=c_query_scheme_alignment_str,
     )
+
+
+def _move_insertions_to_next_position(
+    numbering: IntermediateNumbering, scheme_id: int, keep: int = 0
+) -> IntermediateNumbering:
+    # insertions preceding the next position are numbered towards it, the last one is .1
+    residues = numbering.get(scheme_id, [])
+    moved = [residue for residue in residues if residue[1]][keep:]
+    if not moved:
+        return numbering
+
+    remaining = residues[: len(residues) - len(moved)]
+    if remaining:
+        numbering[scheme_id] = remaining
+    else:
+        del numbering[scheme_id]
+
+    numbering[scheme_id + 1] = [(residue, len(moved) - i) for i, (residue, _) in enumerate(moved)] + numbering.get(
+        scheme_id + 1, []
+    )
+    return numbering
+
+
+def fix_imgt_c_numbering(numbering: IntermediateNumbering, scheme_positions: Sequence[str]) -> IntermediateNumbering:
+    """
+    produce_numbering attaches insertions to the preceding scheme position. In IMGT C-DOMAIN numbering insertions
+    before position 1 (1.x) belong to it, and insertions between 84 and 85 are split: 84.x follow 84, 85.x
+    precede 85, the odd one goes to 84 (IGKC 84.1-84.5, 85.4-85.1).
+    """
+    scheme_ids = {position: i + 1 for i, position in enumerate(scheme_positions)}
+
+    for domain in IMGT_C_DOMAINS:
+        if f"{domain}_1" not in scheme_ids:
+            continue
+
+        numbering = _move_insertions_to_next_position(numbering, scheme_ids[f"{domain}_1"] - 1)
+
+        position_84 = scheme_ids[f"{domain}_84"]
+        de_turn_insertions = len([residue for residue in numbering.get(position_84, []) if residue[1]])
+        numbering = _move_insertions_to_next_position(
+            numbering, position_84, keep=de_turn_insertions - de_turn_insertions // 2
+        )
+
+    return dict(sorted(numbering.items()))
+
+
+def produce_c_numbering(
+    query: str, c_sch_alignment: SchemeAlignment, c_scheme: CScheme, chain_type: ChainType
+) -> dict[str, str]:
+    """
+    Scheme residue mapping of query C region aligned to the C scheme.
+    """
+    c_scheme_positions = get_c_scheme_positions(c_scheme, chain_type)
+
+    c_numbering = produce_numbering(query, c_sch_alignment.alignment_str, c_sch_alignment.q_start)
+    if c_scheme == CScheme.IMGT:
+        c_numbering = fix_imgt_c_numbering(c_numbering, c_scheme_positions)
+
+    return get_scheme_residue_mapping(c_numbering, c_scheme_positions)
 
 
 def get_scheme_residue_mapping(

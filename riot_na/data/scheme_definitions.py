@@ -23,37 +23,33 @@ MARTIN_INDEL_POSITIONS_LIGHT: Final[list[int]] = [30, 52, 95]
 
 
 # Constant region scheme positions, in sequence order. The C scheme mappings of germlines
-# (scheme_mappings/<species>/<c_scheme>/c_scheme_mapping.csv) are cigars over these positions.
+# (scheme_mappings/<species>/<c_scheme>/c_scheme_mapping.csv) are cigars over these positions: a residue on a position
+# is a match, a missing position is a deletion and a residue between positions is an insertion.
 EU_C_POSITIONS_HEAVY: Final[tuple[str, ...]] = tuple(str(position) for position in range(118, 448))
 # EU numbering is defined for kappa light chains only
 EU_C_POSITIONS_LIGHT: Final[tuple[str, ...]] = tuple(str(position) for position in range(108, 215))
 KABAT_C_POSITIONS_HEAVY: Final[tuple[str, ...]] = tuple(str(position) for position in range(114, 479))
-# lambda C starts at Kabat 107A, written as 107.1 like other insertions
-KABAT_C_POSITIONS_LIGHT: Final[tuple[str, ...]] = ("107.1", *(str(position) for position in range(108, 217)))
+# lambda C starts with an insertion after 107 (Kabat 107A), so 107 is the first position
+KABAT_C_POSITIONS_LIGHT: Final[tuple[str, ...]] = tuple(str(position) for position in range(107, 217))
 
-# IMGT unique numbering for C-DOMAIN, positions 129 and 130 are used by CHS of CH3
+# IMGT unique numbering for C-DOMAIN. Positions with a dot (1.8-1.1, 15.1-15.3, 45.1-45.7, 84.1-84.7, 85.7-85.1,
+# 96.1-96.2) are insertions: 1.x precede position 1, 85.x precede 85, the others follow their position.
 IMGT_C_DOMAIN_POSITIONS: Final[tuple[str, ...]] = (
-    *(f"1.{i}" for i in range(8, 0, -1)),
-    *(str(i) for i in range(1, 16)),
-    *(f"15.{i}" for i in range(1, 4)),
-    *(str(i) for i in range(16, 32)),
+    *(str(i) for i in range(1, 32)),
     *(str(i) for i in range(34, 46)),
-    *(f"45.{i}" for i in range(1, 8)),
-    *(str(i) for i in range(77, 85)),
-    *(f"84.{i}" for i in range(1, 8)),
-    *(f"85.{i}" for i in range(7, 0, -1)),
-    *(str(i) for i in range(85, 97)),
-    "96.1",
-    "96.2",
-    *(str(i) for i in range(97, 131)),
+    *(str(i) for i in range(77, 129)),
 )
-# hinge positions are IMGT exon numbering; IGHG3 hinge is encoded by 4 exons (H1-H4), other IGHG by one (H)
+IMGT_C_DOMAINS: Final[tuple[str, ...]] = ("CH1", "CH2", "CH3", "CL")
+# hinge positions are IMGT exon numbering; IGHG3 hinge is encoded by 4 exons (H1-H4), other IGHG by one (H);
+# positions 129 and 130 of CH3 are CHS
 IMGT_C_POSITIONS_HEAVY: Final[tuple[str, ...]] = (
     *(f"CH1_{position}" for position in IMGT_C_DOMAIN_POSITIONS),
     *(f"H_{i}" for i in range(1, 16)),
     *(f"H{exon}_{i}" for exon, exon_length in ((1, 17), (2, 15), (3, 15), (4, 15)) for i in range(1, exon_length + 1)),
     *(f"CH2_{position}" for position in IMGT_C_DOMAIN_POSITIONS),
     *(f"CH3_{position}" for position in IMGT_C_DOMAIN_POSITIONS),
+    "CH3_129",
+    "CH3_130",
 )
 IMGT_C_POSITIONS_LIGHT: Final[tuple[str, ...]] = tuple(f"CL_{position}" for position in IMGT_C_DOMAIN_POSITIONS)
 
