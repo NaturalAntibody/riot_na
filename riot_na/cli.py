@@ -105,7 +105,6 @@ def run_riot(  # pylint: disable=too-many-arguments
             raise click.UsageError("--v-gene and --j-gene cannot be used with --multiple-domains.")
 
     species_list = (species,) if species else None
-    gene_species = species or Organism.HOMO_SAPIENS
     if input_file and input_file.exists():
         if not output_file:
             output_file = Path() / "numbering_result.csv"
@@ -151,7 +150,6 @@ def run_riot(  # pylint: disable=too-many-arguments
                     return_all_domains=multiple_domains,
                     v_gene=v_gene,
                     j_gene=j_gene,
-                    species=gene_species,
                 )
 
         if output_file:

@@ -243,7 +243,6 @@ class RiotNumberingAA:
         *,
         v_gene: Optional[str] = ...,
         j_gene: Optional[str] = ...,
-        species: Organism = ...,
     ) -> AirrRearrangementEntryAA: ...
 
     @overload
@@ -257,7 +256,6 @@ class RiotNumberingAA:
         *,
         v_gene: Optional[str] = ...,
         j_gene: Optional[str] = ...,
-        species: Organism = ...,
     ) -> list[AirrRearrangementEntryAA]: ...
 
     @overload
@@ -271,7 +269,6 @@ class RiotNumberingAA:
         *,
         v_gene: Optional[str] = ...,
         j_gene: Optional[str] = ...,
-        species: Organism = ...,
     ) -> AirrRearrangementEntryAA: ...
 
     @overload
@@ -285,7 +282,6 @@ class RiotNumberingAA:
         *,
         v_gene: Optional[str] = ...,
         j_gene: Optional[str] = ...,
-        species: Organism = ...,
     ) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]: ...
 
     def run_on_sequence(
@@ -297,7 +293,6 @@ class RiotNumberingAA:
         return_all_domains: bool = False,
         v_gene: Optional[str] = None,
         j_gene: Optional[str] = None,
-        species: Organism = Organism.HOMO_SAPIENS,
     ) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]:  # pylint: disable=too-many-statements
         """
         Align and number amino acid sequence.
@@ -315,9 +310,8 @@ class RiotNumberingAA:
         - return_all_domains: If True, return all domains of multiple domain proteins.
         - v_gene, j_gene : Align to these exact germlines (e.g. IGHV3-7*01, IGHJ4*02) instead of
         searching the germline database. Both have to be given together. Gene databases are not
-        prefiltered then, but alignment thresholds still apply.
-        - species : Species of the selected germlines (default human). Used only together with
-        v_gene and j_gene.
+        prefiltered then, but alignment thresholds still apply. Germlines are looked up in the species
+        the numbering was created for, human germlines first.
 
         Returns:
         -----------
@@ -337,7 +331,7 @@ class RiotNumberingAA:
         # produce alignments for v,j,c
         if v_gene and j_gene:
             alignments = self.vjc_aligner_aa.produce_aa_alignments_for_genes(
-                query_sequence, v_gene=v_gene, j_gene=j_gene, species=species
+                query_sequence, v_gene=v_gene, j_gene=j_gene
             )
         else:
             alignments = self.vjc_aligner_aa.produce_aa_alignments(query_sequence)

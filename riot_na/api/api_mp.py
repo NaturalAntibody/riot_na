@@ -22,11 +22,6 @@ from riot_na.data.model import (
 )
 
 
-def gene_species(allowed_species: Optional[tuple[Organism, ...]]) -> Organism:
-    """Species the selected germline names are looked up in."""
-    return allowed_species[0] if allowed_species else Organism.HOMO_SAPIENS
-
-
 class _WorkerNT:
     def __init__(
         self,
@@ -77,7 +72,6 @@ class _WorkerAA:
         self.return_all_domains = return_all_domains
         self.v_gene = v_gene
         self.j_gene = j_gene
-        self.species = gene_species(allowed_species)
 
     def __call__(self, fasta_record: FastaRecord) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]:
         try:
@@ -89,7 +83,6 @@ class _WorkerAA:
                 return_all_domains=self.return_all_domains,
                 v_gene=self.v_gene,
                 j_gene=self.j_gene,
-                species=self.species,
             )
         except Exception as exc:
             print(fasta_record.description)
@@ -145,9 +138,7 @@ def run_on_file_mp(  # pylint: disable=too-many-arguments
         # Validate germline names here, in the parent process. An exception raised in a pool
         # initializer makes multiprocessing respawn workers indefinitely instead of failing.
         assert input_type == InputType.AA, "Selecting germlines by name is supported only for amino acid sequences"
-        create_vjc_aligner_aa(allowed_species=allowed_species, db_dir=db_dir).assert_genes_exist(
-            v_gene, j_gene, gene_species(allowed_species)
-        )
+        create_vjc_aligner_aa(allowed_species=allowed_species, db_dir=db_dir).assert_genes_exist(v_gene, j_gene)
 
     with mp.Pool(
         processes=n_processes,

@@ -4,17 +4,22 @@ import pytest
 
 from riot_na.alignment.aa_gene_alignments import create_vjc_aligner_aa
 from riot_na.alignment.gene_aligner import (
+    GeneAlignerAA,
     create_aa_j_gene_aligner,
     create_aa_v_gene_aligner,
+    get_aa_aligner_params,
 )
 from riot_na.api import api_mp
 from riot_na.api.riot_numbering import create_riot_aa
 from riot_na.config import GENE_DB_DIR
-from riot_na.data.model import InputType, Locus, Organism, Scheme
+from riot_na.data.model import GeneAA, GermlineGene, InputType, Locus, Organism, Scheme
 
 AA_GENES_DIR = GENE_DB_DIR / "gene_db" / "aa_genes_deduplicated"
 
 HEAVY_QUERY = "EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMSWVRQAPGKGLEWVSAISGSGGSTYYADSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYCAKDRGYTYGNFDHWGQGTLVTVSS"
+# germlines found by the database search for HEAVY_QUERY limited to mouse
+MOUSE_V_GENE = "IGHV-SJLD"
+MOUSE_J_GENE = "IGHJ-O6GC"
 KAPPA_QUERY = (
     "DIQMTQSPSSLSASVGDRVTITCRASQSISSYLNWYQQKPGKAPKLLIYAASSLQSGVPSRFSGSGSGTDFTLTISSLQPEDFATYYCQQSYSTPLTFGGGTKVEIK"
 )
@@ -120,7 +125,7 @@ def test_light_chain_genes(riot_aa):
 @pytest.mark.parametrize("gene_name", IRREGULAR_GENE_NAMES)
 def test_irregular_gene_names_are_resolved(v_aligner, gene_name):
     # when
-    gene = v_aligner.get_gene(Organism.HOMO_SAPIENS, gene_name)
+    gene = v_aligner.get_gene(gene_name)
 
     # then
     assert gene.name == gene_name
@@ -134,7 +139,7 @@ def test_every_human_v_gene_is_selectable_by_name(v_aligner):
 
     # then
     for gene in genes:
-        assert v_aligner.get_gene(Organism.HOMO_SAPIENS, gene.name) is gene
+        assert v_aligner.get_gene(gene.name) is gene
 
 
 @pytest.mark.parametrize("locus", list(Locus))
@@ -147,7 +152,7 @@ def test_every_human_j_gene_is_selectable_by_name(locus):
 
     # then
     for gene in genes:
-        assert j_aligner.get_gene(Organism.HOMO_SAPIENS, gene.name) is gene
+        assert j_aligner.get_gene(gene.name) is gene
 
 
 def test_unknown_v_gene_is_rejected(riot_aa):
@@ -166,16 +171,34 @@ def test_j_gene_from_other_locus_is_rejected(riot_aa):
         riot_aa.run_on_sequence("header", HEAVY_QUERY, Scheme.IMGT, v_gene="IGHV3-23*01", j_gene="IGKJ1*01")
 
 
-def test_gene_of_other_species_is_rejected(riot_aa):
-    with pytest.raises(AssertionError, match="not found in mouse"):
-        riot_aa.run_on_sequence(
-            "header",
-            HEAVY_QUERY,
-            Scheme.IMGT,
-            v_gene="IGHV3-23*01",
-            j_gene="IGHJ4*02",
-            species=Organism.MUS_MUSCULUS,
-        )
+def test_gene_of_species_not_allowed_is_rejected(riot_aa):
+    # germlines are looked up only in the species the numbering was created for
+    with pytest.raises(AssertionError, match="IGHV-SJLD not found"):
+        riot_aa.run_on_sequence("header", HEAVY_QUERY, Scheme.IMGT, v_gene=MOUSE_V_GENE, j_gene="IGHJ4*02")
+
+
+def test_genes_are_selected_from_all_allowed_species():
+    # given
+    riot = create_riot_aa(allowed_species=(Organism.MUS_MUSCULUS, Organism.HOMO_SAPIENS))
+
+    # when
+    human = riot.run_on_sequence("header", HEAVY_QUERY, Scheme.IMGT, v_gene="IGHV3-23*01", j_gene="IGHJ4*02")
+    mouse = riot.run_on_sequence("header", HEAVY_QUERY, Scheme.IMGT, v_gene=MOUSE_V_GENE, j_gene=MOUSE_J_GENE)
+
+    # then
+    assert (human.v_call, human.j_call, human.locus_species) == ("IGHV3-23*01", "IGHJ4*02", "human")
+    assert (mouse.v_call, mouse.j_call, mouse.locus_species) == (MOUSE_V_GENE, MOUSE_J_GENE, "mouse")
+
+
+def test_human_gene_is_selected_if_more_species_have_a_gene_of_the_name():
+    # given
+    human_gene = GeneAA(name="IGHV3-23*01", species=Organism.HOMO_SAPIENS, locus=Locus.IGH, sequence=HEAVY_QUERY[:98])
+    mouse_gene = GeneAA(name="IGHV3-23*01", species=Organism.MUS_MUSCULUS, locus=Locus.IGH, sequence=HEAVY_QUERY[:97])
+    v_aligner = GeneAlignerAA([mouse_gene, human_gene], **get_aa_aligner_params(GermlineGene.V))
+
+    # then
+    assert v_aligner.get_gene("IGHV3-23*01") is human_gene
+    assert v_aligner.align_to_genes(HEAVY_QUERY, ["IGHV3-23*01"])[0].species == Organism.HOMO_SAPIENS
 
 
 def test_both_genes_are_required(riot_aa):

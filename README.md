@@ -158,9 +158,9 @@ airr_result: AirrRearrangementEntryAA = riot_aa.run_on_sequence(
                 )
 ```
 
-Germline names are matched exactly, against the database the aligner was built with, and unknown
-names are rejected. Germlines of other species can be used by passing `species` together with
-`v_gene` and `j_gene` (human by default).
+Germline names are matched exactly, against the germlines of `allowed_species` the numbering was
+created with, and unknown names are rejected. If more species have a germline of the same name,
+the human one is used.
 
 ### Caching
 We provide two cached wrappers for `create_riot_nt()` and `crate_riot_aa()` functions - `get_or_create_riot_nt()` | `get_or_create_riot_aa()`. They can be used exactly the same way as base functions:

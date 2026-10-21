@@ -10,7 +10,7 @@ from riot_na.alignment.skbio_alignment import (
 )
 from riot_na.alignment.skbio_alignment import align
 from riot_na.common.fasta import FastaRecord, parse_fasta
-from riot_na.common.gene_match_utils import create_gene_lookup
+from riot_na.common.gene_match_utils import create_gene_lookup, gene_lookup_key
 from riot_na.common.multi_species_prefiltering import MultiSpeciesPrefiltering
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.constants import BLOSUM_62
@@ -25,6 +25,12 @@ from riot_na.data.model import (
     Organism,
     SpeciesGeneMatch,
     SpeciesPrefilteringResult,
+)
+
+# germlines selected by name are looked up in human germlines first, if more species have germlines of the same name
+GENE_SELECTION_SPECIES_ORDER = (
+    Organism.HOMO_SAPIENS,
+    *(species for species in Organism if species != Organism.HOMO_SAPIENS),
 )
 
 ALIGNER_PARAMS = {"match_score": 1, "mismatch_score": -1, "gap_open_penalty": 4, "gap_extend_penalty": 1}
@@ -150,17 +156,27 @@ class GeneAlignerAA:
         self.prefiltering = MultiSpeciesPrefiltering(genes, kmer_size, distance_threshold, top_n, modulo_n)
 
         self.gene_lookup = create_gene_lookup(genes)
-        self.gene_by_species_name = {(gene.species, gene.name): gene for gene in genes}
         self.db_length = sum(len(gene.sequence) for gene in genes)
 
         self.e_value_threshold = e_value_threshold
         self.alignment_length_threshold = alignment_length_threshold
         self.max_cdr3_length = max_cdr3_length
 
-    def get_gene(self, species: Organism, gene_id: str) -> GeneAA:
-        """Look up a germline by its exact name, e.g. IGHV3-7*01."""
-        gene = self.gene_by_species_name.get((species, gene_id))
-        assert gene is not None, f"Gene {gene_id} not found in {species.value} germline database"
+    def find_gene(self, gene_id: str) -> Optional[Gene | GeneAA]:
+        """
+        Look up a germline by its exact name, e.g. IGHV3-7*01, in the species the aligner was created for.
+        Human germline is returned if more species have a germline of this name.
+        """
+        for species in GENE_SELECTION_SPECIES_ORDER:
+            for locus in Locus:
+                gene = self.gene_lookup.get(gene_lookup_key(species, locus, gene_id))
+                if gene is not None:
+                    return gene
+        return None
+
+    def get_gene(self, gene_id: str) -> Gene | GeneAA:
+        gene = self.find_gene(gene_id)
+        assert gene is not None, f"Gene {gene_id} not found in germline database"
         return gene
 
     def _prefilter(self, query: str) -> SpeciesPrefilteringResult:
@@ -223,7 +239,7 @@ class GeneAlignerAA:
         alignments = self._align_sequences(query, prefiltering_result)
         return [AlignmentSegment(alignments)]
 
-    def align_to_genes(self, query: str, species: Organism, gene_ids: Sequence[str]) -> Sequence[AlignmentEntryAA]:
+    def align_to_genes(self, query: str, gene_ids: Sequence[str]) -> Sequence[AlignmentEntryAA]:
         """
         Align query to explicitly selected germlines, skipping prefiltering.
 
@@ -233,10 +249,10 @@ class GeneAlignerAA:
         gene_matches = []
 
         for gene_id in gene_ids:
-            gene = self.get_gene(species, gene_id)
+            gene = self.get_gene(gene_id)
             gene_matches.append(
                 SpeciesGeneMatch(
-                    species_gene_id=f"{gene.species.value}|{gene.locus.value}|{gene.name}",
+                    species_gene_id=gene_lookup_key(gene.species, gene.locus, gene.name),
                     gene_id=gene.name,
                     rev_comp=False,
                     coverage=0,
