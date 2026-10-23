@@ -1,8 +1,9 @@
-from collections.abc import Iterator
+from collections.abc import Iterator, Sequence
 from dataclasses import replace
 from itertools import groupby
+from typing import Optional
 
-from riot_na.data.model import AlignmentEntry, AlignmentString, Cigar
+from riot_na.data.model import AlignmentEntry, AlignmentString, Cigar, Locus
 
 
 def get_cigar_op_groups(cigar: Cigar) -> Iterator[tuple[int, str]]:
@@ -59,6 +60,22 @@ def infer_reading_frame(t_start: int, t_frame: int) -> int:
 
 def offset_alignments(offset: int, aln: AlignmentEntry) -> AlignmentEntry:
     return replace(aln, q_start=aln.q_start + offset, q_end=aln.q_end + offset)
+
+
+def select_c_alignment(
+    c_alignments: Sequence[Optional[AlignmentEntry]], v_locus: Optional[Locus]
+) -> Optional[AlignmentEntry]:
+    """
+    Select the best of C alignments to C genes of different loci. C region can follow V region of another locus
+    in engineered antibodies (e.g. VL-CH1 in CrossMabs), so C genes of all loci are aligned.
+    Alignments are compared by score, as e-values depend on the size of the gene database of each locus.
+    C genes of the V locus win ties.
+    """
+    return max(
+        (alignment for alignment in c_alignments if alignment is not None),
+        key=lambda alignment: (alignment.alignment_score or 0, alignment.locus == v_locus),
+        default=None,
+    )
 
 
 def align_sequences(query: str, target: str, alignment: AlignmentString) -> tuple[str, str]:

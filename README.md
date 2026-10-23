@@ -295,6 +295,71 @@ For a pure Python solution (without the use of `cachetools` package) you can che
 ## Multidomains support
 RIOT's multidomains support allows detection and numbering of multiple immunoglobulin domains within a single protein sequence, such as therapeutic antibodies containing both heavy chain (VH) and light chain (VL) domains. When enabled with the --multiple-domains flag (or return_all_domains=True in the API), RIOT returns separate numbering results for each detected domain rather than just the best single match. The system automatically identifies domain boundaries, truncates sequences at the beginning of each V gene segment, and provides additional metadata including the original query sequence and segment start/end positions for each domain. This is particularly useful for analyzing therapeutic constructs like bispecific antibodies, CAR-T constructs, or other multi-domain fusion proteins where each immunoglobulin domain needs independent numbering and analysis.
 
+Each domain is reported with the constant region following it (up to the next domain). Constant regions are searched among C genes of all loci, so they are also assigned (and numbered with `c_scheme`) when they follow a variable domain of another locus, e.g. in VL-CH1 and VH-CL chains of CrossMabs or in scFv-Fc fusions, and when the J gene is not found. This applies to single domain mode as well. In the API, `return_all_domains=True` has to be passed both to `create_riot_aa` / `create_riot_nt` and to `run_on_sequence`.
+
+### Chain annotation
+
+`annotate_chain` (API only, requires numbering created with `return_all_domains=True`) returns all domains of a chain in sequence order: rearrangements (V domains, the same AIRR records as with `return_all_domains=True`) and constant domains (CH1, H - hinge, CH2, CH3, CL). Unlike the C fields of rearrangements, constant domains are searched for in all parts of the chain not covered by V domains, so it annotates:
+
+- constant regions without a preceding V domain, e.g. Fc chains of knobs-into-holes bispecifics or N-terminal Fc fusions,
+- repeated constant regions, e.g. two Fc regions of a single chain Fc,
+- hybrid constant regions, every domain is assigned its own gene (e.g. IgG2 CH1 and hinge with IgG4 CH2 and CH3),
+- constant domains of other species than the V domain, e.g. human Fc fused to an alpaca VHH.
+
+Every constant domain is numbered separately with `c_scheme` and assigned the rearrangement it follows (`rearrangement_index`, `None` if no V domain precedes it). C genes without domain definitions (e.g. IGHM, IGHA, alpaca C genes) are reported as a single `C` domain. Nucleotide chains are searched in all reading frames (and both strands, if the chain has no V domains), constant domain positions are nucleotide positions of the chain.
+
+```python
+from riot_na import create_riot_aa, CScheme
+
+riot_aa = create_riot_aa(return_all_domains=True)
+chain = riot_aa.annotate_chain(header="IgG-scFv", query_sequence=igg_scfv_heavy_chain, c_scheme=CScheme.EU)
+chain.layout  # "VH-CH1-H-CH2-CH3-[15]-VH-[20]-VK", [n] - n unannotated residues (nucleotides for nucleotide chains)
+chain.rearrangements  # AIRR records of the VH, VH and VK domains
+chain.constant_domains[2]  # ConstantDomain(domain="CH2", c_call="IGHG1", rearrangement_index=0, c_scheme_residue_mapping={"231": "A", ...}, ...)
+chain.domains  # V and constant domains in sequence order (ChainDomain)
+```
+
+### Molecule annotation
+
+`annotate_molecule` (API only, requires numbering created with `return_all_domains=True`) annotates all chains of a molecule (`annotate_chain`, with headers `molecule_id|chain_id`) and pairs their V domains into binding sites:
+
+- `scFv` - adjacent heavy and light V domains of a chain joined by a linker of at least 12 residues,
+- `diabody` - the same with a shorter linker, paired with V domains of another copy of the chain or, if two chains are each other's only candidates, of the other chain,
+- `Fab` - V domain followed by CH1 paired with V domain followed by CL, one of them heavy and the other light, so domain crossovers (CrossMab) are paired too. Constant regions of C genes without domain definitions (e.g. IGHM, IGHA) count as CH1 or CL. Fab arms of one chain pair only if joined by a linker of at least 20 residues (single chain Fab), and then only with each other. If there are as many CH1 as CL arms, every CL arm pairs with one CH1 arm (e.g. FIT-Ig), otherwise a light chain can pair with many heavy chains (common light chain),
+- `Fv` - V domains stacked in front of Fab V domains (e.g. outer V domains of DVD-Ig), paired by their position, and V domains paired by pairing hints only (e.g. V domain only chains),
+- `single domain` - other heavy V domains (e.g. VHH), other light V domains and V domains of Fab arms are `unpaired`.
+
+Pass every distinct chain once. V domains with more than one possible partner (e.g. Fab arms of bispecific antibodies with two different heavy and light chains) are `ambiguous`, their possible partners are listed as `candidates`.
+
+`pairs` are pairing hints: pairs of chains (chain ID) or V domains (chain ID and domain index) which pair. V domains given in pairs pair only with V domains they are given with, which resolves ambiguous Fab arms and diabodies. Light chain Fab arms (followed by CL) are the exception, they are not reserved by pairs, as a light chain can be shared by many heavy chains. V domains not paired by their format, e.g. chains of V domains only, are paired by hints as `Fv`.
+
+```python
+pairs = [("HC1", "LC1"), ("HC2", "LC2")]  # bispecific antibody with two different heavy and light chains
+pairs = [(("HC", 1), "LC1"), (("HC", 3), "LC2")]  # tandem Fab, VH-CH1-linker-VH-CH1-Fc heavy chain, two light chains
+pairs = [("VH", "VL")]  # Fv, chains of V domains only
+```
+
+```python
+from pathlib import Path
+from riot_na import create_riot_aa, CScheme
+from riot_na.common.io import write_binding_sites_csv, write_molecule_layout_csv, write_molecules_json
+
+riot_aa = create_riot_aa(return_all_domains=True)
+molecule = riot_aa.annotate_molecule(
+    molecule_id="bispecific",
+    chains={"HC1": heavy_chain_1, "HC2": heavy_chain_2, "LC1": light_chain_1, "LC2": light_chain_2},
+    c_scheme=CScheme.EU,
+    pairs=[("HC1", "LC1"), ("HC2", "LC2")],
+)
+molecule.binding_sites  # [BindingSite(binding_site_id=1, binding_site_type="Fab", heavy_domain=VDomainRef("HC1", 0), light_domain=VDomainRef("LC1", 0), ...), ...]
+
+write_molecule_layout_csv(Path("layout.csv"), [molecule])  # one row per domain of every chain, with binding sites of V domains
+write_binding_sites_csv(Path("binding_sites.csv"), [molecule])  # one row per binding site
+write_molecules_json(Path("molecules.json"), [molecule])  # all details, including AIRR records and constant domain numbering
+```
+
+V domains are referred to by chain and domain index (1-based position among all domains of the chain) in the CSV files. AIRR records of the chains have `sequence_header` `molecule_id|chain_id`.
+
 ## Germline database
 RIOT uses OGRDB as a primary source of germline alleles. Database version as of 22.01.2024 was used.
 C genes are imported from igblast FTP site fhttps://ftp.ncbi.nih.gov/blast/executables/igblast/release/database/ncbi_human_c_genes.tar
