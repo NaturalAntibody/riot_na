@@ -8,6 +8,7 @@ from ssw_aligner import StripedSmithWaterman
 
 from riot_na.alignment.alignment_utils import infer_reading_frame
 from riot_na.alignment.gene_aligner import (
+    GENE_SELECTION_SPECIES_ORDER,
     GeneAlignerAA,
     create_aa_c_gene_aligner,
     create_aa_j_gene_aligner,
@@ -68,6 +69,52 @@ class VJCAlignerAA:
                     e,
                 )
         return results
+
+    def produce_aa_alignments_for_genes(self, query: str, v_gene: str, j_gene: str) -> list[AlignmentsAA]:
+        """
+        Align query to the given V and J germlines, skipping prefiltering.
+
+        Germlines are given by their exact names, e.g. IGHV3-7*01 and IGHJ4*02, and looked up in the species
+        the aligner was created for, human first. The J germline is aligned to the part of the query left over
+        by the V alignment, so the J locus follows from the V germline. C genes are not assigned.
+        """
+        v_aligner = self._get_gene_selection_v_aligner()
+        result = AlignmentsAA()
+
+        v_aa_alignments = v_aligner.align_to_genes(query, [v_gene])
+        if not v_aa_alignments:
+            return [result]
+
+        v_aa_alignment = v_aa_alignments[0]
+        result.v = v_aa_alignment
+
+        query_j = v_aa_alignment.q_seq[v_aa_alignment.q_end :]
+        if query_j:
+            j_aligner = self._get_j_aligner(v_aa_alignment.locus, j_gene)
+            j_aa_alignments = j_aligner.align_to_genes(query_j, [j_gene])
+            if j_aa_alignments:
+                result.j = j_aa_alignments[0]
+
+        return [result]
+
+    def assert_genes_exist(self, v_gene: str, j_gene: str) -> None:
+        """Fail fast on unknown germline names, without aligning anything."""
+        v_germline = self._get_gene_selection_v_aligner().get_gene(v_gene)
+        self._get_j_aligner(v_germline.locus, j_gene)
+
+    def _get_gene_selection_v_aligner(self) -> GeneAlignerAA:
+        assert isinstance(
+            self.v_aligner, GeneAlignerAA
+        ), "Selecting germlines by name is not supported in multiple domains mode"
+        return self.v_aligner
+
+    def _get_j_aligner(self, locus: Locus, j_gene: str) -> GeneAlignerAA:
+        """J aligner of the locus with the given germline, human first."""
+        for species in GENE_SELECTION_SPECIES_ORDER:
+            j_aligner = self.j_aligners.get(species, {}).get(locus)
+            if j_aligner is not None and j_aligner.find_gene(j_gene) is not None:
+                return j_aligner
+        raise AssertionError(f"Gene {j_gene} not found in {locus.value} J germline database")
 
     def _produce_vjc_aa_alignment(self, v_aa_segment_alignment: AlignmentSegment) -> AlignmentsAA:
         result = AlignmentsAA()
