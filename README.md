@@ -81,6 +81,14 @@ Options:
                                   only amino acid sequences passed with -s option.
   --multiple-domains BOOLEAN      Return all domains of multiple domain
                                   proteins.
+  --v-gene TEXT                   Align to this exact V germline, e.g.
+                                  IGHV3-7*01, instead of searching the
+                                  germline database. Has to be used together
+                                  with --j-gene. Amino acid input only.
+  --j-gene TEXT                   Align to this exact J germline, e.g.
+                                  IGHJ4*02, instead of searching the germline
+                                  database. Has to be used together with
+                                  --v-gene. Amino acid input only.
   --help                          Show this message and exit.
 
 ```
@@ -97,6 +105,10 @@ riot_na -s <sequence> -o result.csv
 Run on fasta file:
 ```
 riot_na -f input.fasta -o results.csv
+```
+Align amino acid sequences to chosen germlines instead of searching the database:
+```
+riot_na -f input.fasta -o results.csv --input-type AA --v-gene "IGHV3-23*01" --j-gene "IGHJ4*02"
 ```
 ### API Nucleotides
 
@@ -124,6 +136,31 @@ airr_result: AirrRearrangementEntryAA = riot_aa.run_on_sequence(
                     extend_alignment = True
                 )
 ```
+
+### Selecting germlines by name
+
+Instead of searching the germline database, amino acid sequences can be aligned and numbered
+against chosen V and J germlines, given by their exact names. Prefiltering is skipped then,
+but the regular alignment thresholds still apply, so a germline that is a very poor match for
+the query may end up with no alignment at all. Both germlines have to be given together, C genes
+are not assigned, and this is not supported together with `return_all_domains`.
+
+```python
+from riot_na import create_riot_aa, Organism, Scheme, RiotNumberingAA, AirrRearrangementEntryAA
+
+riot_aa: RiotNumberingAA = create_riot_aa(allowed_species = (Organism.HOMO_SAPIENS,))
+airr_result: AirrRearrangementEntryAA = riot_aa.run_on_sequence(
+                    header = "my_sequence",
+                    query_sequence = "EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMSWVRQAPGKGLEWVSAISGSGGSTYYADSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYCAKDRGYTYGNFDHWGQGTLVTVSS",
+                    scheme = Scheme.IMGT,
+                    v_gene = "IGHV3-7*01",
+                    j_gene = "IGHJ4*02"
+                )
+```
+
+Germline names are matched exactly, against the germlines of `allowed_species` the numbering was
+created with, and unknown names are rejected. If more species have a germline of the same name,
+the human one is used.
 
 ### Caching
 We provide two cached wrappers for `create_riot_nt()` and `crate_riot_aa()` functions - `get_or_create_riot_nt()` | `get_or_create_riot_aa()`. They can be used exactly the same way as base functions:

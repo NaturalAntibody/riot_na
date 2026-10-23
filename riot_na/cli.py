@@ -65,7 +65,25 @@ from riot_na.data.model import (
     default=False,
     help=("Return all domains of multiple domain proteins."),
 )
-def run_riot(
+@click.option(
+    "--v-gene",
+    type=str,
+    default=None,
+    help=(
+        "Align to this exact V germline, e.g. IGHV3-7*01, instead of searching the germline database. "
+        "Has to be used together with --j-gene. Amino acid input only."
+    ),
+)
+@click.option(
+    "--j-gene",
+    type=str,
+    default=None,
+    help=(
+        "Align to this exact J germline, e.g. IGHJ4*02, instead of searching the germline database. "
+        "Has to be used together with --v-gene. Amino acid input only."
+    ),
+)
+def run_riot(  # pylint: disable=too-many-arguments
     input_file: Optional[Path],
     sequence: Optional[str],
     output_file: Optional[Path],
@@ -75,7 +93,17 @@ def run_riot(
     ncpu: int,
     extend_alignment: bool,
     multiple_domains: bool,
+    v_gene: Optional[str],
+    j_gene: Optional[str],
 ):
+    if v_gene or j_gene:
+        if not (v_gene and j_gene):
+            raise click.UsageError("Both --v-gene and --j-gene need to be specified.")
+        if input_type != InputType.AA:
+            raise click.UsageError("--v-gene and --j-gene are supported only for amino acid sequences.")
+        if multiple_domains:
+            raise click.UsageError("--v-gene and --j-gene cannot be used with --multiple-domains.")
+
     species_list = (species,) if species else None
     if input_file and input_file.exists():
         if not output_file:
@@ -91,6 +119,8 @@ def run_riot(
             n_processes=ncpu,
             input_type=input_type,
             return_all_domains=multiple_domains,
+            v_gene=v_gene,
+            j_gene=j_gene,
         )
         end = time.perf_counter()
         elapsed_time = end - start
@@ -118,6 +148,8 @@ def run_riot(
                     scheme=scheme,
                     extend_alignment=extend_alignment,
                     return_all_domains=multiple_domains,
+                    v_gene=v_gene,
+                    j_gene=j_gene,
                 )
 
         if output_file:
