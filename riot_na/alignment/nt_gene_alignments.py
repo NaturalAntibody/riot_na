@@ -2,11 +2,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from riot_na.alignment.alignment_utils import (
-    offset_alignments,
-    select_c_alignment,
-    v_domain_end,
-)
+from riot_na.alignment.alignment_utils import align_c, offset_alignments, v_domain_end
 from riot_na.alignment.gene_aligner import (
     GeneAligner,
     create_aligner,
@@ -91,12 +87,11 @@ class VDJCAlignerNT:
 
         if query_c:
             # align c
-            c_alignment = select_c_alignment(
-                [
-                    c_aligner.align(query_c, both_strains=False)[0].best_alignment
-                    for c_aligner in self.c_aligners[species].values()
-                ],
+            c_alignment = align_c(
+                self.c_aligners[species],
                 locus,
+                query_c,
+                lambda c_aligner: c_aligner.align(query_c, both_strains=False)[0].best_alignment,
             )
 
             if c_alignment is not None:

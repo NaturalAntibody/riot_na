@@ -6,11 +6,7 @@ from typing import Optional, Sequence
 
 from ssw_aligner import StripedSmithWaterman
 
-from riot_na.alignment.alignment_utils import (
-    infer_reading_frame,
-    select_c_alignment,
-    v_domain_end,
-)
+from riot_na.alignment.alignment_utils import align_c, infer_reading_frame, v_domain_end
 from riot_na.alignment.gene_aligner import (
     GENE_SELECTION_SPECIES_ORDER,
     GeneAlignerAA,
@@ -149,9 +145,11 @@ class VJCAlignerAA:
             ]
 
             if self.c_aligners and query_c:
-                result.c = select_c_alignment(
-                    [c_aligner.align(query_c)[0].best_alignment for c_aligner in self.c_aligners[species].values()],
+                result.c = align_c(
+                    self.c_aligners[species],
                     locus,
+                    query_c,
+                    lambda c_aligner: c_aligner.align(query_c)[0].best_alignment,
                 )
 
         return result
