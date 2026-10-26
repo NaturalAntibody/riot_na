@@ -2,7 +2,7 @@
 mod prefiltering_tests {
     use bio::alphabets::dna;
     use crate::prefiltering::Prefiltering;
-    use crate::model::KmerMatch;
+    use crate::model::{GeneMatch, KmerMatch, SegmentMatch};
     use std::collections::HashMap;
 
     #[test]
@@ -270,6 +270,93 @@ mod prefiltering_tests {
             assert!(segments_sorted[i].query_end <= segments_sorted[i + 1].query_start,
                    "Segments should not overlap");
         }
+    }
+
+    #[test]
+    fn test_segments_with_rev_comp_come_from_one_strand() {
+        let gene_seq = "GAAGTGCAGCTGGTGGAGTCTGGGGGAGGCTTGGTACAGCCTGGCAGGTCCCTGAGACTCTCCTGTGCAGCCTCTGGATTCACCTTTGATGATTATGCCATGCACTGGGTCCGGCAAGCTCCAGGGAAGGGCCTGGAGTGGGTCTCAGGTATTAGTTGGAATAGTGGTAGCATAGGCTATGCGGACTCTGTGAAGGGCCGATTCACCATCTCCAGAGACAACGCCAAGAACTCCCTGTATCTGCAAATGAACAGTCTGAGAGCTGAGGACACGGCCTTGTATTACTGTGCAAAAGATA";
+        let mut genes = HashMap::new();
+        genes.insert("GENE1".to_string(), gene_seq.to_string());
+
+        let prefiltering = Prefiltering::new(
+            genes,
+            9,  // kmer_size
+            13,  // distance_threshold
+            5,  // top_n
+            2,  // modulo_n
+            Some(60), // min_segment_length
+            None,
+        );
+
+        // full gene on the forward strand, followed by a shorter part of the gene on the reverse strand
+        let reverse_part = String::from_utf8(dna::revcomp(gene_seq[..120].as_bytes().to_vec())).unwrap();
+        let query = format!("{gene_seq}{reverse_part}");
+
+        let result = prefiltering.calculate_segment_matches_with_rev_comp(query.clone()).unwrap();
+        assert_eq!(result.segments.len(), 1);
+        assert!(result.segments.iter().flat_map(|s| &s.matching_genes).all(|gene| !gene.rev_comp));
+
+        // the same query reverse complemented is found on the reverse strand only
+        let rev_comp_query = String::from_utf8(dna::revcomp(query.as_bytes().to_vec())).unwrap();
+        let result = prefiltering.calculate_segment_matches_with_rev_comp(rev_comp_query).unwrap();
+        assert_eq!(result.segments.len(), 1);
+        assert!(result.segments.iter().flat_map(|s| &s.matching_genes).all(|gene| gene.rev_comp));
+    }
+
+    fn gene_segment(gene_id: &str, query_start: usize, query_end: usize, target_start: usize, coverage: i32) -> SegmentMatch {
+        SegmentMatch {
+            query_start,
+            query_end,
+            coverage,
+            match_count: 1,
+            matching_genes: vec![GeneMatch { gene_id: gene_id.to_string(), rev_comp: false, coverage }],
+            min_target_start: target_start,
+            max_target_start: target_start,
+            segment_start: query_start - target_start,
+        }
+    }
+
+    #[test]
+    fn test_weak_segment_spanning_two_domains_does_not_merge_them() {
+        let prefiltering = Prefiltering::new(HashMap::new(), 5, 13, 12, 2, Some(100), None);
+
+        let segments = prefiltering.merge_overlapping_segments(vec![
+            gene_segment("VH", 0, 300, 0, 295),
+            gene_segment("VH_ALLELE", 10, 310, 10, 280),
+            // spurious match spanning the end of VH and the start of VL, overlapping VL more
+            gene_segment("BRIDGE", 232, 483, 15, 78),
+            gene_segment("VL", 390, 700, 0, 287),
+        ]);
+
+        assert_eq!(segments.len(), 2);
+
+        assert_eq!((segments[0].segment_start, segments[0].query_start, segments[0].query_end), (0, 0, 310));
+        let vh_genes: Vec<&str> = segments[0].matching_genes.iter().map(|gene| gene.gene_id.as_str()).collect();
+        assert_eq!(vh_genes, vec!["VH", "VH_ALLELE"]);
+
+        // bridge genes are VL candidates, but don't extend the VL domain over VH
+        assert_eq!((segments[1].segment_start, segments[1].query_start, segments[1].query_end), (390, 390, 700));
+        let vl_genes: Vec<&str> = segments[1].matching_genes.iter().map(|gene| gene.gene_id.as_str()).collect();
+        assert_eq!(vl_genes, vec!["VL", "BRIDGE"]);
+    }
+
+    #[test]
+    fn test_domain_split_by_indel_is_merged() {
+        let prefiltering = Prefiltering::new(HashMap::new(), 3, 4, 12, 1, Some(60), None);
+
+        // k-mer matches before and after a 6 residue insertion are on two diagonals of each gene,
+        // the best diagonal of the best gene ends before the insertion
+        let segments = prefiltering.merge_overlapping_segments(vec![
+            gene_segment("VH", 0, 57, 0, 48),
+            gene_segment("VH_ALLELE", 60, 107, 54, 43),
+            // extends the first domain over the second
+            gene_segment("VH_OTHER", 20, 87, 20, 40),
+        ]);
+
+        assert_eq!(segments.len(), 1);
+        assert_eq!((segments[0].segment_start, segments[0].query_start, segments[0].query_end), (0, 0, 107));
+        let genes: Vec<&str> = segments[0].matching_genes.iter().map(|gene| gene.gene_id.as_str()).collect();
+        assert_eq!(genes, vec!["VH", "VH_ALLELE", "VH_OTHER"]);
     }
 
     #[test]

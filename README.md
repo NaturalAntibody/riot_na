@@ -292,8 +292,151 @@ df.select(number_sequence("seq")).collect()
 For a pure Python solution (without the use of `cachetools` package) you can check `riot_na/api/api_mp.py` file.
 
 
-## Multidomains support
-RIOT's multidomains support allows detection and numbering of multiple immunoglobulin domains within a single protein sequence, such as therapeutic antibodies containing both heavy chain (VH) and light chain (VL) domains. When enabled with the --multiple-domains flag (or return_all_domains=True in the API), RIOT returns separate numbering results for each detected domain rather than just the best single match. The system automatically identifies domain boundaries, truncates sequences at the beginning of each V gene segment, and provides additional metadata including the original query sequence and segment start/end positions for each domain. This is particularly useful for analyzing therapeutic constructs like bispecific antibodies, CAR-T constructs, or other multi-domain fusion proteins where each immunoglobulin domain needs independent numbering and analysis.
+## Multiple domains, chains and molecules
+
+Engineered antibodies (bispecifics, scFv fusions, CrossMabs, DVD-Ig, VHH-Fc, ...) carry several variable and constant
+domains per chain and several different chains per molecule. RIOT annotates them on three levels:
+
+| Level | API | Result |
+|---|---|---|
+| sequence | `run_on_sequence(..., return_all_domains=True)`, CLI `--multiple-domains` | AIRR record of every V domain |
+| chain | `annotate_chain(header, sequence)` | all V and constant domains of a chain, in sequence order |
+| molecule | `annotate_molecule(molecule_id, chains, pairs=...)` | all chains, V domains paired into binding sites |
+
+All of them require numbering created with `return_all_domains=True`. Chain and molecule annotation are API only, for
+amino acid (`create_riot_aa`) and nucleotide (`create_riot_nt`) sequences.
+
+```python
+from riot_na import create_riot_aa, CScheme
+
+riot_aa = create_riot_aa(return_all_domains=True)
+```
+
+### Multiple domains
+
+```python
+domains = riot_aa.run_on_sequence(header="IgG-scFv", query_sequence=igg_scfv_heavy_chain, return_all_domains=True)
+```
+
+Every V domain gets its own AIRR record (`SegmentedAirrRearrangementEntryAA` / `NT`), numbered separately. A domain is the
+segment of the sequence from its V gene start to the next V domain: `sequence_aa` (`sequence`) is the segment,
+`query_sequence` the whole sequence, `segment_start` and `segment_end` (1-based) its position in it. Region offsets and
+numbering refer to the segment. The constant region following a V domain is assigned to it (and numbered with
+`c_scheme`), also when it follows a V domain of another locus (VL-CH1 and VH-CL chains of CrossMabs, scFv-Fc).
+
+### Chain annotation
+
+```python
+chain = riot_aa.annotate_chain(header="IgG-scFv", query_sequence=igg_scfv_heavy_chain, c_scheme=CScheme.EU)
+chain.layout            # "VH-CH1-H-CH2-CH3-[15]-VH-[15]-VK", [n] - n unannotated residues (linkers)
+chain.domains           # ChainDomain(domain="VH", sequence_start=1, sequence_end=120, rearrangement_index=0), ...
+chain.rearrangements    # AIRR records of the V domains, as with return_all_domains=True
+chain.constant_domains  # ConstantDomain(domain="CH2", c_call="IGHG1", rearrangement_index=0, c_scheme_residue_mapping={"231": "A", ...}), ...
+```
+
+- V domains (`VH`, `VK`, `VL`) span from the V to the J gene end. If J is not found, they end with FR4 following
+  the J motif (W-G-x-G in heavy, F-G-x-G in light chains).
+- Constant domains (`CH1`, `H` - hinge, `CH2`, `CH3`, `CL`) are searched for in all parts of the chain not covered by
+  V domains, and every one of them is assigned its own C gene. So the annotation includes Fc chains without
+  V domains, repeated Fc regions (single chain Fc), hybrid constant regions (e.g. IgG2 CH1 and hinge with IgG4 CH2
+  and CH3) and constant domains of another species than the V domain (e.g. human Fc of an alpaca VHH). C genes
+  without domain definitions (e.g. IGHM, IGHA, alpaca) give a single `C` domain. Short constant region fragments
+  (e.g. CH1 or CL derived linkers of DVD-Ig) are annotated only right after V domains.
+- Every constant domain is numbered separately with `c_scheme` and refers to the V domain it follows
+  (`rearrangement_index`, `None` if no V domain precedes it).
+- Nucleotide chains are searched in all reading frames (and on both strands, if they have no V domain). Positions are
+  nucleotide positions in `chain.sequence`, which is reverse complemented if `chain.rev_comp`.
+
+### Molecule annotation
+
+```python
+molecule = riot_aa.annotate_molecule(
+    molecule_id="bispecific",
+    chains={"HC1": heavy_chain_1, "LC1": light_chain_1, "HC2": heavy_chain_2, "LC2": light_chain_2},
+    c_scheme=CScheme.EU,
+    pairs=[(1, 1, 2, 1), (3, 1, 4, 1)],  # optional: HC1 with LC1, HC2 with LC2
+)
+molecule.chains["HC1"]   # ChainAnnotation, AIRR records with sequence_header "bispecific|HC1"
+molecule.binding_sites   # [BindingSite(binding_site_id=1, binding_site_type="Fab", heavy_domain=VDomainRef("HC1", 0), light_domain=VDomainRef("LC1", 0), ...), ...]
+```
+
+Pass every distinct chain once, e.g. the heavy and the light chain of an IgG, by chain ID (a dict, or another object
+with `items()`, e.g. a pandas Series) or as a list (chain IDs `"1"`, `"2"`, ...). Chains are numbered from 1 in this
+order. A V domain is numbered from 1 among the V domains of its chain (`v_domain_number`); its domain index is its
+position among all domains of the chain (in `VH-CH1-[5]-VH-CH1-H-CH2-CH3` the V domains are numbers 1 and 2, domain
+indices 1 and 3).
+
+#### Pairs
+
+If the pairing of the V domains is known, give it as `pairs`. Every pair is a binding site, nothing is inferred:
+
+```python
+pairs = [(1, 1, 2, 1), (3, 1, 4, 1)]              # chain 1 V domain 1 with chain 2 V domain 1, chain 3 with chain 4
+pairs = [("HC1", 1, "LC1", 1), ("HC2", 1, "LC2", 1)]  # the same, chains by chain ID
+pairs = [(1, 1, 2, 1), (1, 2, 3, 1)]              # tandem Fab, VH-CH1-linker-VH-CH1-Fc heavy chain with two light chains
+pairs = [(1, 1, 2, 1), (1, 1, 3, 1)]              # common heavy chain of a kappa-lambda body
+```
+
+- A pair is (chain, V domain number, chain, V domain number) of a heavy and a light V domain. Chains are given by
+  number or chain ID. Nucleotide chains on the reverse strand are numbered in their reverse complement.
+- V domain numbers can be read from the layout of the molecule annotated without `pairs` (`v_domain_number`,
+  `chain_layout`, `candidates`), which is then paired by `riot_aa.pair_molecule(molecule, pairs)`, without
+  annotating the chains again.
+- A V domain can be in many pairs (common light or heavy chain). V domains not given in pairs are `single domain`
+  (heavy V domains) or `unpaired`.
+- The binding site type follows the format of the V domains: `Fab` (V domains followed by CH1 and CL), `scFv` or
+  `diabody` (adjacent V domains of a chain joined by a linker of at least 12 or of fewer residues, or V domains of
+  diabody units of two chains), `Fv` (others, e.g. outer V domains of DVD-Ig or chains of V domains only).
+- Invalid pairs raise `ValueError`: unknown chains or V domains (the message lists the V domains found in the chain),
+  two heavy or two light V domains, duplicate pairs, chain numbers which are chain IDs of other chains.
+- `read_v_domain_pairs` (`riot_na.common.io`) reads pairs of many molecules from a CSV (or TSV) file with columns
+  `molecule_id`, `chain_1`, `v_domain_1`, `chain_2`, `v_domain_2` (chains by number or chain ID), one row per
+  binding site.
+
+#### Pairing by the format
+
+Without `pairs`, V domains are paired by the format of their chains, in this order:
+
+| Binding site | V domains | Rule |
+|---|---|---|
+| `scFv` | heavy and light V domains next to each other in a chain (also with a CH1 or CL derived linker, e.g. ASTKGP) | linker of at least 12 residues |
+| `diabody` | the same, with a shorter linker | the linker is too short for them to pair with each other, so they pair with the V domains of another copy of the chain or, if two chains are each other's only candidates, of the other chain |
+| `Fab` | V domain followed by CH1 and V domain followed by CL | one heavy and one light, so domain crossovers of CrossMabs pair too. Fab arms of one chain pair only if joined by a linker of at least 20 residues (single chain Fab) |
+| `Fv` | V domains stacked in front of Fab V domains (e.g. outer V domains of DVD-Ig) | paired by their position |
+| `single domain` | heavy V domain without a partner (e.g. VHH) | |
+| `unpaired` | light V domain or V domain of a Fab arm without a partner | |
+
+A light chain Fab arm can pair with many heavy chain Fab arms (common light chain). If there are as many CH1 as CL Fab
+arms, every CL arm pairs with one CH1 arm (e.g. FIT-Ig). A V domain with more than one possible partner forms a single
+`ambiguous` binding site, with its possible partners as `candidates`. For example, the heavy and light chains of a
+bispecific IgG can't be paired from their sequences, so they have to be given as `pairs`:
+
+| `pairs` | binding_site_id | binding_site_type | heavy | light | ambiguous | candidates |
+|---|---|---|---|---|---|---|
+| none | 1 | Fab | HC1:1 | | True | LC1:1;LC2:1 |
+| | 2 | Fab | HC2:1 | | True | LC1:1;LC2:1 |
+| `[(1, 1, 2, 1), (3, 1, 4, 1)]` | 1 | Fab | HC1:1 | LC1:1 | False | |
+| | 2 | Fab | HC2:1 | LC2:1 | False | |
+
+#### Output
+
+```python
+from pathlib import Path
+from riot_na.common.io import write_binding_sites_csv, write_molecule_layout_csv, write_molecules_json
+
+write_binding_sites_csv(Path("binding_sites.csv"), [molecule])  # one row per binding site
+write_molecule_layout_csv(Path("layout.csv"), [molecule])       # one row per domain of every chain
+write_molecules_json(Path("molecules.json"), [molecule])        # all details: AIRR records, constant domain numbering, ...
+```
+
+- Binding sites: type, heavy and light V domain (chain ID, domain index, V domain number, locus, V gene), linker
+  length (in residues, between V domains of one chain), `ambiguous` and `candidates` (`chain_id:v_domain_number`,
+  separated by `;`).
+- Layout: chain layout, domains with their positions and genes (V and J genes of V domains, C gene and identity of
+  constant domains), V domain numbers and the binding sites of V domains with their partners. A V domain of more than
+  one binding site (e.g. a common light chain) has the values of all of them, separated by `;`. A V domain which is
+  only a candidate of ambiguous binding sites has these binding sites, `ambiguous` and its possible partners as
+  `candidates`.
 
 ## Germline database
 RIOT uses OGRDB as a primary source of germline alleles. Database version as of 22.01.2024 was used.

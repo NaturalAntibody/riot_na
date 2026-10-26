@@ -6,6 +6,7 @@ from riot_na.alignment.alignment_utils import (
     fold_cigar,
     offset_alignments,
     unfold_cigar,
+    v_domain_end,
 )
 from riot_na.data.model import (
     AirrRearrangementEntryAA,
@@ -129,16 +130,6 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
 
         if c_aln is not None:
             assert self.v_gene_alignment_aa is not None
-            assert self.j_gene_alignment_aa is not None
-            assert self.j_gene_alignment_aa.q_end is not None
-            assert self.j_gene_alignment_aa.q_start is not None
-            assert self.j_gene_alignment_aa.t_start is not None
-            assert self.j_gene_alignment_aa.t_end is not None
-            assert self.j_gene_alignment_aa.target_id is not None
-            assert self.j_gene_alignment_aa.cigar is not None
-            assert self.j_gene_alignment_aa.e_value is not None
-            assert self.j_gene_alignment_aa.seq_identity is not None
-            assert self.j_gene_alignment_aa.alignment_score is not None
             assert self.v_gene_alignment_aa.q_end is not None
             assert self.v_gene_alignment_aa.q_start is not None
             assert self.v_gene_alignment_aa.t_start is not None
@@ -148,9 +139,10 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
             assert self.v_gene_alignment_aa.e_value is not None
             assert self.v_gene_alignment_aa.seq_identity is not None
             assert self.v_gene_alignment_aa.alignment_score is not None
-            # offset c_aln by the end of j_gene_alignment_aa
-
-            c_gene_alignment_aa = offset_alignments(self.j_gene_alignment_aa.q_end, c_aln)
+            # offset c_aln by the end of j_gene_alignment_aa or v_gene_alignment_aa, if J was not found
+            c_gene_alignment_aa = offset_alignments(
+                v_domain_end(self.v_gene_alignment_aa, self.j_gene_alignment_aa), c_aln
+            )
             self.c_gene_alignment_aa = c_gene_alignment_aa
             self.rearrangement.c_call = c_gene_alignment_aa.target_id
 
@@ -247,7 +239,7 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
         if self.v_gene_alignment_aa is None:  # or self.rearrangement.sequence_alignment_aa is None:
             return self.rearrangement
 
-        alignment_end = self.j_gene_alignment_aa.q_end if self.j_gene_alignment_aa else self.v_gene_alignment_aa.q_end
+        alignment_end = v_domain_end(self.v_gene_alignment_aa, self.j_gene_alignment_aa)
         sequence_alignment_aa_segment = self.sequence_aa[self.v_gene_alignment_aa.q_start : alignment_end]
 
         if (

@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, unique
 from typing import Generic, Optional, Sequence, TypeVar
 
@@ -405,6 +405,100 @@ AirrRearrangementEntry_co = TypeVar(
     SegmentedAirrRearrangementEntryAA,
     covariant=True,
 )
+
+
+@dataclass
+class ConstantDomain:  # pylint: disable=too-many-instance-attributes
+    """
+    Constant domain of a chain. Sequence positions refer to the chain sequence: nucleotide positions for nucleotide
+    chains (c_positional_scheme_mapping keys are positions of the first codon nucleotides), amino acid positions
+    for amino acid chains.
+    """
+
+    # CH1, H (hinge), CH2, CH3, CL or C (constant region of a C gene without domain definitions)
+    domain: str
+    c_call: str
+    locus: str
+    species: str
+    sequence_start: int  # 1-based closed interval
+    sequence_end: int
+    sequence_aa: str
+    germline_start_aa: int  # 1-based closed interval in the C germline
+    germline_end_aa: int
+    cigar_aa: Cigar
+    identity_aa: float
+    # index of the rearrangement (V domain) the constant domain follows, None if no V domain precedes it
+    rearrangement_index: Optional[int] = None
+    c_numbering_scheme: Optional[str] = None
+    c_scheme_residue_mapping: Optional[dict[str, str]] = None
+    c_positional_scheme_mapping: Optional[dict[int, str]] = None
+
+
+@dataclass
+class ChainDomain:
+    """Domain of a chain: V domain (rearrangement) or constant domain."""
+
+    # VH, VK, VL (V domains) or CH1, H, CH2, CH3, CL, C (constant domains)
+    domain: str
+    sequence_start: int  # 1-based closed interval
+    sequence_end: int
+    # V domains: index of their rearrangement, constant domains: index of the rearrangement they follow
+    rearrangement_index: Optional[int] = None
+    # constant domains: index of the constant domain
+    constant_domain_index: Optional[int] = None
+
+
+SegmentedAirrRearrangementEntry = TypeVar(
+    "SegmentedAirrRearrangementEntry", SegmentedAirrRearrangementEntryNT, SegmentedAirrRearrangementEntryAA
+)
+
+
+@dataclass
+class ChainAnnotation(Generic[SegmentedAirrRearrangementEntry]):
+    """
+    Domains of a chain in sequence order: rearrangements (V domains) and constant domains.
+    """
+
+    sequence_header: str
+    # reverse complemented, if the chain is on the reverse strand
+    sequence: str
+    rev_comp: bool
+    # e.g. VH-CH1-H-CH2-CH3-[15]-VH-[20]-VK, [n] - n unannotated residues (nucleotides for nucleotide chains)
+    layout: str
+    rearrangements: list[SegmentedAirrRearrangementEntry]
+    constant_domains: list[ConstantDomain]
+    # V and constant domains in sequence order
+    domains: list[ChainDomain]
+
+
+@dataclass(frozen=True)
+class VDomainRef:
+    """V domain of a molecule: rearrangement of a chain."""
+
+    chain_id: str
+    rearrangement_index: int
+
+
+@dataclass
+class BindingSite:
+    binding_site_id: int
+    # Fab, Fv (V domains stacked on Fab V domains, e.g. outer Fv of DVD-Ig, or other V domains given in pairs), scFv,
+    # diabody, single domain or unpaired
+    binding_site_type: str
+    heavy_domain: Optional[VDomainRef] = None
+    light_domain: Optional[VDomainRef] = None
+    # binding site with more than one possible partner V domain, they are listed in candidates
+    ambiguous: bool = False
+    candidates: list[VDomainRef] = field(default_factory=list)
+    # residues between V domains of scFv and diabodies
+    linker_length: Optional[int] = None
+
+
+@dataclass
+class MoleculeAnnotation(Generic[SegmentedAirrRearrangementEntry]):
+    molecule_id: str
+    chains: dict[str, ChainAnnotation[SegmentedAirrRearrangementEntry]]
+    binding_sites: list[BindingSite]
 
 
 def serialize_airr_entry(entry: AirrRearrangementEntry_co) -> dict[str, str]:

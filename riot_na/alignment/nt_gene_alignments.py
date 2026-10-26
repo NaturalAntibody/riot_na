@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 from typing import Optional
 
-from riot_na.alignment.alignment_utils import offset_alignments
+from riot_na.alignment.alignment_utils import align_c, offset_alignments, v_domain_end
 from riot_na.alignment.gene_aligner import (
     GeneAligner,
     create_aligner,
@@ -75,26 +75,29 @@ class VDJCAlignerNT:
         j_aligner = self.j_aligners[species][locus]
         j_alignment = j_aligner.align(query_j, both_strains=False)[0].best_alignment
 
-        if j_alignment is None:
-            return aligments_nt
+        if j_alignment is not None:
+            j_alignment = offset_alignments(v_alignment.q_end, j_alignment)
+            aligments_nt.j = j_alignment
 
-        j_alignment = offset_alignments(v_alignment.q_end, j_alignment)
-        assert j_alignment is not None
-        aligments_nt.j = j_alignment
+        # C follows J or V, if J was not found
+        c_query_start = v_domain_end(v_alignment, j_alignment)
 
         # mask c input (query_db_clean -> valn_end + jaln_end)
-        query_c = query_v[j_alignment.q_end :]
+        query_c = query_v[c_query_start:]
 
         if query_c:
             # align c
-            c_aligner = self.c_aligners[species][locus]
-            c_alignment = c_aligner.align(query_c, both_strains=False)[0].best_alignment
+            c_alignment = align_c(
+                self.c_aligners[species],
+                locus,
+                query_c,
+                lambda c_aligner: c_aligner.align(query_c, both_strains=False)[0].best_alignment,
+            )
 
             if c_alignment is not None:
-                c_alignment = offset_alignments(j_alignment.q_end, c_alignment)
-                aligments_nt.c = c_alignment
+                aligments_nt.c = offset_alignments(c_query_start, c_alignment)
 
-        if locus == Locus.IGH:
+        if locus == Locus.IGH and j_alignment is not None:
             # mask d input (query_db_clean -> valn_end + jaln_end)
             query_d = query_v[v_alignment.q_end : j_alignment.q_start]
             if query_d:

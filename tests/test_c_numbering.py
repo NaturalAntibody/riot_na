@@ -1,11 +1,16 @@
 import csv
 from pathlib import Path
 from string import ascii_uppercase
+from typing import Optional
 
 import pytest
 from click.testing import CliRunner
+from ssw_aligner import StripedSmithWaterman
 
-from riot_na import ChainType, CScheme, Organism, Scheme
+from riot_na import ChainType, CScheme, Locus, Organism, Scheme
+from riot_na.alignment.alignment_utils import align_c, select_c_alignment
+from riot_na.alignment.gene_aligner import AA_ALIGNER_PARAMS, ALIGNER_PARAMS
+from riot_na.alignment.skbio_alignment import align, align_aa
 from riot_na.alignment.translate import translate
 from riot_na.api.riot_numbering import (
     RiotNumberingAA,
@@ -44,6 +49,26 @@ C_GERMLINES_AA = {
         GENE_DB_DIR / "gene_db" / "aa_genes" / "c_genes" / "human" / f"{locus}.fasta"
     ).items()
 }
+
+
+NT_GERMLINES = read_germlines(GENE_DB_DIR / "gene_db" / "v_genes" / "human.fasta")
+for nt_locus in ("igh", "igk", "igl"):
+    NT_GERMLINES |= read_germlines(GENE_DB_DIR / "gene_db" / "j_genes" / "human" / f"{nt_locus}.fasta")
+    NT_GERMLINES |= read_germlines(GENE_DB_DIR / "gene_db" / "c_genes" / "human" / f"{nt_locus}.fasta")
+
+NT_LINKER = "GGTGGCGGTTCAGGCGGAGGTGGCTCTGGCGGTGGCGGATCG"
+
+
+def nt_rearrangement(v_gene: str, cdr3: str, j_gene: str, j_frame: int, c_gene: Optional[str] = None) -> str:
+    """In frame V, CDR3, J without the splice nucleotide and C without stop codon"""
+    v_sequence = NT_GERMLINES[v_gene]
+    c_sequence = NT_GERMLINES[c_gene] if c_gene else ""
+    return (
+        v_sequence[: len(v_sequence) // 3 * 3]
+        + cdr3
+        + NT_GERMLINES[j_gene][j_frame:-1]
+        + (c_sequence[:-3] if translate(c_sequence[-3:], 0) == "*" else c_sequence)
+    )
 
 
 def secreted_ighg(gene: str) -> str:
@@ -282,6 +307,175 @@ def test_c_numbering_multiple_domains():
     assert light.c_scheme_residue_mapping and light.c_scheme_residue_mapping["214"] == "C"
 
 
+@pytest.mark.parametrize(
+    "query, c_gene, first_position, last_position",
+    [
+        # CrossMab chains, C follows V of another locus
+        (VK + secreted_ighg("IGHG1"), "IGHG1", "118", "445"),
+        (VH + C_GERMLINES_AA["IGKC"], "IGKC", "108", "214"),
+        # C without CH1
+        (VH + secreted_ighg("IGHG1")[secreted_ighg("IGHG1").index("DKTHT") :], "IGHG1", "221", "445"),
+    ],
+    ids=["VL-CH1", "VH-CL", "VH-hinge-Fc"],
+)
+def test_c_numbering_of_engineered_chains(
+    riot_aa: RiotNumberingAA, query: str, c_gene: str, first_position: str, last_position: str
+):
+    airr = riot_aa.run_on_sequence("", query, c_scheme=CScheme.EU)
+
+    assert airr.c_call == c_gene
+    assert airr.c_scheme_residue_mapping
+    assert (list(airr.c_scheme_residue_mapping)[0], list(airr.c_scheme_residue_mapping)[-1]) == (
+        first_position,
+        last_position,
+    )
+    assert_positional_mapping_consistent(query, airr)
+
+
+C_QUERIES_AA = [
+    secreted_ighg("IGHG1"),
+    C_GERMLINES_AA["IGKC"],
+    C_GERMLINES_AA["IGLC2"],
+    C_GERMLINES_AA["IGHM"],
+    secreted_ighg("IGHG1")[:20],
+    C_GERMLINES_AA["IGKC"][1:20],
+    3 * "GGGGS" + VK,
+    "TTTPAPRPPTPAPTIASQPLSLRPEACRPAAGGAVHTRGLDFACDIYIWAPLAGTCGVLLLSLVITLYC",
+]
+
+
+@pytest.mark.parametrize("query", C_QUERIES_AA)
+def test_c_alignment_score_bounds(query: str):
+    """C genes of other loci than V locus are aligned only if their alignments can score higher, by these bounds."""
+    for c_aligner in get_or_create_riot_aa().vjc_aligner_aa.c_aligners[Organism.HOMO_SAPIENS].values():
+        aligner = StripedSmithWaterman(query, **AA_ALIGNER_PARAMS)
+        max_score = c_aligner.max_alignment_score(query)
+        for gene in c_aligner.gene_lookup.values():
+            alignment = align_aa(aligner, query, gene.name, gene.sequence, db_length=c_aligner.db_length)
+            assert alignment.alignment_score is not None and alignment.alignment_score <= max_score
+
+
+@pytest.mark.parametrize(
+    "query", [NT_GERMLINES["IGHG1"], NT_GERMLINES["IGKC"], NT_GERMLINES["IGLC2"][:60], 5 * NT_LINKER]
+)
+def test_nucleotide_c_alignment_score_bounds(query: str):
+    for c_aligner in get_or_create_riot_nt().vdjc_aligner.c_aligners[Organism.HOMO_SAPIENS].values():
+        aligner = StripedSmithWaterman(query, **ALIGNER_PARAMS)
+        max_score = c_aligner.max_alignment_score(query)
+        for gene in c_aligner.gene_lookup.values():
+            alignment = align(aligner, gene.name, gene.sequence, db_length=c_aligner.db_length, query=query)
+            assert alignment.alignment_score <= max_score
+
+
+@pytest.mark.parametrize("v_locus", list(Locus))
+@pytest.mark.parametrize("query", C_QUERIES_AA)
+def test_c_alignment_of_all_loci(query: str, v_locus: Locus):
+    c_aligners = get_or_create_riot_aa().vjc_aligner_aa.c_aligners[Organism.HOMO_SAPIENS]
+    aligned_loci = []
+
+    def align_query(c_aligner):
+        aligned_loci.append(c_aligner)
+        return c_aligner.align(query)[0].best_alignment
+
+    expected = select_c_alignment(
+        [c_aligner.align(query)[0].best_alignment for c_aligner in c_aligners.values()], v_locus
+    )
+    assert align_c(c_aligners, v_locus, query, align_query) == expected
+
+    # light chain C genes can't score higher than heavy chain C genes on heavy chain constant regions
+    if query == secreted_ighg("IGHG1") and v_locus == Locus.IGH:
+        assert aligned_loci == [c_aligners[Locus.IGH]]
+
+
+def test_c_numbering_multiple_domains_scfv_fc():
+    riot_aa = get_or_create_riot_aa(return_all_domains=True)
+    # scFv fused to CH1, hinge and Fc, C follows VL
+    query = VH + "GGGGSGGGGSGGGGS" + VK + secreted_ighg("IGHG1")
+    heavy, light = riot_aa.run_on_sequence("", query, return_all_domains=True, c_scheme=CScheme.EU)
+
+    assert heavy.c_call is None
+    assert light.locus == "igk"
+    assert light.c_call == "IGHG1"
+    assert light.c_scheme_residue_mapping and light.c_scheme_residue_mapping["297"] == "N"
+
+
+def test_c_numbering_without_j(riot_aa: RiotNumberingAA):
+    # FR4 is missing, so J is not found
+    query = VH[: VH.index("WGQG")] + secreted_ighg("IGHG1")
+    airr = riot_aa.run_on_sequence("", query, c_scheme=CScheme.EU)
+
+    assert airr.j_call is None
+    assert airr.c_call == "IGHG1"
+    assert airr.c_scheme_residue_mapping and list(airr.c_scheme_residue_mapping)[0] == "118"
+    assert_positional_mapping_consistent(query, airr)
+
+
+@pytest.mark.parametrize(
+    "query, c_gene",
+    [
+        # the first C residue is encoded by the J-C junction codon: absorbed by J (FR4 ending with A instead of S)
+        (VH[:-1] + C_GERMLINES_AA["IGHG1"][:20], "IGHG1"),
+        # J-C junction residue mutated (R108G, G to A)
+        (VK + "G" + C_GERMLINES_AA["IGKC"][1:20], "IGKC"),
+        (VL + "A" + C_GERMLINES_AA["IGLC2"][1:20], "IGLC2"),
+    ],
+    ids=["IGHG1", "IGKC", "IGLC2"],
+)
+def test_c_fragments_without_junction_residue(riot_aa: RiotNumberingAA, query: str, c_gene: str):
+    airr = riot_aa.run_on_sequence("", query)
+
+    assert (airr.c_call, airr.c_germline_start_aa) == (c_gene, 2)
+
+
+def test_c_fragments_without_junction_residue_follow_j(riot_aa: RiotNumberingAA):
+    # the Whitlow linker ends with STKG, as CH1 without its first residue (A118), it doesn't follow J
+    airr = riot_aa.run_on_sequence("", VH + "GSTSGSGKPGSGEGSTKG" + VK)
+
+    assert airr.c_call is None
+
+
+@pytest.mark.parametrize("v_domain", [VH, VK], ids=["VH", "VK"])
+def test_non_antibody_regions_are_not_c_regions(riot_aa: RiotNumberingAA, v_domain: str):
+    # CAR: CD8a hinge and transmembrane, CD28 and CD3z signalling domains
+    car_t_tail = (
+        "TTTPAPRPPTPAPTIASQPLSLRPEACRPAAGGAVHTRGLDFACDIYIWAPLAGTCGVLLLSLVITLYCKRGRKKLLYIFKQPFMRPVQTTQEEDGCSCRFPEEEEGG"
+        "CELRVKFSRSADAPAYQQGQNQLYNELNLGRREEYDVLDKRRGRDPEMGGKPRRKNPQEGLYNELQKDKMAEAYSEIGMKGERRRGKGHDGLYQGLSTATKDTYDAL"
+        "HMQALPPR"
+    )
+    airr = riot_aa.run_on_sequence("", v_domain + car_t_tail, c_scheme=CScheme.EU)
+
+    assert airr.j_call
+    assert airr.c_call is None
+    assert airr.c_scheme_residue_mapping is None
+
+
+def test_c_numbering_multiple_domains_nucleotides():
+    riot_nt = get_or_create_riot_nt(return_all_domains=True)
+    heavy_chain = nt_rearrangement("IGHV3-23*01", "GGCTAC", "IGHJ4*02", 2, "IGHG1")
+
+    (airr,) = riot_nt.run_on_sequence("", heavy_chain, return_all_domains=True, c_scheme=CScheme.EU)
+    # whole C region is in the domain, spurious V matches in C region do not split it
+    assert (airr.c_call, airr.c_sequence_end) == ("IGHG1", len(heavy_chain))
+    assert airr.c_scheme_residue_mapping and list(airr.c_scheme_residue_mapping)[-1] == "445"
+
+    # IgG with scFv fused to the C-terminus of the heavy chain
+    query = (
+        heavy_chain
+        + NT_LINKER
+        + nt_rearrangement("IGHV1-69*01", "GATCGGGGCTAC", "IGHJ4*02", 2)
+        + NT_LINKER
+        + nt_rearrangement("IGKV3-11*01", "TGGCCGCTC", "IGKJ4*01", 1)
+    )
+    domains = riot_nt.run_on_sequence("", query, return_all_domains=True, c_scheme=CScheme.EU)
+
+    assert [(domain.v_call, domain.c_call) for domain in domains] == [
+        ("IGHV3-23*01", "IGHG1"),
+        ("IGHV1-69*01", None),
+        ("IGKV3-11*01", None),
+    ]
+    assert domains[0].c_scheme_residue_mapping and list(domains[0].c_scheme_residue_mapping)[-1] == "445"
+
+
 @pytest.mark.parametrize("c_scheme", list(CScheme))
 @pytest.mark.parametrize(
     "v_gene, cdr3, j_gene, j_frame, c_gene",
@@ -289,6 +483,9 @@ def test_c_numbering_multiple_domains():
         ("IGHV3-23*01", "GATCGGGGGTAC", "IGHJ4*02", 2, "IGHG1"),
         ("IGKV1-27*01", "CAGCAGAGTTACAGTACCCCT", "IGKJ1*01", 1, "IGKC"),
         ("IGLV2-14*01", "AGCTCATATACAAGCAGCAGCACT", "IGLJ2*01", 1, "IGLC2"),
+        # CrossMab chains, C follows V of another locus
+        ("IGKV1-27*01", "CAGCAGAGTTACAGTACCCCT", "IGKJ1*01", 1, "IGHG1"),
+        ("IGHV3-23*01", "GATCGGGGGTAC", "IGHJ4*02", 2, "IGKC"),
     ],
 )
 def test_c_numbering_nucleotides(
@@ -301,20 +498,7 @@ def test_c_numbering_nucleotides(
     c_gene: str,
     c_scheme: CScheme,
 ):
-    nt_germlines = read_germlines(GENE_DB_DIR / "gene_db" / "v_genes" / "human.fasta")
-    for locus in ("igh", "igk", "igl"):
-        nt_germlines |= read_germlines(GENE_DB_DIR / "gene_db" / "j_genes" / "human" / f"{locus}.fasta")
-        nt_germlines |= read_germlines(GENE_DB_DIR / "gene_db" / "c_genes" / "human" / f"{locus}.fasta")
-
-    v_sequence = nt_germlines[v_gene]
-    c_sequence = nt_germlines[c_gene]
-    # in frame V, CDR3, J without the splice nucleotide and C without stop codon
-    query = (
-        v_sequence[: len(v_sequence) // 3 * 3]
-        + cdr3
-        + nt_germlines[j_gene][j_frame:-1]
-        + (c_sequence[:-3] if translate(c_sequence[-3:], 0) == "*" else c_sequence)
-    )
+    query = nt_rearrangement(v_gene, cdr3, j_gene, j_frame, c_gene)
 
     airr_nt = riot_nt.run_on_sequence("", query, c_scheme=c_scheme)
     airr_aa = riot_aa.run_on_sequence("", translate(query, 0), c_scheme=c_scheme)
