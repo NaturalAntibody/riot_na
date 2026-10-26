@@ -1,3 +1,5 @@
+from typing import Callable
+
 import pytest
 
 from riot_na import Locus, Organism, Scheme
@@ -10,6 +12,7 @@ from riot_na.api.riot_numbering import (
     get_or_create_riot_nt,
 )
 from riot_na.data.model import AlignmentEntryAA, Cigar, SegmentMatch
+from tests.test_c_numbering import NT_LINKER, VH, VK, VL, nt_rearrangement
 
 
 class TestMultiDomainAlignments:
@@ -555,3 +558,45 @@ def test_segment_starts_cover_v_domain_starts(
     assert [
         (segment_alignment.segment_start, segment_alignment.segment_end) for segment_alignment in segment_alignments
     ] == expected_segments
+
+
+@pytest.mark.parametrize(
+    "create_riot, query",
+    [
+        (get_or_create_riot_aa, VH + 3 * "GGGGS" + VK + 3 * "GGGGS" + VL),
+        (
+            get_or_create_riot_nt,
+            nt_rearrangement("IGHV3-23*01", "GGCTAC", "IGHJ4*02", 2)
+            + NT_LINKER
+            + nt_rearrangement("IGKV3-11*01", "TGGCCGCTC", "IGKJ4*01", 1)
+            + NT_LINKER
+            + nt_rearrangement("IGHV1-69*01", "GATCGGGGCTAC", "IGHJ4*02", 2),
+        ),
+    ],
+    ids=["amino-acids", "nucleotides"],
+)
+def test_domains_are_numbered_separately(
+    create_riot: Callable[..., RiotNumberingAA | RiotNumberingNT], query: str, monkeypatch: pytest.MonkeyPatch
+):
+    """A domain which can't be numbered gets neither the numbering nor the error of another domain."""
+    riot = create_riot(return_all_domains=True)
+    expected = riot.run_on_sequence("", query, return_all_domains=True)
+    assert len(expected) == 3 and all(domain.scheme_residue_mapping and not domain.exc for domain in expected)
+
+    align_to_scheme = riot.scheme_aligner.align_to_scheme
+    aligned_domains = []
+
+    def fail_second_domain(*args, **kwargs):
+        aligned_domains.append(args)
+        if len(aligned_domains) == 2:
+            raise AssertionError("second domain can't be numbered")
+        return align_to_scheme(*args, **kwargs)
+
+    monkeypatch.setattr(riot.scheme_aligner, "align_to_scheme", fail_second_domain)
+    first, second, third = riot.run_on_sequence("", query, return_all_domains=True)
+
+    assert (first, third) == (expected[0], expected[2])
+    assert second.v_call == expected[1].v_call
+    assert second.exc == "second domain can't be numbered"
+    assert second.scheme_residue_mapping is None
+    assert second.cdr3_aa is None

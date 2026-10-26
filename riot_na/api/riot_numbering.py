@@ -339,7 +339,7 @@ class RiotNumberingNT:
             binding_sites=pair_binding_sites(chain_annotations, residue_length=3, pairs=pairs),
         )
 
-    def _build_airr_entries(  # pylint: disable=too-many-locals
+    def _build_airr_entries(
         self,
         header: str,
         query_sequence: str,
@@ -349,6 +349,24 @@ class RiotNumberingNT:
         return_all_domains: bool,
         c_scheme: Optional[CScheme],
     ) -> list[AirrRearrangementEntryNT]:
+        return [
+            self._build_airr_entry(
+                header, query_sequence, alignment, scheme, extend_alignment, return_all_domains, c_scheme
+            )
+            for alignment in alignments
+        ]
+
+    def _build_airr_entry(
+        self,
+        header: str,
+        query_sequence: str,
+        alignment: AlignmentsNT,
+        scheme: Scheme,
+        extend_alignment: bool,
+        return_all_domains: bool,
+        c_scheme: Optional[CScheme],
+    ) -> AirrRearrangementEntryNT:
+        """AIRR record of one domain of the query, every domain is numbered separately."""
         sequence = ""
         segment_start = -1
         segment_end = -1
@@ -356,112 +374,105 @@ class RiotNumberingNT:
         nt_offsets = None
         aa_offsets = None
         sch_alignment = None
+        scheme_residue_mapping = None
         positional_scheme_mapping = None
-        numbering = None
+        c_numbering = None
         scheme_alignment_exc = None
 
         # Query might have been reverse complemented during V alignment.
-        results = []
+        if alignment.v:
+            sequence = alignment.v.q_seq
+            segment_start = alignment.segment_start or 0
+            segment_end = alignment.segment_end or len(sequence)
+            try:
+                translated_alignments = self.vjc_alignment_translator_aa.translate_nt_alignments(
+                    alignment, extend_alignment=extend_alignment
+                )
 
-        for alignment in alignments:
-            c_numbering = None
-            if alignment.v:
-                sequence = alignment.v.q_seq
-                segment_start = alignment.segment_start or 0
-                segment_end = alignment.segment_end or len(sequence)
-                try:
-                    translated_alignments = self.vjc_alignment_translator_aa.translate_nt_alignments(
-                        alignment, extend_alignment=extend_alignment
+                if translated_alignments:
+                    sch_alignment = self.scheme_aligner.align_to_scheme(
+                        translated_alignments.aa_alignments, scheme, extend_alignment=False
                     )
 
-                    if translated_alignments:
-                        sch_alignment = self.scheme_aligner.align_to_scheme(
-                            translated_alignments.aa_alignments, scheme, extend_alignment=False
-                        )
+                    # calculate aa offsets based on the numbering (iterate over cigar to produce positional-> imgt mapping)
+                    assert sch_alignment
+                    assert alignment.v
+                    chain_type = ChainType.from_locus(alignment.v.locus)
 
-                        # calculate aa offsets based on the numbering (iterate over cigar to produce positional-> imgt mapping)
-                        assert sch_alignment
-                        assert alignment.v
-                        chain_type = ChainType.from_locus(alignment.v.locus)
+                    region_offsets = infer_region_offsets(sch_alignment, scheme, chain_type)
+                    aa_offsets = infer_aa_region_offsets(region_offsets)
 
-                        region_offsets = infer_region_offsets(sch_alignment, scheme, chain_type)
-                        aa_offsets = infer_aa_region_offsets(region_offsets)
+                    alignment_start = alignment.v.q_start
 
-                        alignment_start = alignment.v.q_start
+                    nt_offsets = infer_nt_region_offsets(
+                        region_offsets, alignment_start, translated_alignments.reading_frame
+                    )
+                    numbering = produce_numbering(
+                        translated_alignments.translated_query, sch_alignment.alignment_str, sch_alignment.q_start
+                    )
 
-                        nt_offsets = infer_nt_region_offsets(
-                            region_offsets, alignment_start, translated_alignments.reading_frame
-                        )
-                        numbering = produce_numbering(
-                            translated_alignments.translated_query, sch_alignment.alignment_str, sch_alignment.q_start
-                        )
+                    if scheme == Scheme.IMGT:
+                        numbering = fix_imgt_cdrs_numbering(numbering)
+                        numbering = sort_imgt_numbering(numbering)
 
-                        if scheme == Scheme.IMGT:
-                            numbering = fix_imgt_cdrs_numbering(numbering)
-                            numbering = sort_imgt_numbering(numbering)
-
+                    if numbering:
                         scheme_residue_mapping = get_scheme_residue_mapping(numbering)
                         positional_scheme_mapping = get_positional_scheme_mapping(
                             scheme_residue_mapping, sch_alignment.q_start
                         )
 
-                        if c_scheme:
-                            c_numbering = number_c_region(
-                                self.scheme_aligner,
-                                translated_alignments.translated_query,
-                                translated_alignments.aa_alignments,
-                                c_scheme,
-                            )
-                except AssertionError as err:
-                    scheme_alignment_exc = str(err)
+                    if c_scheme:
+                        c_numbering = number_c_region(
+                            self.scheme_aligner,
+                            translated_alignments.translated_query,
+                            translated_alignments.aa_alignments,
+                            c_scheme,
+                        )
+            except AssertionError as err:
+                scheme_alignment_exc = str(err)
 
-            # produce airr result
-            # this is separated on purpose to enable other output formats
-            airr_builder = AirrBuilder(header, sequence or query_sequence, scheme)
-            if return_all_domains:
-                airr_builder = SegmentedAirrBuilder(header, sequence, scheme, query_sequence)
-                airr_builder.with_segment_start_end(segment_start, segment_end)
+        # produce airr result
+        # this is separated on purpose to enable other output formats
+        airr_builder = AirrBuilder(header, sequence or query_sequence, scheme)
+        if return_all_domains:
+            airr_builder = SegmentedAirrBuilder(header, sequence, scheme, query_sequence)
+            airr_builder.with_segment_start_end(segment_start, segment_end)
 
-            if alignment.v:
-                airr_builder.with_v_gene_alignment(alignment.v)
+        if alignment.v:
+            airr_builder.with_v_gene_alignment(alignment.v)
 
-            if translated_alignments:
-                airr_builder.with_aa_alignments(translated_alignments)
+        if translated_alignments:
+            airr_builder.with_aa_alignments(translated_alignments)
 
-            if alignment.j:
-                airr_builder.with_j_gene_alignment(alignment.j)
+        if alignment.j:
+            airr_builder.with_j_gene_alignment(alignment.j)
 
-            if alignment.d:
-                airr_builder.with_d_gene_alignment(alignment.d)
+        if alignment.d:
+            airr_builder.with_d_gene_alignment(alignment.d)
 
-            if alignment.c:
-                airr_builder.with_c_gene_alignment(alignment.c)
+        if alignment.c:
+            airr_builder.with_c_gene_alignment(alignment.c)
 
-            if sch_alignment:
-                assert nt_offsets
-                assert aa_offsets
-                airr_builder.with_nt_region_offsets(nt_offsets)
-                airr_builder.with_aa_region_offsets(aa_offsets)
-                airr_builder.with_aa_scheme_alignment(sch_alignment)
+        if sch_alignment:
+            assert nt_offsets
+            assert aa_offsets
+            airr_builder.with_nt_region_offsets(nt_offsets)
+            airr_builder.with_aa_region_offsets(aa_offsets)
+            airr_builder.with_aa_scheme_alignment(sch_alignment)
 
-            if numbering:
-                (
-                    airr_builder.with_scheme_residue_mapping(scheme_residue_mapping).with_positional_scheme_mapping(
-                        positional_scheme_mapping
-                    )
-                )
+        if scheme_residue_mapping is not None and positional_scheme_mapping is not None:
+            airr_builder.with_scheme_residue_mapping(scheme_residue_mapping).with_positional_scheme_mapping(
+                positional_scheme_mapping
+            )
 
-            if c_numbering:
-                assert c_scheme
-                airr_builder.with_c_scheme_numbering(c_scheme, *c_numbering)
+        if c_numbering:
+            assert c_scheme
+            airr_builder.with_c_scheme_numbering(c_scheme, *c_numbering)
 
-            if scheme_alignment_exc:
-                airr_builder.with_scheme_alignment_exc(scheme_alignment_exc)
+        if scheme_alignment_exc:
+            airr_builder.with_scheme_alignment_exc(scheme_alignment_exc)
 
-            result = airr_builder.build()
-            results.append(result)
-
-        return results
+        return airr_builder.build()
 
 
 class RiotNumberingAA:
@@ -685,7 +696,7 @@ class RiotNumberingAA:
             binding_sites=pair_binding_sites(chain_annotations, residue_length=1, pairs=pairs),
         )
 
-    def _build_airr_entries(  # pylint: disable=too-many-locals
+    def _build_airr_entries(
         self,
         header: str,
         query_sequence: str,
@@ -695,91 +706,102 @@ class RiotNumberingAA:
         return_all_domains: bool,
         c_scheme: Optional[CScheme],
     ) -> list[AirrRearrangementEntryAA]:
+        return [
+            self._build_airr_entry(
+                header, query_sequence, alignment, scheme, extend_alignment, return_all_domains, c_scheme
+            )
+            for alignment in alignments
+        ]
+
+    def _build_airr_entry(
+        self,
+        header: str,
+        query_sequence: str,
+        alignment: AlignmentsAA,
+        scheme: Scheme,
+        extend_alignment: bool,
+        return_all_domains: bool,
+        c_scheme: Optional[CScheme],
+    ) -> AirrRearrangementEntryAA:
+        """AIRR record of one domain of the query, every domain is numbered separately."""
         sequence_aa = query_sequence
         sch_alignment = None
         aa_offsets = None
+        scheme_residue_mapping = None
         positional_scheme_mapping = None
-        numbering = None
+        c_numbering = None
         scheme_alignment_exc = None
         segment_start = -1
         segment_end = -1
 
-        results = []
+        if alignment.v:
+            segment_start = alignment.segment_start or 0
+            segment_end = alignment.segment_end or len(alignment.v.q_seq)
 
-        for alignment in alignments:
-            c_numbering = None
-            if alignment.v:
-                segment_start = alignment.segment_start or 0
-                segment_end = alignment.segment_end or len(alignment.v.q_seq)
+            sequence_aa = alignment.v.q_seq
+            try:
+                sch_alignment = self.scheme_aligner.align_to_scheme(
+                    alignment, scheme, extend_alignment=extend_alignment
+                )
 
-                sequence_aa = alignment.v.q_seq
-                try:
-                    sch_alignment = self.scheme_aligner.align_to_scheme(
-                        alignment, scheme, extend_alignment=extend_alignment
-                    )
+                # calculate aa offsets based on the numbering (iterate over cigar to produce positional-> imgt mapping)
+                assert sch_alignment
+                chain_type = ChainType.from_locus(alignment.v.locus)
 
-                    # calculate aa offsets based on the numbering (iterate over cigar to produce positional-> imgt mapping)
-                    assert sch_alignment
-                    chain_type = ChainType.from_locus(alignment.v.locus)
+                region_offsets = infer_region_offsets(sch_alignment, scheme, chain_type)
+                aa_offsets = infer_aa_region_offsets(region_offsets)
 
-                    region_offsets = infer_region_offsets(sch_alignment, scheme, chain_type)
-                    aa_offsets = infer_aa_region_offsets(region_offsets)
+                numbering = produce_numbering(alignment.v.q_seq, sch_alignment.alignment_str, sch_alignment.q_start)
 
-                    numbering = produce_numbering(alignment.v.q_seq, sch_alignment.alignment_str, sch_alignment.q_start)
+                if scheme == Scheme.IMGT:
+                    numbering = fix_imgt_cdrs_numbering(numbering)
+                    numbering = sort_imgt_numbering(numbering)
 
-                    if scheme == Scheme.IMGT:
-                        numbering = fix_imgt_cdrs_numbering(numbering)
-                        numbering = sort_imgt_numbering(numbering)
-
+                if numbering:
                     scheme_residue_mapping = get_scheme_residue_mapping(numbering)
                     positional_scheme_mapping = get_positional_scheme_mapping(
                         scheme_residue_mapping, sch_alignment.q_start
                     )
-                except AssertionError as err:
-                    scheme_alignment_exc = str(err)
+            except AssertionError as err:
+                scheme_alignment_exc = str(err)
 
-                if c_scheme:
-                    c_numbering = number_c_region(self.scheme_aligner, alignment.v.q_seq, alignment, c_scheme)
+            if c_scheme:
+                c_numbering = number_c_region(self.scheme_aligner, alignment.v.q_seq, alignment, c_scheme)
 
-            # produce airr result
-            # this is separated on purpose to enable other output formats
-            airr_builder = AirrBuilderAA(header, query_sequence, scheme)
-            if return_all_domains:
-                airr_builder = SegmentedAirrBuilderAA(header, sequence_aa, scheme, query_sequence)
-                airr_builder.with_segment_start_end(segment_start, segment_end)
+        # produce airr result
+        # this is separated on purpose to enable other output formats
+        airr_builder = AirrBuilderAA(header, query_sequence, scheme)
+        if return_all_domains:
+            airr_builder = SegmentedAirrBuilderAA(header, sequence_aa, scheme, query_sequence)
+            airr_builder.with_segment_start_end(segment_start, segment_end)
 
-            if alignment.v:
-                airr_builder.with_v_gene_alignment_aa(alignment.v)
+        if alignment.v:
+            airr_builder.with_v_gene_alignment_aa(alignment.v)
 
-            if alignment.j:
-                airr_builder.with_j_gene_alignment_aa(alignment.j)
+        if alignment.j:
+            airr_builder.with_j_gene_alignment_aa(alignment.j)
 
-            if alignment.c:
-                airr_builder.with_c_gene_alignment_aa(alignment.c)
+        if alignment.c:
+            airr_builder.with_c_gene_alignment_aa(alignment.c)
 
-            if sch_alignment:
-                assert aa_offsets
-                airr_builder.with_aa_region_offsets(aa_offsets)
-                airr_builder.with_aa_scheme_alignment(sch_alignment, extend_alignment=extend_alignment)
+        if sch_alignment:
+            assert aa_offsets
+            airr_builder.with_aa_region_offsets(aa_offsets)
+            airr_builder.with_aa_scheme_alignment(sch_alignment, extend_alignment=extend_alignment)
 
-            if numbering:
-                (
-                    airr_builder.with_scheme_residue_mapping(scheme_residue_mapping).with_positional_scheme_mapping(
-                        positional_scheme_mapping
-                    )
-                )
+        if scheme_residue_mapping is not None and positional_scheme_mapping is not None:
+            airr_builder.with_scheme_residue_mapping(scheme_residue_mapping).with_positional_scheme_mapping(
+                positional_scheme_mapping
+            )
 
-            if c_numbering:
-                assert c_scheme
-                airr_builder.with_c_scheme_numbering(c_scheme, *c_numbering)
+        if c_numbering:
+            assert c_scheme
+            airr_builder.with_c_scheme_numbering(c_scheme, *c_numbering)
 
-            if scheme_alignment_exc:
-                airr_builder.with_scheme_alignment_exc(scheme_alignment_exc)
+        if scheme_alignment_exc:
+            airr_builder.with_scheme_alignment_exc(scheme_alignment_exc)
 
-            result = airr_builder.build()
-            results.append(result)
-
-        return results
+        return airr_builder.build()
 
 
 def create_riot_nt(
