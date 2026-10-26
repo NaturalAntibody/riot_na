@@ -177,6 +177,9 @@ def test_constant_region_fragments_follow_v_domains(riot_aa: RiotNumberingAA):
     assert riot_aa.annotate_chain("", ck_start + LINKER + VK).layout == "[27]-VK"
     assert riot_aa.annotate_chain("", VK + LINKER + ck_start).layout == "VK-[27]"
 
+    # CL derived linker of DVD-Ig light chains, without the J-C junction residue (R108)
+    assert riot_aa.annotate_chain("", VK + "TVAAP" + VL).layout == "VK-CL-VL"
+
 
 def test_tandem_fabs(riot_aa: RiotNumberingAA):
     query = VH + IGHG1[:98] + LINKER + VH + IGHG1

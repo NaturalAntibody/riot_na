@@ -335,8 +335,8 @@ class ConstantRegionAligner:  # pylint: disable=too-many-instance-attributes
 
     def _is_fragment(self, domain_alignment: ConstantDomainAlignment) -> bool:
         """
-        Short alignments (allowed only from the start of C genes) are constant region fragments, e.g. C gene starts
-        of sequencing reads or CH1 derived linkers.
+        Short alignments (allowed only from the start of C genes, give or take the J-C junction residue) are constant
+        region fragments, e.g. C gene starts of sequencing reads or CH1 and CL derived linkers.
         """
         alignment = domain_alignment.alignment
         return alignment.t_end - alignment.t_start < self.min_internal_alignment_length

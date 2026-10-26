@@ -153,6 +153,7 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
         max_cdr3_length: Optional[int] = None,
         min_seq_identity: Optional[float] = None,
         min_internal_alignment_length: Optional[int] = None,
+        max_fragment_germline_start: int = 0,
     ) -> None:
         # Initialize the base prefiltering directly with species-aware keys
         self.prefiltering = MultiSpeciesPrefiltering(genes, kmer_size, distance_threshold, top_n, modulo_n)
@@ -165,6 +166,7 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
         self.max_cdr3_length = max_cdr3_length
         self.min_seq_identity = min_seq_identity
         self.min_internal_alignment_length = min_internal_alignment_length
+        self.max_fragment_germline_start = max_fragment_germline_start
 
     def find_gene(self, gene_id: str) -> Optional[Gene | GeneAA]:
         """
@@ -223,7 +225,11 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
                     continue
             if self.min_internal_alignment_length is not None:
                 # alignments shorter than that have to start at the beginning of the germline
-                if alignment.t_start > 0 and alignment_length < self.min_internal_alignment_length:
+                # (at most max_fragment_germline_start residues after it)
+                if (
+                    alignment.t_start > self.max_fragment_germline_start
+                    and alignment_length < self.min_internal_alignment_length
+                ):
                     continue
 
             result.append(
@@ -386,6 +392,9 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 # shorter internal matches are Ig fold similarities (e.g. of V domains following scFv V domains to CL)
                 "min_seq_identity": float(os.environ.get("MIN_SEQ_IDENTITY_C_AA", 0.4)),
                 "min_internal_alignment_length": int(os.environ.get("MIN_INTERNAL_ALIGNMENT_LENGTH_C_AA", 50)),
+                # the first C residue is encoded by the J-C junction codon (its first nucleotide comes from J), so it is
+                # missing or different when J ends differently, e.g. absorbed by J alignment or mutated
+                "max_fragment_germline_start": int(os.environ.get("MAX_FRAGMENT_GERMLINE_START_C_AA", 1)),
             }
         case _:
             raise ValueError("AA aligner not supported for gene type")
