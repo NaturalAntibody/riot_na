@@ -6,7 +6,12 @@ from typing import Optional
 import pytest
 
 from riot_na import CScheme, MoleculeAnnotation
-from riot_na.api.molecule_annotation import binding_site_rows
+from riot_na.api.molecule_annotation import (
+    _FabArm,
+    _one_to_one_partners,
+    _VDomain,
+    binding_site_rows,
+)
 from riot_na.api.riot_numbering import (
     RiotNumberingAA,
     get_or_create_riot_aa,
@@ -17,6 +22,7 @@ from riot_na.common.io import (
     write_molecule_layout_csv,
     write_molecules_json,
 )
+from riot_na.data.model import ChainDomain
 from tests.test_c_numbering import (
     C_GERMLINES_AA,
     VH,
@@ -294,3 +300,29 @@ def test_molecule_output(riot_aa: RiotNumberingAA, tmp_path: Path):
         molecules_json = json.load(json_file)
     assert [molecule["molecule_id"] for molecule in molecules_json] == ["IgG", "VHH-Fc"]
     assert molecules_json[0]["chains"]["HC"]["constant_domains"][2]["c_scheme_residue_mapping"]["297"] == "N"
+
+
+def fab_arm(chain_id: str, heavy: bool) -> _FabArm:
+    v_domain = _VDomain(0, chain_id, 0, ChainDomain("VH" if heavy else "VK", 1, 120, rearrangement_index=0))
+    return _FabArm((v_domain,), ChainDomain("CH1" if heavy else "CL", 121, 220), "CH1" if heavy else "CL")
+
+
+def test_one_to_one_partners():
+    ch1_arms = [fab_arm(f"HC{i}", True) for i in range(10)]
+    cl_arms = [fab_arm(f"LC{i}", False) for i in range(10)]
+
+    # every Fab arm can pair with every other, so all partners are ambiguous
+    all_partners = {ch1_arm: list(cl_arms) for ch1_arm in ch1_arms}
+    assert _one_to_one_partners(ch1_arms, cl_arms, all_partners) == all_partners
+
+    # FIT-Ig like: HC1 pairs with LC1 only, so HC0 pairs with LC0
+    partners = {ch1_arms[0]: cl_arms[:2], ch1_arms[1]: cl_arms[1:2]}
+    assert _one_to_one_partners(ch1_arms[:2], cl_arms[:2], partners) == {
+        ch1_arms[0]: cl_arms[:1],
+        ch1_arms[1]: cl_arms[1:2],
+    }
+
+    # no one-to-one pairing, the last CL arm has no partner
+    no_pairing = {ch1_arm: cl_arms[:-1] for ch1_arm in ch1_arms}
+    assert _one_to_one_partners(ch1_arms, cl_arms, no_pairing) is None
+    assert _one_to_one_partners(ch1_arms, cl_arms[:-1], no_pairing) is None

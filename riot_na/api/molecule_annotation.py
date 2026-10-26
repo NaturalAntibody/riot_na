@@ -45,8 +45,6 @@ CL = "CL"
 FAB_CONSTANT_DOMAINS = (CH1, CL)
 # constant regions of C genes without domain definitions aligned from (about) the C gene start contain CH1 or CL
 MAX_CONSTANT_REGION_GERMLINE_START = 3
-# limit of one-to-one pairings of Fab arms enumerated to find unambiguous partners
-MAX_ONE_TO_ONE_PAIRINGS = 1000
 
 FAB = "Fab"
 FV = "Fv"
@@ -447,34 +445,56 @@ def _one_to_one_partners(
     If there are as many CH1 as CL Fab arms, every CL arm likely pairs with one CH1 arm (e.g. FIT-Ig). Partners
     of CH1 arms are then the CL arms they are paired with in any one-to-one pairing. Returns None, if the numbers
     of arms differ (e.g. common light chain pairs with many heavy chains) or there is no one-to-one pairing.
+
+    One-to-one pairings are perfect matchings of the arms, so a CL arm is paired with a CH1 arm in some one-to-one
+    pairing, if the CH1 arm is reachable from the CL arm by an alternating path: from a CL arm to its CH1 arm in a
+    found one-to-one pairing, then to another partner of this CH1 arm and so on. Arms of the path closed by the CH1
+    arm can exchange their partners, which gives another one-to-one pairing.
     """
     if len(ch1_arms) != len(cl_arms):
         return None
 
-    pairings: list[dict[_FabArm, _FabArm]] = []
-
-    def pair_from(arm_index: int, pairing: dict[_FabArm, _FabArm]):
-        if len(pairings) >= MAX_ONE_TO_ONE_PAIRINGS:
-            return
-        if arm_index == len(ch1_arms):
-            pairings.append(dict(pairing))
-            return
-        fab_arm = ch1_arms[arm_index]
-        for partner in fab_arm_partners[fab_arm]:
-            if partner not in pairing.values():
-                pairing[fab_arm] = partner
-                pair_from(arm_index + 1, pairing)
-                del pairing[fab_arm]
-
-    pair_from(0, {})
-    if not pairings:
+    pairing = _one_to_one_pairing(ch1_arms, fab_arm_partners)
+    if pairing is None:
         return None
+    paired_ch1_arms = {cl_arm: ch1_arm for ch1_arm, cl_arm in pairing.items()}
+
+    def reachable_ch1_arms(cl_arm: _FabArm) -> set[_FabArm]:
+        reached: set[_FabArm] = set()
+        pending = [paired_ch1_arms[cl_arm]]
+        while pending:
+            ch1_arm = pending.pop()
+            if ch1_arm not in reached:
+                reached.add(ch1_arm)
+                pending += [paired_ch1_arms[partner] for partner in fab_arm_partners[ch1_arm]]
+        return reached
+
+    reachable = {cl_arm: reachable_ch1_arms(cl_arm) for cl_arm in cl_arms}
     return {
-        fab_arm: [
-            partner for partner in fab_arm_partners[fab_arm] if any(pairing[fab_arm] == partner for pairing in pairings)
-        ]
+        fab_arm: [partner for partner in fab_arm_partners[fab_arm] if fab_arm in reachable[partner]]
         for fab_arm in ch1_arms
     }
+
+
+def _one_to_one_pairing(
+    ch1_arms: Sequence[_FabArm], fab_arm_partners: Mapping[_FabArm, list[_FabArm]]
+) -> Optional[dict[_FabArm, _FabArm]]:
+    """A one-to-one pairing of all CH1 arms with their partners (maximum bipartite matching), None if there is none."""
+    paired_ch1_arms: dict[_FabArm, _FabArm] = {}
+
+    def pair(ch1_arm: _FabArm, visited: set[_FabArm]) -> bool:
+        # pair the CH1 arm with a free partner or with a partner whose CH1 arm can be paired with another partner
+        for cl_arm in fab_arm_partners[ch1_arm]:
+            if cl_arm not in visited:
+                visited.add(cl_arm)
+                if cl_arm not in paired_ch1_arms or pair(paired_ch1_arms[cl_arm], visited):
+                    paired_ch1_arms[cl_arm] = ch1_arm
+                    return True
+        return False
+
+    if not all(pair(ch1_arm, set()) for ch1_arm in ch1_arms):
+        return None
+    return {ch1_arm: cl_arm for cl_arm, ch1_arm in paired_ch1_arms.items()}
 
 
 def pair_binding_sites(
