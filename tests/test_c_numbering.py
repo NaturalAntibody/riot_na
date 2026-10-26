@@ -351,6 +351,23 @@ def test_c_numbering_without_j(riot_aa: RiotNumberingAA):
     assert_positional_mapping_consistent(query, airr)
 
 
+@pytest.mark.parametrize(
+    "query, c_gene",
+    [
+        # the first C residue is encoded by the J-C junction codon: absorbed by J (FR4 ending with A instead of S)
+        (VH[:-1] + C_GERMLINES_AA["IGHG1"][:20], "IGHG1"),
+        # J-C junction residue mutated (R108G, G to A)
+        (VK + "G" + C_GERMLINES_AA["IGKC"][1:20], "IGKC"),
+        (VL + "A" + C_GERMLINES_AA["IGLC2"][1:20], "IGLC2"),
+    ],
+    ids=["IGHG1", "IGKC", "IGLC2"],
+)
+def test_c_fragments_without_junction_residue(riot_aa: RiotNumberingAA, query: str, c_gene: str):
+    airr = riot_aa.run_on_sequence("", query)
+
+    assert (airr.c_call, airr.c_germline_start_aa) == (c_gene, 2)
+
+
 @pytest.mark.parametrize("v_domain", [VH, VK], ids=["VH", "VK"])
 def test_non_antibody_regions_are_not_c_regions(riot_aa: RiotNumberingAA, v_domain: str):
     # CAR: CD8a hinge and transmembrane, CD28 and CD3z signalling domains
