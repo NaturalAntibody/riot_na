@@ -482,8 +482,8 @@ class VDomainRef:
 @dataclass
 class BindingSite:
     binding_site_id: int
-    # Fab, Fv (V domains stacked on Fab V domains, e.g. outer Fv of DVD-Ig, or paired by pairing hints), scFv, diabody,
-    # single domain or unpaired
+    # Fab, Fv (V domains stacked on Fab V domains, e.g. outer Fv of DVD-Ig, or other V domains given in pairs), scFv,
+    # diabody, single domain or unpaired
     binding_site_type: str
     heavy_domain: Optional[VDomainRef] = None
     light_domain: Optional[VDomainRef] = None

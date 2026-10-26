@@ -6,6 +6,7 @@ from typing import Optional
 import pytest
 
 from riot_na import CScheme, MoleculeAnnotation
+from riot_na.api.chain_annotation import reverse_complement
 from riot_na.api.molecule_annotation import (
     _FabArm,
     _one_to_one_partners,
@@ -19,6 +20,7 @@ from riot_na.api.riot_numbering import (
     get_or_create_riot_nt,
 )
 from riot_na.common.io import (
+    read_v_domain_pairs,
     write_binding_sites_csv,
     write_molecule_layout_csv,
     write_molecules_json,
@@ -28,6 +30,7 @@ from tests.test_c_numbering import (
     C_GERMLINES_AA,
     VH,
     VK,
+    VL,
     nt_rearrangement,
     secreted_ighg,
 )
@@ -166,117 +169,199 @@ def test_binding_site_details(riot_aa: RiotNumberingAA):
 BISPECIFIC = {"HC1": VH + IGHG1, "HC2": VH2 + IGHG1, "LC1": VK + CK, "LC2": VK2 + CK}
 TANDEM_FAB = {"HC": VH + CH1 + "GGGGS" + VH2 + IGHG1, "LC1": VK + CK, "LC2": VK2 + CK}
 DIABODIES = {"A": VH + "GGGGS" + VK2, "B": VH2 + "GGGGS" + VK, "C": VH + "GGGGS" + VK}
+DVD_IG = {"HC": VH + "ASTKGP" + VH2 + IGHG1, "LC": VK + "TVAAP" + VK2 + CK}
 
 
 @pytest.mark.parametrize(
-    "chains, pairs, expected",
+    "chains, expected",
     [
-        (
-            BISPECIFIC,
-            [("HC1", "LC2"), ("HC2", "LC1")],
-            [("Fab", "HC1:1", "LC2:1", None), ("Fab", "HC2:1", "LC1:1", None)],
-        ),
-        # HC2 pairs with the light chain left
-        (BISPECIFIC, [("HC1", "LC2")], [("Fab", "HC1:1", "LC2:1", None), ("Fab", "HC2:1", "LC1:1", None)]),
-        # light chains given in pairs are not reserved, they can be common light chains
-        (
-            {"HC1": VH + IGHG1, "HC2": VH2 + IGHG1, "LC": VK + CK},
-            [("HC1", "LC")],
-            [("Fab", "HC1:1", "LC:1", None), ("Fab", "HC2:1", "LC:1", None)],
-        ),
-        (
-            TANDEM_FAB,
-            None,
-            [("Fab", "HC:1", None, "LC1:1;LC2:1"), ("Fab", "HC:3", None, "LC1:1;LC2:1")],
-        ),
-        # Fab arms of one chain given as V domains (chain ID and domain index)
-        (
-            TANDEM_FAB,
-            [(("HC", 1), "LC1"), (("HC", 3), "LC2")],
-            [("Fab", "HC:1", "LC1:1", None), ("Fab", "HC:3", "LC2:1", None)],
-        ),
-        # V domain only chains
-        ({"H": VH, "L": VK}, None, [("single domain", "H:1", None, None), ("unpaired", None, "L:1", None)]),
-        ({"H": VH, "L": VK}, [("H", "L")], [("Fv", "H:1", "L:1", None)]),
-        # heavy chain without its light chain constant domain
-        ({"HC": VH + IGHG1, "L": VK}, [("HC", "L")], [("Fv", "HC:1", "L:1", None)]),
+        (TANDEM_FAB, [("Fab", "HC:1", None, "LC1:1;LC2:1"), ("Fab", "HC:3", None, "LC1:1;LC2:1")]),
+        ({"H": VH, "L": VK}, [("single domain", "H:1", None, None), ("unpaired", None, "L:1", None)]),
         (
             DIABODIES,
-            None,
             [
                 ("diabody", "A:1", "A:2", "B:1;B:2;C:1;C:2"),
                 ("diabody", "B:1", "B:2", "A:1;A:2;C:1;C:2"),
                 ("diabody", "C:1", "C:2", "A:1;A:2;B:1;B:2"),
             ],
         ),
+    ],
+    ids=["tandem-Fab", "V-domains", "diabodies"],
+)
+def test_ambiguous_binding_sites(riot_aa: RiotNumberingAA, chains: dict[str, str], expected: list):
+    molecule = riot_aa.annotate_molecule("molecule", chains)
+    assert binding_sites(molecule) == expected
+
+
+def numbered_binding_sites(
+    molecule: MoleculeAnnotation,
+) -> list[tuple[str, Optional[str], Optional[str], Optional[int]]]:
+    """(type, heavy V domain, light V domain, linker length) of binding sites, V domains as chain:V domain number"""
+    return [
         (
-            DIABODIES,
-            [("A", "B")],
-            [("diabody", "A:1", "B:2", None), ("diabody", "B:1", "A:2", None), ("diabody", "C:1", "C:2", None)],
-        ),
-        # light V domain given in pairs with two heavy V domains pairs with both, regardless of the chain order
+            row["binding_site_type"],
+            row["heavy_chain_id"] and f"{row['heavy_chain_id']}:{row['heavy_v_domain_number']}",
+            row["light_chain_id"] and f"{row['light_chain_id']}:{row['light_v_domain_number']}",
+            row["linker_length"],
+        )
+        for row in binding_site_rows(molecule)
+    ]
+
+
+@pytest.mark.parametrize(
+    "chains, pairs, expected",
+    [
+        ({"HC": VH + IGHG1, "LC": VK + CK}, [(1, 1, 2, 1)], [("Fab", "HC:1", "LC:1", None)]),
+        # pairs which can't be told from the sequences
+        (BISPECIFIC, [(1, 1, 4, 1), (2, 1, 3, 1)], [("Fab", "HC1:1", "LC2:1", None), ("Fab", "HC2:1", "LC1:1", None)]),
+        # chains given by chain ID
         (
-            {"H1": VH, "H2": VH2, "L": VK},
-            [("H1", "L"), ("H2", "L")],
-            [("Fv", "H1:1", "L:1", None), ("Fv", "H2:1", "L:1", None)],
+            BISPECIFIC,
+            [("HC1", 1, "LC2", 1), ("HC2", 1, "LC1", 1)],
+            [("Fab", "HC1:1", "LC2:1", None), ("Fab", "HC2:1", "LC1:1", None)],
         ),
         (
-            {"H2": VH2, "H1": VH, "L": VK},
-            [("H1", "L"), ("H2", "L")],
-            [("Fv", "H2:1", "L:1", None), ("Fv", "H1:1", "L:1", None)],
+            {"HC1": VH + IGHG1, "HC2": VH2 + IGHG1, "LC": VK + CK},
+            [(1, 1, 3, 1), (2, 1, 3, 1)],
+            [("Fab", "HC1:1", "LC:1", None), ("Fab", "HC2:1", "LC:1", None)],
         ),
-        # V domain given in pairs doesn't form a scFv with another V domain
+        # common heavy chain with a kappa and a lambda light chain
         (
-            {"A": VH + LINKER + VK2, "B": VK},
-            [(("A", 1), "B")],
-            [("Fv", "A:1", "B:1", None), ("unpaired", None, "A:2", None)],
+            {"HC": VH + IGHG1, "LC1": VK + CK, "LC2": VL + C_GERMLINES_AA["IGLC2"]},
+            [(1, 1, 2, 1), (1, 1, 3, 1)],
+            [("Fab", "HC:1", "LC1:1", None), ("Fab", "HC:1", "LC2:1", None)],
         ),
-        # chains given in pairs keep their scFv
+        (
+            {"HC1": VH + IGHG1, "LC1": VK + CK, "HC2": VK2 + IGHG1, "LC2": VH2 + CK},
+            [(1, 1, 2, 1), (3, 1, 4, 1)],
+            [("Fab", "HC1:1", "LC1:1", None), ("Fab", "LC2:1", "HC2:1", None)],
+        ),
+        (TANDEM_FAB, [(1, 1, 2, 1), (1, 2, 3, 1)], [("Fab", "HC:1", "LC1:1", None), ("Fab", "HC:2", "LC2:1", None)]),
+        (DVD_IG, [(1, 1, 2, 1), (1, 2, 2, 2)], [("Fv", "HC:1", "LC:1", None), ("Fab", "HC:2", "LC:2", None)]),
+        # pairs are not changed by the format, e.g. crossed V domains of CODV-Ig
+        (DVD_IG, [(1, 1, 2, 2), (1, 2, 2, 1)], [("Fv", "HC:1", "LC:2", None), ("Fv", "HC:2", "LC:1", None)]),
+        (
+            {"LC-HC": VK + CK + VH2 + IGHG1, "Fd": VH + CH1, "LC": VK2 + CK},
+            [(2, 1, 1, 1), (1, 2, 3, 1)],
+            [("Fab", "Fd:1", "LC-HC:1", None), ("Fab", "LC-HC:2", "LC:1", None)],
+        ),
         (
             {"HC": VH + IGHG1 + LINKER + VH2 + LINKER + VK2, "LC": VK + CK},
-            [("HC", "LC")],
-            [("Fab", "HC:1", "LC:1", None), ("scFv", "HC:6", "HC:7", None)],
+            [(1, 1, 2, 1), (1, 2, 1, 3)],
+            [("Fab", "HC:1", "LC:1", None), ("scFv", "HC:2", "HC:3", 15)],
         ),
-        # V domains given in pairs choose partners of diabody units
+        (
+            {"BiTE": VK + LINKER + VH + "GGGGS" + VH2 + LINKER + VK2},
+            [(1, 2, 1, 1), (1, 3, 1, 4)],
+            [("scFv", "BiTE:2", "BiTE:1", 15), ("scFv", "BiTE:3", "BiTE:4", 15)],
+        ),
+        ({"chain": VH + "GGGGS" + VK}, [(1, 1, 1, 2)], [("diabody", "chain:1", "chain:2", 5)]),
         (
             {"A": VH + "GGGGS" + VK2, "B": VH2 + "GGGGS" + VK},
-            [(("A", 1), ("B", 2))],
+            [(1, 1, 2, 2), (2, 1, 1, 2)],
             [("diabody", "A:1", "B:2", None), ("diabody", "B:1", "A:2", None)],
         ),
         (
             {"tandem": VH + "GGGGS" + VK2 + "GGGGS" + VH2 + "GGGGS" + VK},
-            [(("tandem", 1), ("tandem", 4)), (("tandem", 3), ("tandem", 2))],
-            [("diabody", "tandem:1", "tandem:4", None), ("diabody", "tandem:3", "tandem:2", None)],
+            [(1, 1, 1, 4), (1, 3, 1, 2)],
+            [("diabody", "tandem:1", "tandem:4", None), ("diabody", "tandem:3", "tandem:2", 5)],
         ),
+        ({"scFab": VK + CK + 6 * "GGGGS" + VH + CH1}, [(1, 2, 1, 1)], [("Fab", "scFab:2", "scFab:1", None)]),
+        ({"H": VH, "L": VK}, [(1, 1, 2, 1)], [("Fv", "H:1", "L:1", None)]),
+        ({"HC": VH + IGHG1, "L": VK}, [(1, 1, 2, 1)], [("Fv", "HC:1", "L:1", None)]),
+        # V domains of a scFv paired with other V domains
         (
-            {"A": VH + "GGGGS" + VK2, "B": VK},
-            [(("A", 1), "B")],
+            {"A": VH + LINKER + VK2, "B": VK},
+            [(1, 1, 2, 1)],
             [("Fv", "A:1", "B:1", None), ("unpaired", None, "A:2", None)],
         ),
+        # V domains not given in pairs are single domains or unpaired
+        (
+            {"HC1": VH + IGHG1, "HC2": VH2 + IGHG1, "LC": VK + CK, "VHH-Fc": VHH + FC},
+            [(1, 1, 3, 1)],
+            [
+                ("Fab", "HC1:1", "LC:1", None),
+                ("unpaired", "HC2:1", None, None),
+                ("single domain", "VHH-Fc:1", None, None),
+            ],
+        ),
+        ({"HC": VH + IGHG1, "LC": VK + CK}, [], [("unpaired", "HC:1", None, None), ("unpaired", None, "LC:1", None)]),
     ],
     ids=[
+        "IgG",
         "bispecific",
-        "one-pair",
+        "chain-IDs",
         "common-light-chain",
+        "common-heavy-chain",
+        "CrossMab",
         "tandem-Fab",
-        "tandem-Fab-domains",
-        "V-domains",
-        "Fv",
-        "HC-with-VL",
-        "diabodies",
+        "DVD-Ig",
+        "DVD-Ig-crossed",
+        "FIT-Ig",
+        "IgG-scFv",
+        "BiTE",
+        "diabody",
         "heterodimeric-diabody",
-        "common-light-chain-Fv",
-        "common-light-chain-Fv-chain-order",
-        "scFv-V-domain-pairs",
-        "IgG-scFv-chain-pairs",
-        "heterodimeric-diabody-V-domain-pairs",
         "tandem-diabody",
-        "diabody-V-domain-pairs",
+        "scFab",
+        "V-domains",
+        "HC-with-VL",
+        "scFv-V-domains",
+        "not-given",
+        "none",
     ],
 )
-def test_pairs(riot_aa: RiotNumberingAA, chains: dict[str, str], pairs: Optional[list], expected: list):
+def test_pairs(riot_aa: RiotNumberingAA, chains: dict[str, str], pairs: list, expected: list):
     molecule = riot_aa.annotate_molecule("molecule", chains, pairs=pairs)
-    assert binding_sites(molecule) == expected
+    assert numbered_binding_sites(molecule) == expected
+    assert not any(binding_site.ambiguous or binding_site.candidates for binding_site in molecule.binding_sites)
+
+
+@pytest.mark.parametrize(
+    "chains, pairs, error",
+    [
+        (BISPECIFIC, [(5, 1, 3, 1)], r"No chain 5 in V domain pair \(5, 1, 3, 1\), the molecule has 4 chains"),
+        (BISPECIFIC, [(0, 1, 3, 1)], "No chain 0"),
+        (BISPECIFIC, [("HC3", 1, "LC1", 1)], "Unknown chain HC3"),
+        (
+            BISPECIFIC,
+            [(1, 2, 3, 1)],
+            r"No V domain 2 in chain 1 \(HC1\) in V domain pair \(1, 2, 3, 1\), "
+            r"V domains of the chain: 1 VH \(layout VH-CH1-H-CH2-CH3\)",
+        ),
+        (
+            {"HC": VH + IGHG1, "Fc": FC, "LC": VK + CK},
+            [(1, 1, 2, 1)],
+            r"No V domain 1 in chain 2 \(Fc\) .* V domains of the chain: none \(layout H-CH2-CH3\)",
+        ),
+        (
+            BISPECIFIC,
+            [(1, 1, 2, 1)],
+            r"pairs two heavy V domains: VH 1 of chain 1 \(HC1\) and VH 1 of chain 2 \(HC2\)",
+        ),
+        (BISPECIFIC, [(3, 1, 4, 1)], "pairs two light V domains"),
+        (BISPECIFIC, [(1, 1, 1, 1)], r"pairs VH 1 of chain 1 \(HC1\) with itself"),
+        (BISPECIFIC, [(1, 1, 3, 1), (3, 1, 1, 1)], r"Duplicate V domain pair \(3, 1, 1, 1\)"),
+        (BISPECIFIC, [(1, 1, 3)], r"is not \(chain, V domain number, chain, V domain number\)"),
+        (BISPECIFIC, [(1, "1", 3, 1)], r"is not \(chain, V domain number, chain, V domain number\)"),
+    ],
+    ids=[
+        "chain-number",
+        "chain-number-0",
+        "chain-ID",
+        "V-domain-number",
+        "chain-without-V-domains",
+        "two-heavy",
+        "two-light",
+        "same-V-domain",
+        "duplicate",
+        "short",
+        "not-number",
+    ],
+)
+def test_invalid_pairs(riot_aa: RiotNumberingAA, chains: dict[str, str], pairs: list, error: str):
+    with pytest.raises(ValueError, match=error):
+        riot_aa.annotate_molecule("molecule", chains, pairs=pairs)
 
 
 @pytest.mark.parametrize(
@@ -303,29 +388,18 @@ def test_pairs(riot_aa: RiotNumberingAA, chains: dict[str, str], pairs: Optional
                 "LC2:1": ("1;2", "Fab;Fab", None, None, True, "HC1:1;HC2:1"),
             },
         ),
+        # common heavy chain is in binding sites of both light chains
         (
-            {"H": VH, "L1": VK, "L2": VK2},
-            [("H", "L1"), ("H", "L2")],
+            {"HC": VH + IGHG1, "LC1": VK + CK, "LC2": VL + C_GERMLINES_AA["IGLC2"]},
+            [(1, 1, 2, 1), (1, 1, 3, 1)],
             {
-                "H:1": (1, "Fv", None, None, True, "L1:1;L2:1"),
-                "L1:1": (1, "Fv", None, None, True, "H:1"),
-                "L2:1": (1, "Fv", None, None, True, "H:1"),
-            },
-        ),
-        # LC2 pairs with the second Fab arm of HCA and is a candidate of the other heavy chain Fab arms
-        (
-            {"HCA": VH + CH1 + "GGGGS" + VH2 + IGHG1, "HCB": VH + IGHG1, "LC1": VK + CK, "LC2": VK2 + CK},
-            [(("HCA", 3), "LC2")],
-            {
-                "HCA:1": (1, "Fab", None, None, True, "LC1:1;LC2:1"),
-                "HCA:3": (2, "Fab", "LC2", 1, False, None),
-                "HCB:1": (3, "Fab", None, None, True, "LC1:1;LC2:1"),
-                "LC1:1": ("1;3", "Fab;Fab", None, None, True, "HCA:1;HCB:1"),
-                "LC2:1": (2, "Fab", "HCA", 3, True, "HCA:1;HCB:1"),
+                "HC:1": ("1;2", "Fab;Fab", "LC1;LC2", "1;1", False, None),
+                "LC1:1": (1, "Fab", "HC", 1, False, None),
+                "LC2:1": (2, "Fab", "HC", 1, False, None),
             },
         ),
     ],
-    ids=["common-light-chain", "bispecific", "ambiguous-Fv", "paired-candidate"],
+    ids=["common-light-chain", "bispecific", "common-heavy-chain"],
 )
 def test_layout_binding_sites(riot_aa: RiotNumberingAA, chains: dict[str, str], pairs: Optional[list], expected: dict):
     molecule = riot_aa.annotate_molecule("molecule", chains, pairs=pairs)
@@ -344,12 +418,66 @@ def test_layout_binding_sites(riot_aa: RiotNumberingAA, chains: dict[str, str], 
     assert v_domain_rows == expected
 
 
-def test_invalid_pairs(riot_aa: RiotNumberingAA):
-    with pytest.raises(ValueError, match="Unknown chain"):
-        riot_aa.annotate_molecule("molecule", BISPECIFIC, pairs=[("HC1", "LC3")])
-    # domain 2 of HC is CH1
-    with pytest.raises(ValueError, match="No V domain with domain index 2 in chain HC"):
-        riot_aa.annotate_molecule("molecule", TANDEM_FAB, pairs=[(("HC", 2), "LC1")])
+def test_chain_list(riot_aa: RiotNumberingAA):
+    # chains are numbered, chain numbers are chain IDs
+    molecule = riot_aa.annotate_molecule("molecule", [VH + IGHG1, VK + CK], pairs=[(1, 1, 2, 1)])
+    assert [chain.sequence_header for chain in molecule.chains.values()] == ["molecule|1", "molecule|2"]
+    assert numbered_binding_sites(molecule) == [("Fab", "1:1", "2:1", None)]
+
+    with pytest.raises(TypeError):
+        riot_aa.annotate_molecule("molecule", VH + IGHG1)
+
+
+def test_v_domain_numbers(riot_aa: RiotNumberingAA):
+    molecule = riot_aa.annotate_molecule("molecule", {"HC": VH + IGHG1 + LINKER + VH2 + LINKER + VK2, "LC": VK + CK})
+
+    assert [
+        (row["chain_id"], row["domain"], row["domain_index"], row["v_domain_number"], row["partner_v_domain_number"])
+        for row in molecule_layout_rows(molecule)
+        if row["v_domain_number"]
+    ] == [("HC", "VH", 1, 1, 1), ("HC", "VH", 6, 2, 3), ("HC", "VK", 7, 3, 2), ("LC", "VK", 1, 1, 1)]
+    numbers = [(row["heavy_v_domain_number"], row["light_v_domain_number"]) for row in binding_site_rows(molecule)]
+    assert numbers == [(1, 1), (2, 3)]
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+def test_nucleotide_pairs(reverse: bool):
+    riot_nt = get_or_create_riot_nt(return_all_domains=True)
+    vh = nt_rearrangement("IGHV3-23*01", "GGCTAC", "IGHJ4*02", 2)
+    vk = nt_rearrangement("IGKV1-27*01", "CAGCAGAGTTACAGTACCCCT", "IGKJ1*01", 1)
+    scfv = vh + 3 * "GGTGGCGGTGGCTCG" + vk
+    molecule = riot_nt.annotate_molecule(
+        "molecule",
+        [
+            nt_rearrangement("IGHV3-23*01", "GGCTAC", "IGHJ4*02", 2, "IGHG1"),
+            nt_rearrangement("IGKV1-27*01", "CAGCAGAGTTACAGTACCCCT", "IGKJ1*01", 1, "IGKC"),
+            reverse_complement(scfv) if reverse else scfv,
+        ],
+        pairs=[(1, 1, 2, 1), (3, 1, 3, 2)],
+    )
+
+    # V domains are numbered in the reverse complemented sequence of chains on the reverse strand
+    assert molecule.chains["3"].rev_comp == reverse
+    assert numbered_binding_sites(molecule) == [("Fab", "1:1", "2:1", None), ("scFv", "3:1", "3:2", 15)]
+
+
+def test_read_v_domain_pairs(tmp_path: Path):
+    pairs_path = tmp_path / "pairs.tsv"
+    pairs_path.write_text(
+        "molecule_id\tchain_1\tv_domain_1\tchain_2\tv_domain_2\n"
+        "bispecific\t1\t1\t2\t1\n"
+        "IgG\t1\t1\t2\t1\n"
+        "bispecific\t3\t1\t4\t1\n"
+    )
+    assert read_v_domain_pairs(pairs_path) == {"bispecific": [(1, 1, 2, 1), (3, 1, 4, 1)], "IgG": [(1, 1, 2, 1)]}
+
+    pairs_path = tmp_path / "pairs.csv"
+    pairs_path.write_text("molecule_id,chain_1,v_domain_1,chain_2\nIgG,1,1,2\n")
+    with pytest.raises(ValueError, match="Missing columns .*: v_domain_2"):
+        read_v_domain_pairs(pairs_path)
+    pairs_path.write_text("molecule_id,chain_1,v_domain_1,chain_2,v_domain_2\nIgG,1,1,2,1\nIgG2,HC,1,LC,1\n")
+    with pytest.raises(ValueError, match="Invalid V domain pair in line 3"):
+        read_v_domain_pairs(pairs_path)
 
 
 def test_nucleotide_molecule():

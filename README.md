@@ -352,62 +352,66 @@ chain.constant_domains  # ConstantDomain(domain="CH2", c_call="IGHG1", rearrange
 ```python
 molecule = riot_aa.annotate_molecule(
     molecule_id="bispecific",
-    chains={"HC1": heavy_chain_1, "HC2": heavy_chain_2, "LC1": light_chain_1, "LC2": light_chain_2},
+    chains={"HC1": heavy_chain_1, "LC1": light_chain_1, "HC2": heavy_chain_2, "LC2": light_chain_2},
     c_scheme=CScheme.EU,
-    pairs=[("HC1", "LC1"), ("HC2", "LC2")],
+    pairs=[(1, 1, 2, 1), (3, 1, 4, 1)],  # optional: HC1 with LC1, HC2 with LC2
 )
 molecule.chains["HC1"]   # ChainAnnotation, AIRR records with sequence_header "bispecific|HC1"
 molecule.binding_sites   # [BindingSite(binding_site_id=1, binding_site_type="Fab", heavy_domain=VDomainRef("HC1", 0), light_domain=VDomainRef("LC1", 0), ...), ...]
 ```
 
-Pass every distinct chain once, e.g. the heavy and the light chain of an IgG. A V domain is referred to by its chain ID
-and domain index, the 1-based position among all domains of the chain (in `VH-CH1-[5]-VH-CH1-H-CH2-CH3` the V domains
-are 1 and 3).
+Pass every distinct chain once, e.g. the heavy and the light chain of an IgG, as a dict by chain ID or as a list
+(chain IDs `"1"`, `"2"`, ...). Chains are numbered from 1 in this order. A V domain is numbered from 1 among the
+V domains of its chain (`v_domain_number`); its domain index is its position among all domains of the chain (in
+`VH-CH1-[5]-VH-CH1-H-CH2-CH3` the V domains are numbers 1 and 2, domain indices 1 and 3).
 
-#### Binding sites
+#### Pairs
 
-V domains are paired by the format of their chains, in this order:
+If the pairing of the V domains is known, give it as `pairs`. Every pair is a binding site, nothing is inferred:
+
+```python
+pairs = [(1, 1, 2, 1), (3, 1, 4, 1)]              # chain 1 V domain 1 with chain 2 V domain 1, chain 3 with chain 4
+pairs = [("HC1", 1, "LC1", 1), ("HC2", 1, "LC2", 1)]  # the same, chains by chain ID
+pairs = [(1, 1, 2, 1), (1, 2, 3, 1)]              # tandem Fab, VH-CH1-linker-VH-CH1-Fc heavy chain with two light chains
+pairs = [(1, 1, 2, 1), (1, 1, 3, 1)]              # common heavy chain of a kappa-lambda body
+```
+
+- A pair is (chain, V domain number, chain, V domain number) of a heavy and a light V domain. Chains are given by
+  number or chain ID. Nucleotide chains on the reverse strand are numbered in their reverse complement.
+- A V domain can be in many pairs (common light or heavy chain). V domains not given in pairs are `single domain`
+  (heavy V domains) or `unpaired`.
+- The binding site type follows the format of the V domains: `Fab` (V domains followed by CH1 and CL), `scFv` or
+  `diabody` (adjacent V domains of a chain joined by a linker of at least 12 or of fewer residues, or V domains of
+  diabody units of two chains), `Fv` (others, e.g. outer V domains of DVD-Ig or chains of V domains only).
+- Invalid pairs raise `ValueError`: unknown chains or V domains (the message lists the V domains found in the chain),
+  two heavy or two light V domains, duplicate pairs.
+- `read_v_domain_pairs` (`riot_na.common.io`) reads pairs of many molecules from a CSV (or TSV) file with columns
+  `molecule_id`, `chain_1`, `v_domain_1`, `chain_2`, `v_domain_2`, one row per binding site.
+
+#### Pairing by the format
+
+Without `pairs`, V domains are paired by the format of their chains, in this order:
 
 | Binding site | V domains | Rule |
 |---|---|---|
 | `scFv` | heavy and light V domains next to each other in a chain | linker of at least 12 residues |
 | `diabody` | the same, with a shorter linker | the linker is too short for them to pair with each other, so they pair with the V domains of another copy of the chain or, if two chains are each other's only candidates, of the other chain |
 | `Fab` | V domain followed by CH1 and V domain followed by CL | one heavy and one light, so domain crossovers of CrossMabs pair too. Fab arms of one chain pair only if joined by a linker of at least 20 residues (single chain Fab) |
-| `Fv` | V domains stacked in front of Fab V domains (e.g. outer V domains of DVD-Ig) | paired by their position; also V domains paired only by `pairs` (e.g. chains of V domains only) |
+| `Fv` | V domains stacked in front of Fab V domains (e.g. outer V domains of DVD-Ig) | paired by their position |
 | `single domain` | heavy V domain without a partner (e.g. VHH) | |
 | `unpaired` | light V domain or V domain of a Fab arm without a partner | |
 
 A light chain Fab arm can pair with many heavy chain Fab arms (common light chain). If there are as many CH1 as CL Fab
 arms, every CL arm pairs with one CH1 arm (e.g. FIT-Ig). A V domain with more than one possible partner forms a single
 `ambiguous` binding site, with its possible partners as `candidates`. For example, the heavy and light chains of a
-bispecific IgG can't be paired from their sequences:
+bispecific IgG can't be paired from their sequences, so they have to be given as `pairs`:
 
 | `pairs` | binding_site_id | binding_site_type | heavy | light | ambiguous | candidates |
 |---|---|---|---|---|---|---|
 | none | 1 | Fab | HC1:1 | | True | LC1:1;LC2:1 |
 | | 2 | Fab | HC2:1 | | True | LC1:1;LC2:1 |
-| `[("HC1", "LC1"), ("HC2", "LC2")]` | 1 | Fab | HC1:1 | LC1:1 | False | |
+| `[(1, 1, 2, 1), (3, 1, 4, 1)]` | 1 | Fab | HC1:1 | LC1:1 | False | |
 | | 2 | Fab | HC2:1 | LC2:1 | False | |
-
-#### Pairing hints
-
-`pairs` are pairs of chains (chain ID) or of V domains (chain ID and domain index) which pair with each other:
-
-```python
-pairs = [("HC1", "LC1"), ("HC2", "LC2")]          # bispecific IgG, two different heavy and light chains
-pairs = [(("HC", 1), "LC1"), (("HC", 3), "LC2")]  # tandem Fab, VH-CH1-linker-VH-CH1-Fc heavy chain with two light chains
-pairs = [("H", "L")]                              # Fv, chains of V domains only
-pairs = [(("A", 1), ("B", 2))]                    # heterodimeric diabody (DART), VH of A pairs with VL of B
-```
-
-- V domains given in pairs pair only with V domains they are given with.
-- Light V domains are not reserved by pairs: a light chain given with many heavy chains pairs with each of them
-  (common light chain).
-- V domains not paired by their format are paired by pairs as `Fv`.
-- Pairs choose the partners of diabody units. Two units of one chain pair with each other only if they are given
-  in pairs with each other (tandem diabody).
-- Chains given in pairs keep their scFv. A V domain given in pairs (chain ID and domain index) forms a scFv only with
-  a V domain it is given with.
 
 #### Output
 
@@ -420,12 +424,14 @@ write_molecule_layout_csv(Path("layout.csv"), [molecule])       # one row per do
 write_molecules_json(Path("molecules.json"), [molecule])        # all details: AIRR records, constant domain numbering, ...
 ```
 
-- Binding sites: type, heavy and light V domain (chain ID, domain index, locus, V gene), linker length (in residues,
-  between V domains of one chain), `ambiguous` and `candidates` (`chain_id:domain_index`, separated by `;`).
+- Binding sites: type, heavy and light V domain (chain ID, domain index, V domain number, locus, V gene), linker
+  length (in residues, between V domains of one chain), `ambiguous` and `candidates` (`chain_id:domain_index`,
+  separated by `;`).
 - Layout: chain layout, domains with their positions and genes (V and J genes of V domains, C gene and identity of
-  constant domains) and the binding sites of V domains with their partners. A V domain of more than one binding site
-  (e.g. a common light chain) has the values of all of them, separated by `;`. A V domain which is only a candidate of
-  ambiguous binding sites has these binding sites, `ambiguous` and its possible partners as `candidates`.
+  constant domains), V domain numbers and the binding sites of V domains with their partners. A V domain of more than
+  one binding site (e.g. a common light chain) has the values of all of them, separated by `;`. A V domain which is
+  only a candidate of ambiguous binding sites has these binding sites, `ambiguous` and its possible partners as
+  `candidates`.
 
 ## Germline database
 RIOT uses OGRDB as a primary source of germline alleles. Database version as of 22.01.2024 was used.

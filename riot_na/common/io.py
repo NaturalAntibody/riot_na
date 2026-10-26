@@ -1,5 +1,6 @@
 import csv
 import json
+from collections import defaultdict
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Callable, Iterable, Sequence, Type
@@ -7,6 +8,7 @@ from typing import Any, Callable, Iterable, Sequence, Type
 from riot_na.api.molecule_annotation import (
     BINDING_SITE_FIELDS,
     LAYOUT_FIELDS,
+    VDomainPair,
     binding_site_rows,
     molecule_layout_rows,
 )
@@ -43,6 +45,35 @@ def write_airr_iter_to_csv(
     output_file_path.parent.mkdir(exist_ok=True, parents=True)
     with open(output_file_path, "w") as output:
         AirrRearrangementEntryWriter(output, cls).write(airr_iter)
+
+
+V_DOMAIN_PAIR_FIELDS = ("molecule_id", "chain_1", "v_domain_1", "chain_2", "v_domain_2")
+
+
+def read_v_domain_pairs(input_file_path: Path) -> dict[str, list[VDomainPair]]:
+    """
+    V domain pairs of molecules (pairs of annotate_molecule) by molecule ID, from a CSV file (TSV, if the file
+    extension is .tsv) with columns molecule_id, chain_1, v_domain_1, chain_2, v_domain_2: one row per binding site,
+    chains and V domains by number (1-based position of the chain in the molecule chains and of the V domain among the
+    V domains of the chain).
+    """
+    delimiter = "\t" if input_file_path.suffix.lower() == ".tsv" else ","
+    v_domain_pairs: dict[str, list[VDomainPair]] = defaultdict(list)
+    with open(input_file_path, newline="") as input_file:
+        reader = csv.DictReader(input_file, delimiter=delimiter)
+        missing_fields = [field for field in V_DOMAIN_PAIR_FIELDS if field not in (reader.fieldnames or ())]
+        if missing_fields:
+            raise ValueError(f"Missing columns in {input_file_path}: {', '.join(missing_fields)}")
+        for row in reader:
+            try:
+                chain_1, v_domain_1, chain_2, v_domain_2 = (int(row[field]) for field in V_DOMAIN_PAIR_FIELDS[1:])
+            except (TypeError, ValueError) as error:
+                raise ValueError(
+                    f"Invalid V domain pair in line {reader.line_num} of {input_file_path}, "
+                    "chains and V domains must be numbers"
+                ) from error
+            v_domain_pairs[row["molecule_id"]].append((chain_1, v_domain_1, chain_2, v_domain_2))
+    return dict(v_domain_pairs)
 
 
 def write_molecule_layout_csv(output_file_path: Path, molecules: Iterable[MoleculeAnnotation]):

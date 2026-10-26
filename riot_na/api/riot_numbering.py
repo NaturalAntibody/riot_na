@@ -2,7 +2,7 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import Generic, Literal, Mapping, Optional, Sequence, cast, overload
+from typing import Generic, Literal, Mapping, Optional, Sequence, Union, cast, overload
 
 from cachetools import cached
 
@@ -35,7 +35,7 @@ from riot_na.api.chain_annotation import (
     j_end_nt,
     reverse_complement,
 )
-from riot_na.api.molecule_annotation import PairingTarget, pair_binding_sites
+from riot_na.api.molecule_annotation import VDomainPair, pair_binding_sites
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
     AirrRearrangementEntryAA,
@@ -151,11 +151,11 @@ class _RiotNumbering(ABC, Generic[SegmentedAirrRearrangementEntry]):
     def annotate_molecule(
         self,
         molecule_id: str,
-        chains: Mapping[str, str],
+        chains: Union[Mapping[str, str], Sequence[str]],
         scheme: Scheme = Scheme.IMGT,
         extend_alignment: bool = True,
         c_scheme: Optional[CScheme] = None,
-        pairs: Optional[Sequence[tuple[PairingTarget, PairingTarget]]] = None,
+        pairs: Optional[Sequence[VDomainPair]] = None,
     ) -> MoleculeAnnotation[SegmentedAirrRearrangementEntry]:
         """
         Annotate all chains of a molecule (annotate_chain) and pair their V domains into binding sites:
@@ -166,25 +166,34 @@ class _RiotNumbering(ABC, Generic[SegmentedAirrRearrangementEntry]):
         -----------
         - molecule_id : Molecule ID, chain headers are molecule_id|chain_id.
         - chains : Sequences of the molecule chains (nucleotide or amino acid sequences, as of the numbering) by chain
-        ID, every distinct chain once.
+        ID, every distinct chain once, or a list of them with chain numbers as chain IDs ("1", "2", ...). Chains are
+        numbered (from 1) in this order.
         - scheme : Numbering scheme of V domains (default IMGT).
         - extend_alignment: Extend alignments of V domains to cover full sequence.
         - c_scheme : Numbering scheme of constant domains (eu, kabat or imgt). By default constant domains are not
         numbered.
-        - pairs : Pairing hints, pairs of chains or V domains (chain ID and domain index, 1-based position among all
-        domains of the chain) which pair, e.g. [("HC1", "LC1"), ("HC2", "LC2")] or [(("HC", 1), "LC1"), (("HC", 3),
-        "LC2")]. V domains given in pairs pair only with V domains they are given with, except light chain Fab arms
-        (followed by CL) and light V domains paired by pairs only, which can be shared by heavy chains. By default
-        V domains with more than one possible partner are ambiguous and V domains not paired by their format (e.g.
-        V domain only chains) are single domains or unpaired.
+        - pairs : Binding sites as pairs of a heavy and a light V domain, (chain, V domain number, chain, V domain
+        number), e.g. [(1, 1, 2, 1), (3, 1, 4, 1)] for chains HC1, LC1, HC2, LC2 of a bispecific antibody. Chains are
+        given by number (1-based position in chains) or chain ID, V domains by number (1-based position among the
+        V domains of the chain, v_domain_number in molecule layout rows). Every pair is a binding site of the type of
+        the format of its V domains (Fab, scFv, diabody or Fv), other V domains are single domains or unpaired. Without
+        pairs, V domains are paired by the format of the chains and V domains with more than one possible partner are
+        ambiguous.
 
         Returns:
         -----------
         MoleculeAnnotation with chain annotations and binding sites.
         """
+        if isinstance(chains, str):
+            raise TypeError("chains must be a mapping of chain IDs to sequences or a list of sequences")
+        chain_sequences = (
+            chains
+            if isinstance(chains, Mapping)
+            else {str(chain_number): sequence for chain_number, sequence in enumerate(chains, start=1)}
+        )
         chain_annotations = {
             chain_id: self.annotate_chain(f"{molecule_id}|{chain_id}", sequence, scheme, extend_alignment, c_scheme)
-            for chain_id, sequence in chains.items()
+            for chain_id, sequence in chain_sequences.items()
         }
         return MoleculeAnnotation(
             molecule_id=molecule_id,

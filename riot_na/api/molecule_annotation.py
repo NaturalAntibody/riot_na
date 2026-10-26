@@ -1,30 +1,28 @@
 """
 Molecule annotation: binding sites formed by V domains of the chains of a molecule.
 
-V domains are paired by the format of the chains, in this order:
+Without pairs, V domains are paired by the format of the chains, in this order:
 - scFv: adjacent heavy and light V domains of a chain (no constant domain in between) joined by a linker of at least
-  MIN_SCFV_LINKER_LENGTH residues, unless one of them is given in pairs as a V domain with other V domains,
+  MIN_SCFV_LINKER_LENGTH residues,
 - diabody: the same with a shorter linker, too short to pair V domains of one chain. V domains pair with V domains of
   another copy of the chain (homodimer) or, if two chains are each other's only candidates, of the other chain
-  (heterodimer). Units of one chain pair with each other only if they are given in pairs with each other (e.g. tandem
-  diabody),
+  (heterodimer),
 - Fab: V domain followed by CH1 pairs with V domain followed by CL, if one of them is heavy and the other light
   (which pairs domain crossovers of CrossMabs too). Constant regions of C genes without domain definitions
   (e.g. IGHM) aligned from their start are CH1 of heavy and CL of light C genes. V domains stacked in front of them
-  (e.g. outer V domains of DVD-Ig) pair by their position. Fab arms of one chain pair only if joined by a linker of at
-  least MIN_SCFAB_LINKER_LENGTH residues (single chain Fab), then only with each other. Fab arms with more than one
+  (e.g. outer V domains of DVD-Ig) pair by their position (Fv). Fab arms of one chain pair only if joined by a linker of
+  at least MIN_SCFAB_LINKER_LENGTH residues (single chain Fab), then only with each other. Fab arms with more than one
   possible partner are ambiguous,
-- Fv: V domains given in pairs (pairing hints), which are not paired by their format (e.g. V domain only chains).
-  A light V domain given in pairs with many heavy V domains pairs with each of them (common light chain),
 - single domain: other heavy V domains (e.g. VHH), other light V domains and V domains of Fab arms are unpaired.
 
-Pairing hints (pairs) are pairs of chains or V domains of chains which pair with each other. V domains given in pairs
-pair only with V domains they are given with, which resolves ambiguous Fab arms and diabodies. Light chain Fab arms
-(followed by CL) and light V domains paired as Fv are not reserved by pairs, they can be shared by heavy chain Fab arms
-or heavy V domains (common light chain). Pairs choose partners of diabody units. Chains given in pairs (chain ID
-only) don't prevent scFv of their V domains, only V domains given in pairs (chain ID and domain index) do.
+Pairs (V domain pairs) give the binding sites instead: every given pair of a heavy and a light V domain is a binding
+site, nothing is inferred, and V domains not given in pairs are single domains or unpaired. A V domain can be given in
+many pairs (e.g. common light chain). The binding site type follows the format of the V domains: Fab (V domains followed
+by CH1 and CL), scFv or diabody (adjacent V domains of a chain joined by a long or short linker, or V domains of diabody
+units of different chains) or Fv (others, e.g. stacked V domains of DVD-Ig or V domain only chains).
 """
 
+import operator
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence, Union
@@ -63,6 +61,7 @@ LAYOUT_FIELDS = (
     "chain_id",
     "chain_layout",
     "domain_index",
+    "v_domain_number",
     "domain",
     "sequence_start",
     "sequence_end",
@@ -77,6 +76,7 @@ LAYOUT_FIELDS = (
     "binding_site_type",
     "partner_chain_id",
     "partner_domain_index",
+    "partner_v_domain_number",
     "ambiguous",
     "candidates",
 )
@@ -86,9 +86,11 @@ BINDING_SITE_FIELDS = (
     "binding_site_type",
     "heavy_chain_id",
     "heavy_domain_index",
+    "heavy_v_domain_number",
     "heavy_v_call",
     "light_chain_id",
     "light_domain_index",
+    "light_v_domain_number",
     "light_locus",
     "light_v_call",
     "linker_length",
@@ -96,11 +98,10 @@ BINDING_SITE_FIELDS = (
     "candidates",
 )
 
-# pairing hint: chain ID (all V domains of the chain) or chain ID and domain index of a V domain
-# (1-based position among all domains of the chain, as in molecule layout and binding site rows)
-PairingTarget = Union[str, tuple[str, int]]
-# chain ID and position of a V domain in the chain domains, None for all V domains of the chain
-_Target = tuple[str, Optional[int]]
+# V domain pair: chain, V domain number, chain, V domain number. A chain is given by its number (1-based position in
+# the molecule chains) or chain ID, a V domain by its number (1-based position among the V domains of the chain, as
+# v_domain_number in molecule layout and binding site rows)
+VDomainPair = tuple[Union[int, str], int, Union[int, str], int]
 
 
 @dataclass(frozen=True)
@@ -119,10 +120,6 @@ class _VDomain:
     def ref(self) -> VDomainRef:
         assert self.domain.rearrangement_index is not None
         return VDomainRef(self.chain_id, self.domain.rearrangement_index)
-
-    def matches(self, target: _Target) -> bool:
-        chain_id, position = target
-        return self.chain_id == chain_id and position in (None, self.position)
 
 
 @dataclass(frozen=True)
@@ -143,12 +140,7 @@ class _FabArm:
 
 
 class _BindingSitePairing:  # pylint: disable=too-few-public-methods
-    def __init__(
-        self,
-        chains: Mapping[str, ChainAnnotation],
-        residue_length: int,
-        pairs: Optional[Sequence[tuple[PairingTarget, PairingTarget]]],
-    ) -> None:
+    def __init__(self, chains: Mapping[str, ChainAnnotation], residue_length: int) -> None:
         self.chains = chains
         self.residue_length = residue_length
         self.v_domains = {
@@ -159,65 +151,18 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
             ]
             for chain_order, (chain_id, chain) in enumerate(chains.items())
         }
-        self.hints = [(self._target(first), self._target(second)) for first, second in pairs or ()]
         self.binding_sites: list[BindingSite] = []
         self.paired: set[_VDomain] = set()
         # V domains of Fab arms are unpaired, if no partner is found
         self.fab_arm_v_domains: set[_VDomain] = set()
 
-    def _target(self, target: PairingTarget) -> _Target:
-        chain_id, domain_index = (target, None) if isinstance(target, str) else target
-        if chain_id not in self.chains:
-            raise ValueError(f"Unknown chain in pairs: {chain_id}")
-        if domain_index is None:
-            return chain_id, None
-        if all(v_domain.position != domain_index - 1 for v_domain in self.v_domains[chain_id]):
-            raise ValueError(f"No V domain with domain index {domain_index} in chain {chain_id} in pairs")
-        return chain_id, domain_index - 1
-
-    def _hint_partners(self, v_domains: Sequence[_VDomain]) -> list[_Target]:
-        """Targets which any of the V domains is given in pairs with."""
-        return [
-            partner
-            for hint in self.hints
-            for target, partner in (hint, hint[::-1])
-            if any(v_domain.matches(target) for v_domain in v_domains)
-        ]
-
-    def _hinted(self, v_domains: Sequence[_VDomain], partner_v_domains: Sequence[_VDomain]) -> bool:
-        """V domains are given in pairs with partner V domains."""
-        return any(
-            partner_v_domain.matches(target)
-            for target in self._hint_partners(v_domains)
-            for partner_v_domain in partner_v_domains
-        )
-
-    def _hints_allow(self, v_domains: Sequence[_VDomain], partner_v_domains: Sequence[_VDomain]) -> bool:
-        """V domains given in pairs pair only with V domains they are given with."""
-        hinted = (self._hint_partners(v_domains), self._hint_partners(partner_v_domains))
-        return not any(hinted) or self._hinted(v_domains, partner_v_domains)
-
-    def _domain_hints_allow(self, first: _VDomain, second: _VDomain) -> bool:
-        """
-        V domains given in pairs as V domains (chain ID and domain index) pair only with V domains they are given with.
-        """
-        return all(
-            not partners or any(other.matches(partner) for partner in partners)
-            for v_domain, other in ((first, second), (second, first))
-            for partners in [
-                [
-                    partner
-                    for hint in self.hints
-                    for target, partner in (hint, hint[::-1])
-                    if target == (v_domain.chain_id, v_domain.position)
-                ]
-            ]
-        )
-
-    def pair(self) -> list[BindingSite]:
-        self._pair_single_chain_fvs()
-        self._pair_fab_arms()
-        self._pair_hinted_v_domains()
+    def pair(self, pairs: Optional[Sequence[VDomainPair]] = None) -> list[BindingSite]:
+        """Binding sites of the given V domain pairs or, without pairs, of V domains paired by their format."""
+        if pairs is None:
+            self._pair_single_chain_fvs()
+            self._pair_fab_arms()
+        else:
+            self._pair_given_v_domains(pairs)
 
         for chain_v_domains in self.v_domains.values():
             for v_domain in chain_v_domains:
@@ -282,15 +227,11 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
                     continue
 
                 linker_length = self._linker_length(first.domain, second.domain)
-                if linker_length < MIN_SCFV_LINKER_LENGTH:
-                    diabody_units.append((first, second))
-                    self.paired.update((first, second))
-                elif self._domain_hints_allow(first, second):
+                if linker_length >= MIN_SCFV_LINKER_LENGTH:
                     self._add_binding_site(SCFV, [first, second], linker_length=linker_length)
                 else:
-                    # V domains given in pairs (as V domains) with other V domains don't form a scFv
-                    i += 1
-                    continue
+                    diabody_units.append((first, second))
+                    self.paired.update((first, second))
                 i += 2
 
         self._pair_diabodies(diabody_units)
@@ -298,22 +239,10 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
     def _pair_diabodies(self, units: Sequence[tuple[_VDomain, _VDomain]]) -> None:
         """
         Diabody units (V domains joined by short linkers) of chains which are each other's only candidates
-        form a heterodimer, other units pair with another copy of their chain (homodimer). Units of one chain are
-        candidates of each other only if they are given in pairs with each other (e.g. tandem diabody). V domains of
-        units which can't pair with any unit, because their V domains are given in pairs (as V domains) with other
-        V domains, are paired by pairs.
+        form a heterodimer, other units pair with another copy of their chain (homodimer).
         """
         candidates = {
-            unit: [
-                other_unit
-                for other_unit in units
-                if (
-                    other_unit[0].chain_id != unit[0].chain_id
-                    or (other_unit != unit and self._hinted(unit, other_unit))
-                )
-                and self._hints_allow(unit, other_unit)
-            ]
-            for unit in units
+            unit: [other_unit for other_unit in units if other_unit[0].chain_id != unit[0].chain_id] for unit in units
         }
         heterodimer_units: set[tuple[_VDomain, _VDomain]] = set()
 
@@ -332,8 +261,6 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
                 self._add_binding_site(
                     DIABODY, [second, other_first if second.heavy != other_first.heavy else other_second]
                 )
-            elif not unit_candidates and not self._domain_hints_allow(first, second):
-                self.paired.difference_update(unit)
             else:
                 self._add_binding_site(
                     DIABODY,
@@ -342,6 +269,19 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
                     candidates=[v_domain for other_unit in unit_candidates for v_domain in other_unit],
                     linker_length=self._linker_length(first.domain, second.domain),
                 )
+
+    def _fab_arm_constant_domain_type(self, chain_id: str, position: int) -> Optional[str]:
+        """
+        CH1 or CL, if the domain at the position in the chain domains is a Fab constant domain. Shorter CH1 or CL
+        fragments (e.g. CH1 derived linkers of DVD-Ig) are not, unless at the chain end.
+        """
+        domains = self.chains[chain_id].domains
+        if position >= len(domains):
+            return None
+        domain = domains[position]
+        if self._domain_length(domain) < MIN_FAB_CONSTANT_DOMAIN_LENGTH and position != len(domains) - 1:
+            return None
+        return _fab_constant_domain_type(self.chains[chain_id], domain)
 
     def _fab_arms(self) -> list[_FabArm]:
         """V domains followed by CH1 or CL, with V domains stacked in front of them."""
@@ -352,11 +292,8 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
 
             for position, domain in enumerate(domains):
                 v_domain = v_domains.get(position - 1)
-                constant_domain_type = _fab_constant_domain_type(chain, domain)
-                full_constant_domain = (
-                    self._domain_length(domain) >= MIN_FAB_CONSTANT_DOMAIN_LENGTH or position == len(domains) - 1
-                )
-                if constant_domain_type is None or not full_constant_domain:
+                constant_domain_type = self._fab_arm_constant_domain_type(chain_id, position)
+                if constant_domain_type is None:
                     continue
                 if v_domain is None or v_domain in self.paired:
                     continue
@@ -388,10 +325,7 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
                 or len(other_arm.v_domains) != len(fab_arm.v_domains)
             ):
                 continue
-            # only CH1 arms are restricted by pairs, CL arms can be shared by many CH1 arms (common light chain)
-            if self._hint_partners(fab_arm.v_domains) and not self._hinted(fab_arm.v_domains, other_arm.v_domains):
-                continue
-            if other_arm.chain_id == fab_arm.chain_id and not self._hinted(fab_arm.v_domains, other_arm.v_domains):
+            if other_arm.chain_id == fab_arm.chain_id:
                 first, second = sorted((fab_arm, other_arm), key=lambda arm: arm.constant_domain.sequence_start)
                 # single chain Fab
                 if self._linker_length(first.constant_domain, second.v_domains[0].domain) < MIN_SCFAB_LINKER_LENGTH:
@@ -440,30 +374,109 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
         for fab_arm in cl_arms_with_partners:
             self.paired.update(fab_arm.v_domains)
 
-    def _pair_hinted_v_domains(self) -> None:
+    def _pair_given_v_domains(self, pairs: Sequence[VDomainPair]) -> None:
         """
-        Pair V domains given in pairs, which are not paired by their format (e.g. V domain only chains). Light V domains
-        are not reserved, as light chain Fab arms: a light V domain given in pairs with many heavy V domains pairs with
-        each of them (common light chain).
+        Every given V domain pair is a binding site, of the type of the format of its V domains: Fab (V domains
+        followed by CH1 and CL), scFv or diabody (adjacent V domains of a chain joined by a long or short linker, or
+        V domains of diabody units of different chains) or Fv.
         """
-        unpaired_v_domains = [
-            v_domain
-            for chain_v_domains in self.v_domains.values()
-            for v_domain in chain_v_domains
-            if v_domain not in self.paired
-        ]
+        # V domains of Fab arms which are not given in pairs are unpaired
+        self.fab_arm_v_domains = {v_domain for fab_arm in self._fab_arms() for v_domain in fab_arm.v_domains}
+        given_pairs: set[frozenset[_VDomain]] = set()
 
-        for v_domain in unpaired_v_domains:
-            if not v_domain.heavy:
-                continue
-            partners = [
-                partner for partner in unpaired_v_domains if not partner.heavy and self._hinted([v_domain], [partner])
-            ]
-            if len(partners) == 1:
-                self._add_binding_site(FV, [v_domain, partners[0]])
-            elif partners:
-                self._add_binding_site(FV, [v_domain], ambiguous=True, candidates=partners)
-                self.paired.update(partners)
+        for pair in pairs:
+            first, second = self._given_v_domains(pair)
+            if frozenset((first, second)) in given_pairs:
+                raise ValueError(f"Duplicate V domain pair {pair}")
+            given_pairs.add(frozenset((first, second)))
+
+            linker_length = self._adjacent_linker_length(first, second)
+            fab_constant_domain_types = {
+                self._fab_arm_constant_domain_type(v_domain.chain_id, v_domain.position + 1)
+                for v_domain in (first, second)
+            }
+            if fab_constant_domain_types == {CH1, CL}:
+                self._add_binding_site(FAB, [first, second])
+            elif linker_length is not None:
+                binding_site_type = SCFV if linker_length >= MIN_SCFV_LINKER_LENGTH else DIABODY
+                self._add_binding_site(binding_site_type, [first, second], linker_length=linker_length)
+            elif self._in_diabody_unit(first) and self._in_diabody_unit(second):
+                self._add_binding_site(DIABODY, [first, second])
+            else:
+                self._add_binding_site(FV, [first, second])
+
+    def _given_v_domains(self, pair: VDomainPair) -> tuple[_VDomain, _VDomain]:
+        """V domains of a V domain pair, a heavy and a light one."""
+        if len(pair) != 4:
+            raise ValueError(f"V domain pair {pair} is not (chain, V domain number, chain, V domain number)")
+        first_chain, first_number, second_chain, second_number = pair
+        first = self._given_v_domain(pair, first_chain, first_number)
+        second = self._given_v_domain(pair, second_chain, second_number)
+        if first == second:
+            raise ValueError(f"V domain pair {pair} pairs {self._v_domain_name(first)} with itself")
+        if first.heavy == second.heavy:
+            raise ValueError(
+                f"V domain pair {pair} pairs two {'heavy' if first.heavy else 'light'} V domains: "
+                f"{self._v_domain_name(first)} and {self._v_domain_name(second)}"
+            )
+        return first, second
+
+    def _given_v_domain(self, pair: VDomainPair, chain: Union[int, str], number: int) -> _VDomain:
+        """V domain given by chain number or chain ID and V domain number."""
+        chain_ids = list(self.chains)
+        if isinstance(chain, str):
+            if chain not in self.chains:
+                raise ValueError(f"Unknown chain {chain} in V domain pair {pair}")
+            chain_id = chain
+        else:
+            chain_number = _pair_number(chain, pair)
+            if not 1 <= chain_number <= len(chain_ids):
+                raise ValueError(
+                    f"No chain {chain_number} in V domain pair {pair}, the molecule has {len(chain_ids)} chains"
+                )
+            chain_id = chain_ids[chain_number - 1]
+
+        v_domains = self.v_domains[chain_id]
+        v_domain_number = _pair_number(number, pair)
+        if not 1 <= v_domain_number <= len(v_domains):
+            found = ", ".join(f"{i} {v_domain.domain.domain}" for i, v_domain in enumerate(v_domains, start=1))
+            raise ValueError(
+                f"No V domain {v_domain_number} in chain {self._chain_name(chain_id)} in V domain pair {pair}, "
+                f"V domains of the chain: {found or 'none'} (layout {self.chains[chain_id].layout})"
+            )
+        return v_domains[v_domain_number - 1]
+
+    def _chain_name(self, chain_id: str) -> str:
+        """Chain number and ID, e.g. 2 (LC1)."""
+        return f"{list(self.chains).index(chain_id) + 1} ({chain_id})"
+
+    def _v_domain_name(self, v_domain: _VDomain) -> str:
+        """V domain type, number and chain, e.g. VH 1 of chain 2 (HC)."""
+        v_domain_number = self.v_domains[v_domain.chain_id].index(v_domain) + 1
+        return f"{v_domain.domain.domain} {v_domain_number} of chain {self._chain_name(v_domain.chain_id)}"
+
+    def _adjacent_linker_length(self, first: _VDomain, second: _VDomain) -> Optional[int]:
+        """Residues between V domains, if they are adjacent V domains of a chain (no domain in between)."""
+        if first.chain_id != second.chain_id or abs(first.position - second.position) != 1:
+            return None
+        preceding, following = sorted((first, second), key=lambda v_domain: v_domain.position)
+        return self._linker_length(preceding.domain, following.domain)
+
+    def _in_diabody_unit(self, v_domain: _VDomain) -> bool:
+        """V domain joined to an adjacent V domain of the other type by a linker too short to pair them."""
+        for other in self.v_domains[v_domain.chain_id]:
+            linker_length = self._adjacent_linker_length(v_domain, other)
+            if other.heavy != v_domain.heavy and linker_length is not None and linker_length < MIN_SCFV_LINKER_LENGTH:
+                return True
+        return False
+
+
+def _pair_number(value: Any, pair: VDomainPair) -> int:
+    """Chain or V domain number of a V domain pair."""
+    try:
+        return operator.index(value)
+    except TypeError as error:
+        raise ValueError(f"V domain pair {pair} is not (chain, V domain number, chain, V domain number)") from error
 
 
 def _fab_constant_domain_type(chain: ChainAnnotation, domain: ChainDomain) -> Optional[str]:
@@ -540,30 +553,30 @@ def _one_to_one_pairing(
 def pair_binding_sites(
     chains: Mapping[str, ChainAnnotation],
     residue_length: int = 1,
-    pairs: Optional[Sequence[tuple[PairingTarget, PairingTarget]]] = None,
+    pairs: Optional[Sequence[VDomainPair]] = None,
 ) -> list[BindingSite]:
     """
     Binding sites of the V domains of a molecule chains.
 
     - residue_length: length of residues in chain sequence positions, 3 for nucleotide chains.
-    - pairs: pairing hints, pairs of chains (chain ID) or V domains (chain ID and domain index) which pair.
-    V domains given in pairs pair only with V domains they are given with, except light chain Fab arms (followed by
-    CL) and light V domains paired as Fv, which can be shared by many heavy chain Fab arms or heavy V domains (common
-    light chain). They resolve ambiguous Fab arms (e.g. of bispecific antibodies with two different heavy and light
-    chains, given as chains, or tandem Fabs with two different light chains, given as V domains) and diabodies, and
-    pair V domains not paired by their format (e.g. V domain only chains) as Fv.
+    - pairs: binding sites as pairs of a heavy and a light V domain, (chain, V domain number, chain, V domain number),
+    e.g. [(1, 1, 2, 1), (3, 1, 4, 1)]. Chains are given by number (1-based position in chains) or chain ID, V domains
+    by number (1-based position among the V domains of the chain). Every pair is a binding site of the type of the
+    format of its V domains (Fab, scFv, diabody or Fv), other V domains are single domains or unpaired. Without pairs,
+    V domains are paired by the format of the chains.
     """
-    return _BindingSitePairing(chains, residue_length, pairs).pair()
+    return _BindingSitePairing(chains, residue_length).pair(pairs)
 
 
 def molecule_layout_rows(molecule: MoleculeAnnotation) -> list[dict[str, Any]]:
     """
     Domains of all chains of a molecule, one row per domain, with binding sites of V domains. V domains of more than
     one binding site (e.g. common light chains) have values of all of them, separated by ";". V domains which are
-    only candidates of ambiguous binding sites (e.g. light chains of bispecific antibodies without pairing hints) have
-    these binding sites and their V domains as candidates.
+    only candidates of ambiguous binding sites (e.g. light chains of bispecific antibodies without pairs) have these
+    binding sites and their V domains as candidates.
     """
     domain_indices = _domain_indices(molecule)
+    v_domain_numbers = _v_domain_numbers(molecule)
     member_binding_sites: dict[VDomainRef, list[BindingSite]] = defaultdict(list)
     candidate_binding_sites: dict[VDomainRef, list[BindingSite]] = defaultdict(list)
     for binding_site in molecule.binding_sites:
@@ -605,8 +618,13 @@ def molecule_layout_rows(molecule: MoleculeAnnotation) -> list[dict[str, Any]]:
                 }
 
                 v_domain = VDomainRef(chain_id, domain.rearrangement_index)
+                row["v_domain_number"] = v_domain_numbers[v_domain]
                 row |= _v_domain_binding_sites(
-                    v_domain, member_binding_sites[v_domain], candidate_binding_sites[v_domain], domain_indices
+                    v_domain,
+                    member_binding_sites[v_domain],
+                    candidate_binding_sites[v_domain],
+                    domain_indices,
+                    v_domain_numbers,
                 )
 
             rows.append({field: row.get(field) for field in LAYOUT_FIELDS})
@@ -618,6 +636,7 @@ def _v_domain_binding_sites(
     member_binding_sites: Sequence[BindingSite],
     candidate_binding_sites: Sequence[BindingSite],
     domain_indices: dict[VDomainRef, int],
+    v_domain_numbers: dict[VDomainRef, int],
 ) -> dict[str, Any]:
     """
     Layout columns of binding sites of a V domain: binding sites the V domain is in, with their partner V domains,
@@ -638,6 +657,9 @@ def _v_domain_binding_sites(
         "binding_site_type": _join_values([binding_site.binding_site_type for binding_site in binding_sites]),
         "partner_chain_id": _join_values([partner.chain_id if partner else None for partner in partners]),
         "partner_domain_index": _join_values([domain_indices[partner] if partner else None for partner in partners]),
+        "partner_v_domain_number": _join_values(
+            [v_domain_numbers[partner] if partner else None for partner in partners]
+        ),
         "ambiguous": bool(candidates) or any(binding_site.ambiguous for binding_site in binding_sites),
         "candidates": _format_v_domains(list(dict.fromkeys(candidates)), domain_indices),
     }
@@ -666,6 +688,7 @@ def _join_values(values: Sequence[Any]) -> Any:
 def binding_site_rows(molecule: MoleculeAnnotation) -> list[dict[str, Any]]:
     """Binding sites of a molecule, one row per binding site."""
     domain_indices = _domain_indices(molecule)
+    v_domain_numbers = _v_domain_numbers(molecule)
 
     rows = []
     for binding_site in molecule.binding_sites:
@@ -683,6 +706,7 @@ def binding_site_rows(molecule: MoleculeAnnotation) -> list[dict[str, Any]]:
                 row |= {
                     f"{prefix}_chain_id": v_domain.chain_id,
                     f"{prefix}_domain_index": domain_indices[v_domain],
+                    f"{prefix}_v_domain_number": v_domain_numbers[v_domain],
                     f"{prefix}_locus": rearrangement.locus,
                     f"{prefix}_v_call": rearrangement.v_call,
                 }
@@ -697,6 +721,22 @@ def _domain_indices(molecule: MoleculeAnnotation) -> dict[VDomainRef, int]:
         for chain_id, chain in molecule.chains.items()
         for domain_index, domain in enumerate(chain.domains, start=1)
         if domain.domain in V_DOMAINS and domain.rearrangement_index is not None
+    }
+
+
+def _v_domain_numbers(molecule: MoleculeAnnotation) -> dict[VDomainRef, int]:
+    """1-based numbers of V domains among the V domains of their chains, as in V domain pairs."""
+    return {
+        v_domain: v_domain_number
+        for chain_id, chain in molecule.chains.items()
+        for v_domain_number, v_domain in enumerate(
+            (
+                VDomainRef(chain_id, domain.rearrangement_index)
+                for domain in chain.domains
+                if domain.domain in V_DOMAINS and domain.rearrangement_index is not None
+            ),
+            start=1,
+        )
     }
 
 
