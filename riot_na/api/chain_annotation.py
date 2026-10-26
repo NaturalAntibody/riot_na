@@ -203,15 +203,15 @@ def annotate_constant_domains(
         alignment = domain_alignment.alignment
         translation = translated_domain_alignment.translation
 
-        sequence_start = translated_domain_alignment.chain_position(domain_alignment.query_start)
-        sequence_end = translated_domain_alignment.chain_position(domain_alignment.query_end)
+        sequence_start = translated_domain_alignment.start
+        sequence_end = translated_domain_alignment.end
         # the secreted tail added to CH3 can't overlap the next domain
         next_v_domain = bisect_left(v_domain_starts, sequence_start)
         if next_v_domain < len(v_domains):
             sequence_end = min(sequence_end, v_domains[next_v_domain].start)
         if i + 1 < len(domain_alignments):
             next_domain = domain_alignments[i + 1]
-            sequence_end = min(sequence_end, next_domain.chain_position(next_domain.domain_alignment.query_start))
+            sequence_end = min(sequence_end, next_domain.start)
         query_end = translated_domain_alignment.translation_position(sequence_end)
 
         constant_domain = ConstantDomain(
