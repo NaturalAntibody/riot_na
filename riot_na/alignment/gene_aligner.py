@@ -251,11 +251,11 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
                 if alignment.seq_identity < self.min_seq_identity:
                     continue
             if self.min_internal_alignment_length is not None:
-                # alignments shorter than that have to start at the beginning of the germline
-                # (at most max_fragment_germline_start residues after it)
-                if (
+                # alignments shorter than that have to start at the beginning of the germline, or at most
+                # max_fragment_germline_start residues after it if they start at the beginning of the query too
+                if alignment_length < self.min_internal_alignment_length and (
                     alignment.t_start > self.max_fragment_germline_start
-                    and alignment_length < self.min_internal_alignment_length
+                    or (alignment.t_start > 0 and alignment.q_start > self.max_fragment_germline_start)
                 ):
                     continue
 
@@ -429,7 +429,8 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 "min_seq_identity": float(os.environ.get("MIN_SEQ_IDENTITY_C_AA", 0.4)),
                 "min_internal_alignment_length": int(os.environ.get("MIN_INTERNAL_ALIGNMENT_LENGTH_C_AA", 30)),
                 # the first C residue is encoded by the J-C junction codon (its first nucleotide comes from J), so it is
-                # missing or different when J ends differently, e.g. absorbed by J alignment or mutated
+                # missing or different when J ends differently, e.g. absorbed by J alignment or mutated. C fragments
+                # without it start right after J (or at the start of the query of the constant region aligner)
                 "max_fragment_germline_start": int(os.environ.get("MAX_FRAGMENT_GERMLINE_START_C_AA", 1)),
             }
         case _:
