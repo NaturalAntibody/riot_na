@@ -168,8 +168,8 @@ class _RiotNumbering(ABC, Generic[SegmentedAirrRearrangementEntry]):
         -----------
         - molecule_id : Molecule ID, chain headers are molecule_id|chain_id.
         - chains : Sequences of the molecule chains (nucleotide or amino acid sequences, as of the numbering) by chain
-        ID, every distinct chain once, or a list of them with chain numbers as chain IDs ("1", "2", ...). Chains are
-        numbered (from 1) in this order.
+        ID (a dict or another object with items()), every distinct chain once, or a list or tuple of them with chain
+        numbers as chain IDs ("1", "2", ...). Chains are numbered (from 1) in this order.
         - scheme : Numbering scheme of V domains (default IMGT).
         - extend_alignment: Extend alignments of V domains to cover full sequence.
         - c_scheme : Numbering scheme of constant domains (eu, kabat or imgt). By default constant domains are not
@@ -180,27 +180,40 @@ class _RiotNumbering(ABC, Generic[SegmentedAirrRearrangementEntry]):
         V domains of the chain, v_domain_number in molecule layout rows). Every pair is a binding site of the type of
         the format of its V domains (Fab, scFv, diabody or Fv), other V domains are single domains or unpaired. Without
         pairs, V domains are paired by the format of the chains and V domains with more than one possible partner are
-        ambiguous.
+        ambiguous. V domain numbers can be read from the layout of a molecule annotated without pairs, which can be
+        paired with pair_molecule then.
 
         Returns:
         -----------
         MoleculeAnnotation with chain annotations and binding sites.
         """
-        if isinstance(chains, str):
+        if isinstance(chains, (list, tuple)):
+            chain_sequences = {str(chain_number): sequence for chain_number, sequence in enumerate(chains, start=1)}
+        elif hasattr(chains, "items") and not isinstance(chains, str):
+            chain_sequences = dict(cast(Mapping[str, str], chains).items())
+        else:
+            # e.g. sets, which have no order
             raise TypeError("chains must be a mapping of chain IDs to sequences or a list of sequences")
-        chain_sequences = (
-            chains
-            if isinstance(chains, Mapping)
-            else {str(chain_number): sequence for chain_number, sequence in enumerate(chains, start=1)}
-        )
         chain_annotations = {
             chain_id: self.annotate_chain(f"{molecule_id}|{chain_id}", sequence, scheme, extend_alignment, c_scheme)
             for chain_id, sequence in chain_sequences.items()
         }
+        return self.pair_molecule(MoleculeAnnotation(molecule_id, chain_annotations, binding_sites=[]), pairs)
+
+    def pair_molecule(
+        self,
+        molecule: MoleculeAnnotation[SegmentedAirrRearrangementEntry],
+        pairs: Optional[Sequence[VDomainPair]] = None,
+    ) -> MoleculeAnnotation[SegmentedAirrRearrangementEntry]:
+        """
+        Pair V domains of an annotated molecule into binding sites again, without annotating its chains, e.g. by
+        pairs given after reading V domain numbers from the layout of the molecule annotated without pairs. Pairs are
+        as of annotate_molecule.
+        """
         return MoleculeAnnotation(
-            molecule_id=molecule_id,
-            chains=chain_annotations,
-            binding_sites=pair_binding_sites(chain_annotations, residue_length=self.residue_length, pairs=pairs),
+            molecule_id=molecule.molecule_id,
+            chains=molecule.chains,
+            binding_sites=pair_binding_sites(molecule.chains, residue_length=self.residue_length, pairs=pairs),
         )
 
     def _chain_annotation(  # pylint: disable=too-many-arguments

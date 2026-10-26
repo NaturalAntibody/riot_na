@@ -286,6 +286,12 @@ def numbered_binding_sites(
             ],
         ),
         ({"HC": VH + IGHG1, "LC": VK + CK}, [], [("unpaired", "HC:1", None, None), ("unpaired", None, "LC:1", None)]),
+        # VHH in front of a Fab arm is not its outer V domain (as in DVD-Ig), it is a single domain
+        (
+            {"HC": VHH + LINKER + VH + IGHG1, "LC": VK + CK},
+            [(1, 2, 2, 1)],
+            [("single domain", "HC:1", None, None), ("Fab", "HC:2", "LC:1", None)],
+        ),
     ],
     ids=[
         "IgG",
@@ -309,6 +315,7 @@ def numbered_binding_sites(
         "scFv-V-domains",
         "not-given",
         "none",
+        "VHH-IgG",
     ],
 )
 def test_pairs(riot_aa: RiotNumberingAA, chains: dict[str, str], pairs: list, expected: list):
@@ -344,6 +351,13 @@ def test_pairs(riot_aa: RiotNumberingAA, chains: dict[str, str], pairs: list, ex
         (BISPECIFIC, [(1, 1, 3, 1), (3, 1, 1, 1)], r"Duplicate V domain pair \(3, 1, 1, 1\)"),
         (BISPECIFIC, [(1, 1, 3)], r"is not \(chain, V domain number, chain, V domain number\)"),
         (BISPECIFIC, [(1, "1", 3, 1)], r"is not \(chain, V domain number, chain, V domain number\)"),
+        (BISPECIFIC, (1, 1, 3, 1), r"V domain pair 1 is not \(chain, V domain number, chain, V domain number\)"),
+        (BISPECIFIC, [(True, 1, 3, 1)], r"is not \(chain, V domain number, chain, V domain number\)"),
+        (
+            {"2": VK + CK, "1": VH + IGHG1},
+            [(1, 1, 2, 1)],
+            "Chain 1 in V domain pair .* is ambiguous: chain number 1 has chain ID 2, but chain ID 1 is chain number 2",
+        ),
     ],
     ids=[
         "chain-number",
@@ -357,6 +371,9 @@ def test_pairs(riot_aa: RiotNumberingAA, chains: dict[str, str], pairs: list, ex
         "duplicate",
         "short",
         "not-number",
+        "not-list-of-pairs",
+        "bool",
+        "numeric-chain-IDs",
     ],
 )
 def test_invalid_pairs(riot_aa: RiotNumberingAA, chains: dict[str, str], pairs: list, error: str):
@@ -426,6 +443,18 @@ def test_chain_list(riot_aa: RiotNumberingAA):
 
     with pytest.raises(TypeError):
         riot_aa.annotate_molecule("molecule", VH + IGHG1)
+    # sets have no order to number chains by
+    with pytest.raises(TypeError):
+        riot_aa.annotate_molecule("molecule", {VH + IGHG1, VK + CK})  # type: ignore[arg-type]
+
+
+def test_chains_with_items(riot_aa: RiotNumberingAA):
+    class Chains:  # e.g. pandas Series of sequences by chain ID
+        def items(self):
+            return {"HC": VH + IGHG1, "LC": VK + CK}.items()
+
+    molecule = riot_aa.annotate_molecule("molecule", Chains(), pairs=[("HC", 1, "LC", 1)])  # type: ignore[arg-type]
+    assert numbered_binding_sites(molecule) == [("Fab", "HC:1", "LC:1", None)]
 
 
 @pytest.mark.parametrize(
@@ -441,6 +470,46 @@ def test_linkers_with_constant_domain_fragments(
 
     assert molecule.chains["chain"].layout.count("-") >= 2
     assert numbered_binding_sites(molecule) == [(binding_site_type, "chain:1", "chain:2", len(linker))]
+
+
+def test_candidates_are_v_domain_numbers(riot_aa: RiotNumberingAA):
+    molecule = riot_aa.annotate_molecule(
+        "molecule",
+        {
+            "HC1": VH + "ASTKGP" + VH2 + IGHG1,
+            "HC2": VH2 + "ASTKGP" + VH + IGHG1,
+            "LC1": VK + "TVAAP" + VK2 + CK,
+            "LC2": VK2 + "TVAAP" + VK + CK,
+        },
+    )
+
+    # inner V domains of DVD-Ig chains VH-CH1-VH-CH1-... and VK-CL-VK-CL have domain index 3 and number 2
+    assert [
+        (row["heavy_chain_id"], row["heavy_v_domain_number"], row["candidates"]) for row in binding_site_rows(molecule)
+    ] == [
+        ("HC1", 1, "LC1:1;LC2:1"),
+        ("HC1", 2, "LC1:2;LC2:2"),
+        ("HC2", 1, "LC1:1;LC2:1"),
+        ("HC2", 2, "LC1:2;LC2:2"),
+    ]
+
+
+def test_pair_molecule(riot_aa: RiotNumberingAA):
+    molecule = riot_aa.annotate_molecule("molecule", BISPECIFIC)
+    assert all(binding_site.ambiguous for binding_site in molecule.binding_sites)
+
+    paired = riot_aa.pair_molecule(molecule, [(1, 1, 4, 1), (2, 1, 3, 1)])
+    assert paired.chains is molecule.chains
+    assert numbered_binding_sites(paired) == [("Fab", "HC1:1", "LC2:1", None), ("Fab", "HC2:1", "LC1:1", None)]
+
+    # linkers of nucleotide chains are in residues
+    riot_nt = get_or_create_riot_nt(return_all_domains=True)
+    vh = nt_rearrangement("IGHV3-23*01", "GGCTAC", "IGHJ4*02", 2)
+    vk = nt_rearrangement("IGKV1-27*01", "CAGCAGAGTTACAGTACCCCT", "IGKJ1*01", 1)
+    nt_molecule = riot_nt.annotate_molecule("molecule", {"chain": vh + "GGTGGCGGTGGCTCG" + vk})
+    assert numbered_binding_sites(riot_nt.pair_molecule(nt_molecule, [(1, 1, 1, 2)])) == [
+        ("diabody", "chain:1", "chain:2", 5)
+    ]
 
 
 def test_v_domain_numbers(riot_aa: RiotNumberingAA):
@@ -486,11 +555,17 @@ def test_read_v_domain_pairs(tmp_path: Path):
     )
     assert read_v_domain_pairs(pairs_path) == {"bispecific": [(1, 1, 2, 1), (3, 1, 4, 1)], "IgG": [(1, 1, 2, 1)]}
 
+    # CSV saved by Excel (byte order mark), chain IDs, spaces, numbers written as floats
     pairs_path = tmp_path / "pairs.csv"
+    pairs_path.write_text(
+        "molecule_id,chain_1,v_domain_1,chain_2,v_domain_2\nIgG , HC,1.0,LC ,1\n", encoding="utf-8-sig"
+    )
+    assert read_v_domain_pairs(pairs_path) == {"IgG": [("HC", 1, "LC", 1)]}
+
     pairs_path.write_text("molecule_id,chain_1,v_domain_1,chain_2\nIgG,1,1,2\n")
     with pytest.raises(ValueError, match="Missing columns .*: v_domain_2"):
         read_v_domain_pairs(pairs_path)
-    pairs_path.write_text("molecule_id,chain_1,v_domain_1,chain_2,v_domain_2\nIgG,1,1,2,1\nIgG2,HC,1,LC,1\n")
+    pairs_path.write_text("molecule_id,chain_1,v_domain_1,chain_2,v_domain_2\nIgG,1,1,2,1\nIgG2,1,VH,2,1\n")
     with pytest.raises(ValueError, match="Invalid V domain pair in line 3"):
         read_v_domain_pairs(pairs_path)
 

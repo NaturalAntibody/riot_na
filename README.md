@@ -360,10 +360,11 @@ molecule.chains["HC1"]   # ChainAnnotation, AIRR records with sequence_header "b
 molecule.binding_sites   # [BindingSite(binding_site_id=1, binding_site_type="Fab", heavy_domain=VDomainRef("HC1", 0), light_domain=VDomainRef("LC1", 0), ...), ...]
 ```
 
-Pass every distinct chain once, e.g. the heavy and the light chain of an IgG, as a dict by chain ID or as a list
-(chain IDs `"1"`, `"2"`, ...). Chains are numbered from 1 in this order. A V domain is numbered from 1 among the
-V domains of its chain (`v_domain_number`); its domain index is its position among all domains of the chain (in
-`VH-CH1-[5]-VH-CH1-H-CH2-CH3` the V domains are numbers 1 and 2, domain indices 1 and 3).
+Pass every distinct chain once, e.g. the heavy and the light chain of an IgG, by chain ID (a dict, or another object
+with `items()`, e.g. a pandas Series) or as a list (chain IDs `"1"`, `"2"`, ...). Chains are numbered from 1 in this
+order. A V domain is numbered from 1 among the V domains of its chain (`v_domain_number`); its domain index is its
+position among all domains of the chain (in `VH-CH1-[5]-VH-CH1-H-CH2-CH3` the V domains are numbers 1 and 2, domain
+indices 1 and 3).
 
 #### Pairs
 
@@ -378,15 +379,19 @@ pairs = [(1, 1, 2, 1), (1, 1, 3, 1)]              # common heavy chain of a kapp
 
 - A pair is (chain, V domain number, chain, V domain number) of a heavy and a light V domain. Chains are given by
   number or chain ID. Nucleotide chains on the reverse strand are numbered in their reverse complement.
+- V domain numbers can be read from the layout of the molecule annotated without `pairs` (`v_domain_number`,
+  `chain_layout`, `candidates`), which is then paired by `riot_aa.pair_molecule(molecule, pairs)`, without
+  annotating the chains again.
 - A V domain can be in many pairs (common light or heavy chain). V domains not given in pairs are `single domain`
   (heavy V domains) or `unpaired`.
 - The binding site type follows the format of the V domains: `Fab` (V domains followed by CH1 and CL), `scFv` or
   `diabody` (adjacent V domains of a chain joined by a linker of at least 12 or of fewer residues, or V domains of
   diabody units of two chains), `Fv` (others, e.g. outer V domains of DVD-Ig or chains of V domains only).
 - Invalid pairs raise `ValueError`: unknown chains or V domains (the message lists the V domains found in the chain),
-  two heavy or two light V domains, duplicate pairs.
+  two heavy or two light V domains, duplicate pairs, chain numbers which are chain IDs of other chains.
 - `read_v_domain_pairs` (`riot_na.common.io`) reads pairs of many molecules from a CSV (or TSV) file with columns
-  `molecule_id`, `chain_1`, `v_domain_1`, `chain_2`, `v_domain_2`, one row per binding site.
+  `molecule_id`, `chain_1`, `v_domain_1`, `chain_2`, `v_domain_2` (chains by number or chain ID), one row per
+  binding site.
 
 #### Pairing by the format
 
@@ -425,7 +430,7 @@ write_molecules_json(Path("molecules.json"), [molecule])        # all details: A
 ```
 
 - Binding sites: type, heavy and light V domain (chain ID, domain index, V domain number, locus, V gene), linker
-  length (in residues, between V domains of one chain), `ambiguous` and `candidates` (`chain_id:domain_index`,
+  length (in residues, between V domains of one chain), `ambiguous` and `candidates` (`chain_id:v_domain_number`,
   separated by `;`).
 - Layout: chain layout, domains with their positions and genes (V and J genes of V domains, C gene and identity of
   constant domains), V domain numbers and the binding sites of V domains with their partners. A V domain of more than

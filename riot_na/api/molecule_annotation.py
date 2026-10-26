@@ -380,8 +380,22 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
         followed by CH1 and CL), scFv or diabody (adjacent V domains of a chain joined by a long or short linker, or
         V domains of diabody units of different chains) or Fv.
         """
-        # V domains of Fab arms which are not given in pairs are unpaired
-        self.fab_arm_v_domains = {v_domain for fab_arm in self._fab_arms() for v_domain in fab_arm.v_domains}
+        # V domains of Fab arms which are not given in pairs are unpaired. V domains stacked in front of the Fab
+        # V domain count only if an arm of the other constant domain has as many V domains (DVD-Ig, not VHH-IgG)
+        fab_arms = self._fab_arms()
+        self.fab_arm_v_domains = {
+            v_domain
+            for fab_arm in fab_arms
+            for v_domain in (
+                fab_arm.v_domains
+                if any(
+                    other.constant_domain_type != fab_arm.constant_domain_type
+                    and len(other.v_domains) == len(fab_arm.v_domains)
+                    for other in fab_arms
+                )
+                else fab_arm.v_domains[-1:]
+            )
+        }
         given_pairs: set[frozenset[_VDomain]] = set()
 
         for pair in pairs:
@@ -407,7 +421,7 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
 
     def _given_v_domains(self, pair: VDomainPair) -> tuple[_VDomain, _VDomain]:
         """V domains of a V domain pair, a heavy and a light one."""
-        if len(pair) != 4:
+        if not isinstance(pair, (tuple, list)) or len(pair) != 4:
             raise ValueError(f"V domain pair {pair} is not (chain, V domain number, chain, V domain number)")
         first_chain, first_number, second_chain, second_number = pair
         first = self._given_v_domain(pair, first_chain, first_number)
@@ -435,6 +449,12 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
                     f"No chain {chain_number} in V domain pair {pair}, the molecule has {len(chain_ids)} chains"
                 )
             chain_id = chain_ids[chain_number - 1]
+            if str(chain_number) in self.chains and str(chain_number) != chain_id:
+                raise ValueError(
+                    f"Chain {chain_number} in V domain pair {pair} is ambiguous: chain number {chain_number} has chain "
+                    f"ID {chain_id}, but chain ID {chain_number} is chain number {chain_ids.index(str(chain_number)) + 1}, "
+                    "give chains by chain ID"
+                )
 
         v_domains = self.v_domains[chain_id]
         v_domain_number = _pair_number(number, pair)
@@ -482,6 +502,8 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
 
 def _pair_number(value: Any, pair: VDomainPair) -> int:
     """Chain or V domain number of a V domain pair."""
+    if isinstance(value, bool):
+        raise ValueError(f"V domain pair {pair} is not (chain, V domain number, chain, V domain number)")
     try:
         return operator.index(value)
     except TypeError as error:
@@ -670,7 +692,7 @@ def _v_domain_binding_sites(
             [v_domain_numbers[partner] if partner else None for partner in partners]
         ),
         "ambiguous": bool(candidates) or any(binding_site.ambiguous for binding_site in binding_sites),
-        "candidates": _format_v_domains(list(dict.fromkeys(candidates)), domain_indices),
+        "candidates": _format_v_domains(list(dict.fromkeys(candidates)), v_domain_numbers),
     }
 
 
@@ -707,7 +729,7 @@ def binding_site_rows(molecule: MoleculeAnnotation) -> list[dict[str, Any]]:
             "binding_site_type": binding_site.binding_site_type,
             "linker_length": binding_site.linker_length,
             "ambiguous": binding_site.ambiguous,
-            "candidates": _format_v_domains(binding_site.candidates, domain_indices),
+            "candidates": _format_v_domains(binding_site.candidates, v_domain_numbers),
         }
         for prefix, v_domain in (("heavy", binding_site.heavy_domain), ("light", binding_site.light_domain)):
             if v_domain:
@@ -749,7 +771,8 @@ def _v_domain_numbers(molecule: MoleculeAnnotation) -> dict[VDomainRef, int]:
     }
 
 
-def _format_v_domains(v_domains: Sequence[VDomainRef], domain_indices: dict[VDomainRef, int]) -> Optional[str]:
+def _format_v_domains(v_domains: Sequence[VDomainRef], v_domain_numbers: dict[VDomainRef, int]) -> Optional[str]:
+    """V domains as chain_id:v_domain_number, separated by ";"."""
     if not v_domains:
         return None
-    return ";".join(f"{v_domain.chain_id}:{domain_indices[v_domain]}" for v_domain in v_domains)
+    return ";".join(f"{v_domain.chain_id}:{v_domain_numbers[v_domain]}" for v_domain in v_domains)

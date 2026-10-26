@@ -3,7 +3,7 @@ import json
 from collections import defaultdict
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Callable, Iterable, Sequence, Type
+from typing import Any, Callable, Iterable, Optional, Sequence, Type, Union
 
 from riot_na.api.molecule_annotation import (
     BINDING_SITE_FIELDS,
@@ -54,26 +54,46 @@ def read_v_domain_pairs(input_file_path: Path) -> dict[str, list[VDomainPair]]:
     """
     V domain pairs of molecules (pairs of annotate_molecule) by molecule ID, from a CSV file (TSV, if the file
     extension is .tsv) with columns molecule_id, chain_1, v_domain_1, chain_2, v_domain_2: one row per binding site,
-    chains and V domains by number (1-based position of the chain in the molecule chains and of the V domain among the
-    V domains of the chain).
+    chains by number (1-based position of the chain in the molecule chains) or chain ID and V domains by number
+    (1-based position of the V domain among the V domains of the chain).
     """
     delimiter = "\t" if input_file_path.suffix.lower() == ".tsv" else ","
     v_domain_pairs: dict[str, list[VDomainPair]] = defaultdict(list)
-    with open(input_file_path, newline="") as input_file:
+    # utf-8-sig: CSV files saved by Excel start with a byte order mark
+    with open(input_file_path, newline="", encoding="utf-8-sig") as input_file:
         reader = csv.DictReader(input_file, delimiter=delimiter)
-        missing_fields = [field for field in V_DOMAIN_PAIR_FIELDS if field not in (reader.fieldnames or ())]
+        fieldnames = [fieldname.strip() for fieldname in reader.fieldnames or ()]
+        missing_fields = [field for field in V_DOMAIN_PAIR_FIELDS if field not in fieldnames]
         if missing_fields:
             raise ValueError(f"Missing columns in {input_file_path}: {', '.join(missing_fields)}")
+        reader.fieldnames = fieldnames
         for row in reader:
-            try:
-                chain_1, v_domain_1, chain_2, v_domain_2 = (int(row[field]) for field in V_DOMAIN_PAIR_FIELDS[1:])
-            except (TypeError, ValueError) as error:
+            values = {field: (row[field] or "").strip() for field in V_DOMAIN_PAIR_FIELDS}
+            v_domain_1, v_domain_2 = _number(values["v_domain_1"]), _number(values["v_domain_2"])
+            if v_domain_1 is None or v_domain_2 is None or not values["chain_1"] or not values["chain_2"]:
                 raise ValueError(
-                    f"Invalid V domain pair in line {reader.line_num} of {input_file_path}, "
-                    "chains and V domains must be numbers"
-                ) from error
-            v_domain_pairs[row["molecule_id"]].append((chain_1, v_domain_1, chain_2, v_domain_2))
+                    f"Invalid V domain pair in line {reader.line_num} of {input_file_path}, chains must be numbers or "
+                    "chain IDs and V domains must be numbers"
+                )
+            v_domain_pairs[values["molecule_id"]].append(
+                (_chain(values["chain_1"]), v_domain_1, _chain(values["chain_2"]), v_domain_2)
+            )
     return dict(v_domain_pairs)
+
+
+def _number(value: str) -> Optional[int]:
+    """Integer of a value, also written as a float (e.g. 1.0, as written for columns with missing values)."""
+    try:
+        number = float(value)
+    except ValueError:
+        return None
+    return int(number) if number.is_integer() else None
+
+
+def _chain(value: str) -> Union[int, str]:
+    """Chain number or chain ID."""
+    number = _number(value)
+    return number if number is not None else value
 
 
 def write_molecule_layout_csv(output_file_path: Path, molecules: Iterable[MoleculeAnnotation]):
