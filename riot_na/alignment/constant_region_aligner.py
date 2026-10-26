@@ -82,16 +82,20 @@ class ConstantRegionAligner:  # pylint: disable=too-many-instance-attributes
     ) -> None:
         # constant domains not preceded by V domains are aligned to C genes of this species
         self.default_species = Organism.HOMO_SAPIENS if Organism.HOMO_SAPIENS in c_aligners else next(iter(c_aligners))
+        self.aligner_params = get_aa_aligner_params(GermlineGene.C)
+        self.min_seq_identity: float = self.aligner_params["min_seq_identity"]
+        self.min_internal_alignment_length: int = self.aligner_params["min_internal_alignment_length"]
 
         self.genes: dict[str, GeneAA] = {}
         # species of C genes of every organism, e.g. mouse sequences are aligned to human C genes
-        self.c_gene_species: dict[Organism, set[Organism]] = defaultdict(set)
+        self.c_gene_species: dict[Organism, list[Organism]] = defaultdict(list)
         for organism, organism_aligners in c_aligners.items():
             for aligner in organism_aligners.values():
                 for lookup_id, gene in aligner.gene_lookup.items():
                     assert isinstance(gene, GeneAA)
                     self.genes[lookup_id] = gene
-                    self.c_gene_species[organism].add(gene.species)
+                    if gene.species not in self.c_gene_species[organism]:
+                        self.c_gene_species[organism].append(gene.species)
 
         self.germline_domains: dict[str, dict[str, GermlineDomain]] = {}
         for lookup_id, gene in self.genes.items():
@@ -119,10 +123,10 @@ class ConstantRegionAligner:  # pylint: disable=too-many-instance-attributes
                         replace(gene, sequence=gene.sequence[germline_domain.start : germline_domain.end])
                     )
 
-        params = get_aa_aligner_params(GermlineGene.C)
+        params = self.aligner_params
         # short alignments are allowed only at the start of C genes (e.g. CH1 fragments in Fabs), so not in CH2 and CH3
         inner_domain_params = params | {
-            "alignment_length_threshold": params["min_internal_alignment_length"],
+            "alignment_length_threshold": self.min_internal_alignment_length,
             "min_internal_alignment_length": None,
         }
         return {
@@ -154,7 +158,7 @@ class ConstantRegionAligner:  # pylint: disable=too-many-instance-attributes
             if not candidates:
                 break
 
-            domain_alignment, interval = max(candidates, key=lambda candidate: rank(candidate[0], candidate[1]))
+            domain_alignment, interval = max(candidates, key=lambda candidate: self._rank(candidate[0], candidate[1]))
             domain_alignments.append(domain_alignment)
             pending_intervals.remove(interval)
             pending_intervals += [
@@ -175,7 +179,10 @@ class ConstantRegionAligner:  # pylint: disable=too-many-instance-attributes
     def _align_interval(self, query: str, interval: QueryInterval) -> Optional[ConstantDomainAlignment]:
         interval_query = query[interval.start : interval.end]
         candidates = []
-        for species in self.c_gene_species[interval.species] | self.c_gene_species[self.default_species]:
+        # C genes of the species of the interval are aligned first, so they win ties
+        for species in dict.fromkeys(
+            [*self.c_gene_species[interval.species], *self.c_gene_species[self.default_species]]
+        ):
             for domain, aligner in self.domain_aligners[species].items():
                 alignment = aligner.align(interval_query)[0].best_alignment
                 if alignment is not None:
@@ -185,9 +192,9 @@ class ConstantRegionAligner:  # pylint: disable=too-many-instance-attributes
             (
                 candidate
                 for candidate in candidates
-                if not is_fragment(candidate) or follows_v_domain(candidate, interval)
+                if not self._is_fragment(candidate) or follows_v_domain(candidate, interval)
             ),
-            key=lambda candidate: rank(candidate, interval),
+            key=lambda candidate: self._rank(candidate, interval),
             default=None,
         )
 
@@ -253,7 +260,6 @@ class ConstantRegionAligner:  # pylint: disable=too-many-instance-attributes
         assert neighbour is not None
         gap_query = query[gap_start:gap_end]
         aligner = StripedSmithWaterman(gap_query, **AA_ALIGNER_PARAMS)
-        min_seq_identity = get_aa_aligner_params(GermlineGene.C)["min_seq_identity"]
 
         candidates = []
         for lookup_id, gene in self.genes.items():
@@ -265,7 +271,7 @@ class ConstantRegionAligner:  # pylint: disable=too-many-instance-attributes
             alignment = align_aa(aligner, gap_query, gene.name, hinge_sequence, db_length=len(hinge_sequence))
             follows_ch1 = after_ch1 and alignment.q_start == 0 and alignment.t_start == 0
             precedes_ch2 = before_ch2 and alignment.q_end == len(gap_query) and alignment.t_end == len(hinge_sequence)
-            if not (follows_ch1 or precedes_ch2) or (alignment.seq_identity or 0) < min_seq_identity:
+            if not (follows_ch1 or precedes_ch2) or (alignment.seq_identity or 0) < self.min_seq_identity:
                 continue
 
             candidates.append(
@@ -327,14 +333,28 @@ class ConstantRegionAligner:  # pylint: disable=too-many-instance-attributes
             tail_length = 1
         return replace(domain_alignment, query_end=domain_alignment.query_end + tail_length)
 
+    def _is_fragment(self, domain_alignment: ConstantDomainAlignment) -> bool:
+        """
+        Short alignments (allowed only from the start of C genes) are constant region fragments, e.g. C gene starts
+        of sequencing reads or CH1 derived linkers.
+        """
+        alignment = domain_alignment.alignment
+        return alignment.t_end - alignment.t_start < self.min_internal_alignment_length
 
-def is_fragment(domain_alignment: ConstantDomainAlignment) -> bool:
-    """
-    Short alignments (allowed only from the start of C genes) are constant region fragments, e.g. C gene starts
-    of sequencing reads or CH1 derived linkers.
-    """
-    alignment = domain_alignment.alignment
-    return alignment.t_end - alignment.t_start < get_aa_aligner_params(GermlineGene.C)["min_internal_alignment_length"]
+    def _rank(
+        self, domain_alignment: ConstantDomainAlignment, interval: QueryInterval
+    ) -> tuple[bool, float, float, bool]:
+        """
+        Alignments to single domains and to whole C genes are compared, so alignments (except short C gene fragments)
+        are ranked by identity before score, e.g. a human Fc is assigned human CH2 and CH3, not a whole alpaca C gene.
+        """
+        alignment = domain_alignment.alignment
+        return (
+            not self._is_fragment(domain_alignment),
+            alignment.seq_identity or 0,
+            alignment.alignment_score or 0,
+            alignment.locus == interval.locus,
+        )
 
 
 def follows_v_domain(domain_alignment: ConstantDomainAlignment, interval: QueryInterval) -> bool:
@@ -343,17 +363,3 @@ def follows_v_domain(domain_alignment: ConstantDomainAlignment, interval: QueryI
     regions) short alignments are spurious.
     """
     return interval.follows_v_domain and domain_alignment.query_start - interval.start <= MAX_FRAGMENT_OFFSET
-
-
-def rank(domain_alignment: ConstantDomainAlignment, interval: QueryInterval) -> tuple[bool, float, float, bool]:
-    """
-    Alignments to single domains and to whole C genes are compared, so alignments (except short C gene fragments)
-    are ranked by identity before score, e.g. a human Fc is assigned human CH2 and CH3, not a whole alpaca C gene.
-    """
-    alignment = domain_alignment.alignment
-    return (
-        not is_fragment(domain_alignment),
-        alignment.seq_identity or 0,
-        alignment.alignment_score or 0,
-        alignment.locus == interval.locus,
-    )
