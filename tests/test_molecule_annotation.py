@@ -368,6 +368,40 @@ def test_nucleotide_molecule():
     assert binding_sites(molecule) == [("Fab", "HC:1", "LC:1", None)]
 
 
+# J region of VH mutated (YFDYWGQGTLVTVSS -> YFAAWGAGTAVTASS), J is not found, the J motif (W-G-x-G) is kept
+VH_WITHOUT_J = VH.replace("YFDYWGQGTLVTVSS", "YFAAWGAGTAVTASS")
+
+
+@pytest.mark.parametrize(
+    "chains, expected, linker_length",
+    [
+        ({"chain": VH_WITHOUT_J + "GGGGS" + VK}, ("diabody", "chain:1", "chain:2", None), 5),
+        ({"chain": VH_WITHOUT_J + LINKER + VK}, ("scFv", "chain:1", "chain:2", None), len(LINKER)),
+    ],
+    ids=["diabody", "scFv"],
+)
+def test_v_domains_without_j(riot_aa: RiotNumberingAA, chains: dict[str, str], expected: tuple, linker_length: int):
+    molecule = riot_aa.annotate_molecule("molecule", chains)
+
+    assert molecule.chains["chain"].rearrangements[0].j_call is None
+    assert binding_sites(molecule) == [expected]
+    assert molecule.binding_sites[0].linker_length == linker_length
+
+
+@pytest.mark.parametrize(
+    "linker, expected_type", [("GGTGGCGGTGGCTCG", "diabody"), (2 * "GGTGGCGGTGGCTCG" + "GGTGGC", "scFv")]
+)
+def test_nucleotide_linker_length(linker: str, expected_type: str):
+    # J germlines end with the nucleotide of the first C codon, which matches the first nucleotide of the linker
+    vh = nt_rearrangement("IGHV3-23*01", "GGCTAC", "IGHJ4*02", 2)
+    vk = nt_rearrangement("IGKV1-27*01", "CAGCAGAGTTACAGTACCCCT", "IGKJ1*01", 1)
+    molecule = get_or_create_riot_nt(return_all_domains=True).annotate_molecule("molecule", {"chain": vh + linker + vk})
+
+    assert [
+        (binding_site.binding_site_type, binding_site.linker_length) for binding_site in molecule.binding_sites
+    ] == [(expected_type, len(linker) // 3)]
+
+
 def test_molecule_output(riot_aa: RiotNumberingAA, tmp_path: Path):
     molecules = [
         riot_aa.annotate_molecule("IgG", {"HC": VH + IGHG1, "LC": VK + CK}, c_scheme=CScheme.EU),

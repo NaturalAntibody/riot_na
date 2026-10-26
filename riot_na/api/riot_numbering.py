@@ -14,7 +14,7 @@ from riot_na.alignment.aa_gene_alignments import (
     create_vjc_aligner_aa,
     create_vjc_alignment_translator_aa,
 )
-from riot_na.alignment.alignment_utils import v_domain_end
+from riot_na.alignment.alignment_utils import infer_reading_frame, v_domain_end
 from riot_na.alignment.constant_region_aligner import ConstantRegionAligner
 from riot_na.alignment.gene_aligner import GeneAlignerAA
 from riot_na.alignment.nt_gene_alignments import VDJCAlignerNT, create_vdjc_aligner_nt
@@ -22,6 +22,7 @@ from riot_na.alignment.segment_gene_aligner import (
     SegmentGeneAligner,
     SegmentGeneAlignerAA,
 )
+from riot_na.alignment.translate import translate
 from riot_na.api.chain_annotation import (
     TranslatedDomainAlignment,
     VDomainSpan,
@@ -30,6 +31,8 @@ from riot_na.api.chain_annotation import (
     annotate_constant_domains,
     chain_domains,
     chain_layout,
+    fr4_end_by_j_motif,
+    j_end_nt,
     reverse_complement,
 )
 from riot_na.api.molecule_annotation import PairingTarget, pair_binding_sites
@@ -83,26 +86,34 @@ def create_constant_region_aligner(
 
 
 def v_domain_span_aa(alignments: AlignmentsAA) -> VDomainSpan:
-    assert alignments.v
+    """V domain of V and J alignments. V domains without J alignments end with FR4 following the J motif."""
+    v = alignments.v
+    assert v
     segment_start = alignments.segment_start or 0
-    return VDomainSpan(
-        segment_start + alignments.v.q_start,
+    if alignments.j:
         # J is aligned to the query left after V alignment
-        segment_start + v_domain_end(alignments.v, alignments.j, j_query_start=alignments.v.q_end),
-        alignments.v.species,
-        alignments.v.locus,
-    )
+        end = v_domain_end(v, alignments.j, j_query_start=v.q_end)
+    else:
+        end = fr4_end_by_j_motif(v.q_seq, v.q_end, v.locus) or v.q_end
+    return VDomainSpan(segment_start + v.q_start, segment_start + end, v.species, v.locus)
 
 
 def v_domain_span_nt(alignments: AlignmentsNT) -> VDomainSpan:
-    assert alignments.v
+    """
+    V domain of V and J alignments, which ends with a codon: J alignments are extended to residue level (j_end_nt),
+    V domains without J alignments end with FR4 following the J motif.
+    """
+    v = alignments.v
+    assert v and v.reading_frame is not None
     segment_start = alignments.segment_start or 0
-    return VDomainSpan(
-        segment_start + alignments.v.q_start,
-        segment_start + v_domain_end(alignments.v, alignments.j),
-        alignments.v.species,
-        alignments.v.locus,
-    )
+    # reading frame of the segment
+    frame = (v.q_start + infer_reading_frame(t_start=v.t_start, t_frame=v.reading_frame)) % 3
+    if alignments.j:
+        end = j_end_nt(v.q_seq, alignments.j, frame)
+    else:
+        fr4_end = fr4_end_by_j_motif(translate(v.q_seq, frame), (v.q_end - frame) // 3, v.locus)
+        end = frame + 3 * fr4_end if fr4_end is not None else v.q_end
+    return VDomainSpan(segment_start + v.q_start, segment_start + end, v.species, v.locus)
 
 
 def number_c_region(

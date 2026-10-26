@@ -2,6 +2,7 @@
 Chain annotation: domains of a chain in sequence order, rearrangements (V domains) and constant domains.
 """
 
+import re
 from bisect import bisect_left
 from dataclasses import dataclass, replace
 from typing import Optional, Sequence
@@ -12,7 +13,15 @@ from riot_na.alignment.constant_region_aligner import (
     QueryInterval,
 )
 from riot_na.alignment.translate import translate
-from riot_na.data.model import ChainDomain, ConstantDomain, CScheme, Locus, Organism
+from riot_na.data.constants import BLOSUM_62
+from riot_na.data.model import (
+    AlignmentEntryNT,
+    ChainDomain,
+    ConstantDomain,
+    CScheme,
+    Locus,
+    Organism,
+)
 from riot_na.schemes.scheme_alignment import SchemeAligner
 
 V_DOMAIN_NAMES = {Locus.IGH: "VH", Locus.IGK: "VK", Locus.IGL: "VL"}
@@ -20,10 +29,57 @@ FRAMES = (0, 1, 2)
 SPLIT_CODON_OVERLAP = 2
 STOP_CODON = "*"
 COMPLEMENT = str.maketrans("ACGTURYKMBVDHSWN", "TGCAAYRMKVBHDSWN")
+# FR4 starts with the J motif (IMGT 118-121, J-TRP and J-PHE): W-G-x-G in heavy and F-G-x-G in light V domains
+J_MOTIFS = {Locus.IGH: re.compile("WG.G"), Locus.IGK: re.compile("FG.G"), Locus.IGL: re.compile("FG.G")}
+J_MOTIF_LENGTH = 4
+# FR4 is IMGT 118-128 in heavy and 118-127 in light V domains
+FR4_LENGTHS = {Locus.IGH: 11, Locus.IGK: 10, Locus.IGL: 10}
+# J alignments start up to MAX_CDR3_LENGTH_J_AA (60) residues after V alignments, J germlines have up to 9 residues
+# before the J motif
+MAX_J_MOTIF_START = 70
+# score of residues missing in BLOSUM62 (e.g. ambiguous codons)
+MIN_RESIDUE_SCORE = -4.0
 
 
 def reverse_complement(sequence: str) -> str:
     return sequence.translate(COMPLEMENT)[::-1]
+
+
+def fr4_end_by_j_motif(sequence: str, v_end: int, locus: Locus) -> Optional[int]:
+    """
+    End (exclusive) of FR4 starting with the first J motif found up to MAX_J_MOTIF_START residues after the V alignment
+    end v_end, clipped to the sequence end, or None if there is no J motif. V domains without J alignments end there.
+    """
+    match = J_MOTIFS[locus].search(sequence, v_end, v_end + MAX_J_MOTIF_START + J_MOTIF_LENGTH)
+    if match is None:
+        return None
+    return min(match.start() + FR4_LENGTHS[locus], len(sequence))
+
+
+def j_end_nt(sequence: str, j_alignment: AlignmentEntryNT, frame: int) -> int:
+    """
+    End of a nucleotide J alignment to sequence, translated in frame, at residue level: extended over the codons of the
+    following J germline residues to the best ungapped BLOSUM62 score, at a codon end. Nucleotide alignments end before
+    mismatches of synonymous codons (common in FR4 of codon optimized sequences) and with the nucleotide of the first
+    C codon J germlines end with. J alignments out of frame end as aligned.
+    """
+    assert j_alignment.reading_frame is not None
+    if (j_alignment.q_end - frame) % 3 != (j_alignment.t_end - j_alignment.reading_frame) % 3:
+        return j_alignment.q_end
+
+    translation = translate(sequence, frame)
+    germline_translation = translate(j_alignment.t_seq, j_alignment.reading_frame)
+    # codons of the first nucleotides after the alignment, partially aligned codons are scored as residues too
+    residue = (j_alignment.q_end - frame) // 3
+    germline_residue = (j_alignment.t_end - j_alignment.reading_frame) // 3
+    end_residue, score, best_score = residue, 0.0, 0.0
+    while residue < len(translation) and germline_residue < len(germline_translation):
+        score += BLOSUM_62.get(translation[residue], {}).get(germline_translation[germline_residue], MIN_RESIDUE_SCORE)
+        residue += 1
+        germline_residue += 1
+        if score > best_score:
+            end_residue, best_score = residue, score
+    return frame + 3 * end_residue
 
 
 @dataclass(frozen=True)

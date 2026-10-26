@@ -3,12 +3,15 @@ import re
 import pytest
 
 from riot_na import ChainType, CScheme, Organism
+from riot_na.alignment.translate import translate
 from riot_na.api.chain_annotation import reverse_complement
 from riot_na.api.riot_numbering import (
     RiotNumberingAA,
     RiotNumberingNT,
     get_or_create_riot_aa,
     get_or_create_riot_nt,
+    v_domain_span_aa,
+    v_domain_span_nt,
 )
 from riot_na.data.model import ConstantDomain
 from riot_na.data.scheme_mapping_facade import CSchemeMappingFacade
@@ -34,6 +37,7 @@ VHH = (
 CAR_TAIL = (
     "TTTPAPRPPTPAPTIASQPLSLRPEACRPAAGGAVHTRGLDFACDIYIWAPLAGTCGVLLLSLVITLYCKRGRKKLLYIFKQPFMRPVQTTQEEDGCSCRFPEEEEGGCEL"
 )
+VK_NT = nt_rearrangement("IGKV1-27*01", "CAGCAGAGTTACAGTACCCCT", "IGKJ1*01", 1)
 
 
 @pytest.fixture(name="riot_aa")
@@ -247,6 +251,31 @@ def test_nucleotide_chain_with_multiple_domains(riot_nt: RiotNumberingNT):
 
     # unannotated nucleotides of linkers
     assert re.fullmatch(r"VH-CH1-H-CH2-CH3-\[4\d\]-VH-\[4\d\]-VK", chain.layout)
+
+
+def test_v_domains_without_j_end_with_fr4(riot_aa: RiotNumberingAA, riot_nt: RiotNumberingNT):
+    # V domains end with FR4 following the J motif (W-G-x-G), if J is not found
+    aa_alignments = riot_aa.vjc_aligner_aa.produce_aa_alignments(VH + "GGGGS" + VK)[0]
+    assert v_domain_span_aa(aa_alignments).end == len(VH)
+    aa_alignments.j = None
+    assert v_domain_span_aa(aa_alignments).end == len(VH)
+
+    # J germline ends with the nucleotide of the first C codon, which matches the first linker nucleotide (G)
+    heavy_chain = nt_rearrangement("IGHV3-23*01", "GGCTAC", "IGHJ4*02", 2)
+    nt_alignments = riot_nt.vdjc_aligner.produce_nt_alignments(heavy_chain + "GGTGGCGGTGGCTCG" + VK_NT)[0]
+    assert v_domain_span_nt(nt_alignments).end == len(heavy_chain)
+    nt_alignments.j = None
+    assert v_domain_span_nt(nt_alignments).end == len(heavy_chain)
+
+
+def test_nucleotide_v_domains_end_with_fr4_residues(riot_nt: RiotNumberingNT):
+    # synonymous codons at the FR4 end (TCC TCA -> AGC AGT), nucleotide J alignment ends before them
+    heavy_chain = nt_rearrangement("IGHV3-23*01", "GGCTAC", "IGHJ4*02", 2, "IGHG1")
+    fr4_end = heavy_chain.index("GCCTCCACCAAGGGC")
+    recoded_chain = heavy_chain[: fr4_end - 6] + "AGCAGT" + heavy_chain[fr4_end:]
+    assert translate(recoded_chain, 0) == translate(heavy_chain, 0)
+
+    assert riot_nt.annotate_chain("", recoded_chain).layout == "VH-CH1-H-CH2-CH3"
 
 
 def test_chain_annotation_requires_multiple_domains_numbering():
