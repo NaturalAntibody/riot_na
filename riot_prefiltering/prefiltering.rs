@@ -157,11 +157,7 @@ impl Prefiltering {
         let query_bytes = self.validate_and_convert_query(&query)?;
         let rev_comp_query_bytes = dna::revcomp(&query_bytes);
 
-        // Get segments from both orientations
-        let forward_segments = self.find_non_overlapping_segments(&query_bytes, false);
-        let reverse_segments = self.find_non_overlapping_segments(&rev_comp_query_bytes, true);
-
-        let combined_segments = self.select_strand_segments(forward_segments, reverse_segments);
+        let combined_segments = self.find_strand_segments(&query_bytes, &rev_comp_query_bytes);
 
         let rev_comp_query = std::str::from_utf8(&rev_comp_query_bytes)
             .unwrap()
@@ -176,6 +172,18 @@ impl Prefiltering {
 }
 
 impl Prefiltering {
+    /// Segments of the strand with the higher total coverage, found in both orientations of the query
+    pub(crate) fn find_strand_segments(
+        &self,
+        query_bytes: &ByteSequence,
+        rev_comp_query_bytes: &ByteSequence,
+    ) -> Vec<SegmentMatch> {
+        let forward_segments = self.find_non_overlapping_segments(query_bytes, false);
+        let reverse_segments = self.find_non_overlapping_segments(rev_comp_query_bytes, true);
+
+        self.select_strand_segments(forward_segments, reverse_segments)
+    }
+
     pub(crate) fn calculate_coverage(&self, matches: Vec<&KmerMatch>) -> Coverage {
         let ksize = self.kmer_size as i32;
         let mut coverage = 0;

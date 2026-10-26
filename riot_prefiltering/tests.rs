@@ -292,15 +292,21 @@ mod prefiltering_tests {
         let reverse_part = String::from_utf8(dna::revcomp(gene_seq[..120].as_bytes().to_vec())).unwrap();
         let query = format!("{gene_seq}{reverse_part}");
 
-        let result = prefiltering.calculate_segment_matches_with_rev_comp(query.clone()).unwrap();
-        assert_eq!(result.segments.len(), 1);
-        assert!(result.segments.iter().flat_map(|s| &s.matching_genes).all(|gene| !gene.rev_comp));
+        // segments are found directly, as PyResult of the Python API can't be linked into the test binary
+        let strand_segments = |query: &str| {
+            let query_bytes = query.as_bytes().to_vec();
+            prefiltering.find_strand_segments(&query_bytes, &dna::revcomp(&query_bytes))
+        };
+
+        let segments = strand_segments(&query);
+        assert_eq!(segments.len(), 1);
+        assert!(segments.iter().flat_map(|s| &s.matching_genes).all(|gene| !gene.rev_comp));
 
         // the same query reverse complemented is found on the reverse strand only
         let rev_comp_query = String::from_utf8(dna::revcomp(query.as_bytes().to_vec())).unwrap();
-        let result = prefiltering.calculate_segment_matches_with_rev_comp(rev_comp_query).unwrap();
-        assert_eq!(result.segments.len(), 1);
-        assert!(result.segments.iter().flat_map(|s| &s.matching_genes).all(|gene| gene.rev_comp));
+        let segments = strand_segments(&rev_comp_query);
+        assert_eq!(segments.len(), 1);
+        assert!(segments.iter().flat_map(|s| &s.matching_genes).all(|gene| gene.rev_comp));
     }
 
     fn gene_segment(gene_id: &str, query_start: usize, query_end: usize, target_start: usize, coverage: i32) -> SegmentMatch {
