@@ -394,7 +394,7 @@ Without `pairs`, V domains are paired by the format of their chains, in this ord
 
 | Binding site | V domains | Rule |
 |---|---|---|
-| `scFv` | heavy and light V domains next to each other in a chain | linker of at least 12 residues |
+| `scFv` | heavy and light V domains next to each other in a chain (also with a CH1 or CL derived linker, e.g. ASTKGP) | linker of at least 12 residues |
 | `diabody` | the same, with a shorter linker | the linker is too short for them to pair with each other, so they pair with the V domains of another copy of the chain or, if two chains are each other's only candidates, of the other chain |
 | `Fab` | V domain followed by CH1 and V domain followed by CL | one heavy and one light, so domain crossovers of CrossMabs pair too. Fab arms of one chain pair only if joined by a linker of at least 20 residues (single chain Fab) |
 | `Fv` | V domains stacked in front of Fab V domains (e.g. outer V domains of DVD-Ig) | paired by their position |

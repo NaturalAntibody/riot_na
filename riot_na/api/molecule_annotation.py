@@ -2,8 +2,8 @@
 Molecule annotation: binding sites formed by V domains of the chains of a molecule.
 
 Without pairs, V domains are paired by the format of the chains, in this order:
-- scFv: adjacent heavy and light V domains of a chain (no constant domain in between) joined by a linker of at least
-  MIN_SCFV_LINKER_LENGTH residues,
+- scFv: adjacent heavy and light V domains of a chain (no V or constant domain in between, except constant domain
+  fragments of CH1 or CL derived linkers) joined by a linker of at least MIN_SCFV_LINKER_LENGTH residues,
 - diabody: the same with a shorter linker, too short to pair V domains of one chain. V domains pair with V domains of
   another copy of the chain (homodimer) or, if two chains are each other's only candidates, of the other chain
   (heterodimer),
@@ -222,11 +222,11 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
             i = 0
             while i + 1 < len(chain_v_domains):
                 first, second = chain_v_domains[i], chain_v_domains[i + 1]
-                if second.position != first.position + 1 or first.heavy == second.heavy:
+                linker_length = self._adjacent_linker_length(first, second)
+                if linker_length is None or first.heavy == second.heavy:
                     i += 1
                     continue
 
-                linker_length = self._linker_length(first.domain, second.domain)
                 if linker_length >= MIN_SCFV_LINKER_LENGTH:
                     self._add_binding_site(SCFV, [first, second], linker_length=linker_length)
                 else:
@@ -456,10 +456,19 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
         return f"{v_domain.domain.domain} {v_domain_number} of chain {self._chain_name(v_domain.chain_id)}"
 
     def _adjacent_linker_length(self, first: _VDomain, second: _VDomain) -> Optional[int]:
-        """Residues between V domains, if they are adjacent V domains of a chain (no domain in between)."""
-        if first.chain_id != second.chain_id or abs(first.position - second.position) != 1:
+        """
+        Residues between V domains, if they are adjacent V domains of a chain: no domain in between, except constant
+        domain fragments (e.g. CH1 or CL derived linkers, ASTKGP..., RTVAAP...).
+        """
+        if first.chain_id != second.chain_id or first.position == second.position:
             return None
         preceding, following = sorted((first, second), key=lambda v_domain: v_domain.position)
+        between = self.chains[first.chain_id].domains[preceding.position + 1 : following.position]
+        if any(
+            domain.domain in V_DOMAINS or self._domain_length(domain) >= MIN_FAB_CONSTANT_DOMAIN_LENGTH
+            for domain in between
+        ):
+            return None
         return self._linker_length(preceding.domain, following.domain)
 
     def _in_diabody_unit(self, v_domain: _VDomain) -> bool:

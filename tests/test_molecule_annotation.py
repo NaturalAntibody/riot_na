@@ -428,6 +428,21 @@ def test_chain_list(riot_aa: RiotNumberingAA):
         riot_aa.annotate_molecule("molecule", VH + IGHG1)
 
 
+@pytest.mark.parametrize(
+    "linker, binding_site_type",
+    [("ASTKGP", "diabody"), ("TVAAP", "diabody"), ("ASTKGP" + 2 * "GGGGS", "scFv"), ("RTVAAP" + 2 * "GGGGS", "scFv")],
+)
+@pytest.mark.parametrize("pairs", [None, [(1, 1, 1, 2)]], ids=["format", "pairs"])
+def test_linkers_with_constant_domain_fragments(
+    riot_aa: RiotNumberingAA, linker: str, binding_site_type: str, pairs: Optional[list]
+):
+    # CH1 and CL derived linkers are annotated as constant domain fragments between the V domains
+    molecule = riot_aa.annotate_molecule("molecule", {"chain": VH + linker + VK}, pairs=pairs)
+
+    assert molecule.chains["chain"].layout.count("-") >= 2
+    assert numbered_binding_sites(molecule) == [(binding_site_type, "chain:1", "chain:2", len(linker))]
+
+
 def test_v_domain_numbers(riot_aa: RiotNumberingAA):
     molecule = riot_aa.annotate_molecule("molecule", {"HC": VH + IGHG1 + LINKER + VH2 + LINKER + VK2, "LC": VK + CK})
 
