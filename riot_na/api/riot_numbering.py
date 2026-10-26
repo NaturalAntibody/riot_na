@@ -163,9 +163,9 @@ class _RiotNumbering(ABC, Generic[SegmentedAirrRearrangementEntry]):
         - pairs : Pairing hints, pairs of chains or V domains (chain ID and domain index, 1-based position among all
         domains of the chain) which pair, e.g. [("HC1", "LC1"), ("HC2", "LC2")] or [(("HC", 1), "LC1"), (("HC", 3),
         "LC2")]. V domains given in pairs pair only with V domains they are given with, except light chain Fab arms
-        (followed by CL), which can be shared by heavy chains. By default V domains with more than one possible partner
-        are ambiguous and V domains not paired by their format (e.g. V domain only chains) are single domains or
-        unpaired.
+        (followed by CL) and light V domains paired by pairs only, which can be shared by heavy chains. By default
+        V domains with more than one possible partner are ambiguous and V domains not paired by their format (e.g.
+        V domain only chains) are single domains or unpaired.
 
         Returns:
         -----------

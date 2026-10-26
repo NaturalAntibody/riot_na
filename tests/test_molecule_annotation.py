@@ -214,6 +214,45 @@ DIABODIES = {"A": VH + "GGGGS" + VK2, "B": VH2 + "GGGGS" + VK, "C": VH + "GGGGS"
             [("A", "B")],
             [("diabody", "A:1", "B:2", None), ("diabody", "B:1", "A:2", None), ("diabody", "C:1", "C:2", None)],
         ),
+        # light V domain given in pairs with two heavy V domains pairs with both, regardless of the chain order
+        (
+            {"H1": VH, "H2": VH2, "L": VK},
+            [("H1", "L"), ("H2", "L")],
+            [("Fv", "H1:1", "L:1", None), ("Fv", "H2:1", "L:1", None)],
+        ),
+        (
+            {"H2": VH2, "H1": VH, "L": VK},
+            [("H1", "L"), ("H2", "L")],
+            [("Fv", "H2:1", "L:1", None), ("Fv", "H1:1", "L:1", None)],
+        ),
+        # V domain given in pairs doesn't form a scFv with another V domain
+        (
+            {"A": VH + LINKER + VK2, "B": VK},
+            [(("A", 1), "B")],
+            [("Fv", "A:1", "B:1", None), ("unpaired", None, "A:2", None)],
+        ),
+        # chains given in pairs keep their scFv
+        (
+            {"HC": VH + IGHG1 + LINKER + VH2 + LINKER + VK2, "LC": VK + CK},
+            [("HC", "LC")],
+            [("Fab", "HC:1", "LC:1", None), ("scFv", "HC:6", "HC:7", None)],
+        ),
+        # V domains given in pairs choose partners of diabody units
+        (
+            {"A": VH + "GGGGS" + VK2, "B": VH2 + "GGGGS" + VK},
+            [(("A", 1), ("B", 2))],
+            [("diabody", "A:1", "B:2", None), ("diabody", "B:1", "A:2", None)],
+        ),
+        (
+            {"tandem": VH + "GGGGS" + VK2 + "GGGGS" + VH2 + "GGGGS" + VK},
+            [(("tandem", 1), ("tandem", 4)), (("tandem", 3), ("tandem", 2))],
+            [("diabody", "tandem:1", "tandem:4", None), ("diabody", "tandem:3", "tandem:2", None)],
+        ),
+        (
+            {"A": VH + "GGGGS" + VK2, "B": VK},
+            [(("A", 1), "B")],
+            [("Fv", "A:1", "B:1", None), ("unpaired", None, "A:2", None)],
+        ),
     ],
     ids=[
         "bispecific",
@@ -226,6 +265,13 @@ DIABODIES = {"A": VH + "GGGGS" + VK2, "B": VH2 + "GGGGS" + VK, "C": VH + "GGGGS"
         "HC-with-VL",
         "diabodies",
         "heterodimeric-diabody",
+        "common-light-chain-Fv",
+        "common-light-chain-Fv-chain-order",
+        "scFv-V-domain-pairs",
+        "IgG-scFv-chain-pairs",
+        "heterodimeric-diabody-V-domain-pairs",
+        "tandem-diabody",
+        "diabody-V-domain-pairs",
     ],
 )
 def test_pairs(riot_aa: RiotNumberingAA, chains: dict[str, str], pairs: Optional[list], expected: list):

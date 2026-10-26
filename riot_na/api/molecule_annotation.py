@@ -3,22 +3,26 @@ Molecule annotation: binding sites formed by V domains of the chains of a molecu
 
 V domains are paired by the format of the chains, in this order:
 - scFv: adjacent heavy and light V domains of a chain (no constant domain in between) joined by a linker of at least
-  MIN_SCFV_LINKER_LENGTH residues,
+  MIN_SCFV_LINKER_LENGTH residues, unless one of them is given in pairs as a V domain with other V domains,
 - diabody: the same with a shorter linker, too short to pair V domains of one chain. V domains pair with V domains of
   another copy of the chain (homodimer) or, if two chains are each other's only candidates, of the other chain
-  (heterodimer),
+  (heterodimer). Units of one chain pair with each other only if they are given in pairs with each other (e.g. tandem
+  diabody),
 - Fab: V domain followed by CH1 pairs with V domain followed by CL, if one of them is heavy and the other light
   (which pairs domain crossovers of CrossMabs too). Constant regions of C genes without domain definitions
   (e.g. IGHM) aligned from their start are CH1 of heavy and CL of light C genes. V domains stacked in front of them
   (e.g. outer V domains of DVD-Ig) pair by their position. Fab arms of one chain pair only if joined by a linker of at
   least MIN_SCFAB_LINKER_LENGTH residues (single chain Fab), then only with each other. Fab arms with more than one
   possible partner are ambiguous,
-- Fv: V domains given in pairs (pairing hints), which are not paired by their format (e.g. V domain only chains),
+- Fv: V domains given in pairs (pairing hints), which are not paired by their format (e.g. V domain only chains).
+  A light V domain given in pairs with many heavy V domains pairs with each of them (common light chain),
 - single domain: other heavy V domains (e.g. VHH), other light V domains and V domains of Fab arms are unpaired.
 
 Pairing hints (pairs) are pairs of chains or V domains of chains which pair with each other. V domains given in pairs
-pair only with V domains they are given with, which resolves ambiguous Fab arms and diabodies. Only light chain Fab
-arms (followed by CL) are not reserved by pairs, they can be shared by heavy chain Fab arms (common light chain).
+pair only with V domains they are given with, which resolves ambiguous Fab arms and diabodies. Light chain Fab arms
+(followed by CL) and light V domains paired as Fv are not reserved by pairs, they can be shared by heavy chain Fab arms
+or heavy V domains (common light chain). Pairs choose partners of diabody units. Chains given in pairs (chain ID
+only) don't prevent scFv of their V domains, only V domains given in pairs (chain ID and domain index) do.
 """
 
 from collections import defaultdict
@@ -193,6 +197,23 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
         hinted = (self._hint_partners(v_domains), self._hint_partners(partner_v_domains))
         return not any(hinted) or self._hinted(v_domains, partner_v_domains)
 
+    def _domain_hints_allow(self, first: _VDomain, second: _VDomain) -> bool:
+        """
+        V domains given in pairs as V domains (chain ID and domain index) pair only with V domains they are given with.
+        """
+        return all(
+            not partners or any(other.matches(partner) for partner in partners)
+            for v_domain, other in ((first, second), (second, first))
+            for partners in [
+                [
+                    partner
+                    for hint in self.hints
+                    for target, partner in (hint, hint[::-1])
+                    if target == (v_domain.chain_id, v_domain.position)
+                ]
+            ]
+        )
+
     def pair(self) -> list[BindingSite]:
         self._pair_single_chain_fvs()
         self._pair_fab_arms()
@@ -261,11 +282,15 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
                     continue
 
                 linker_length = self._linker_length(first.domain, second.domain)
-                if linker_length >= MIN_SCFV_LINKER_LENGTH:
-                    self._add_binding_site(SCFV, [first, second], linker_length=linker_length)
-                else:
+                if linker_length < MIN_SCFV_LINKER_LENGTH:
                     diabody_units.append((first, second))
                     self.paired.update((first, second))
+                elif self._domain_hints_allow(first, second):
+                    self._add_binding_site(SCFV, [first, second], linker_length=linker_length)
+                else:
+                    # V domains given in pairs (as V domains) with other V domains don't form a scFv
+                    i += 1
+                    continue
                 i += 2
 
         self._pair_diabodies(diabody_units)
@@ -273,13 +298,20 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
     def _pair_diabodies(self, units: Sequence[tuple[_VDomain, _VDomain]]) -> None:
         """
         Diabody units (V domains joined by short linkers) of chains which are each other's only candidates
-        form a heterodimer, other units pair with another copy of their chain (homodimer).
+        form a heterodimer, other units pair with another copy of their chain (homodimer). Units of one chain are
+        candidates of each other only if they are given in pairs with each other (e.g. tandem diabody). V domains of
+        units which can't pair with any unit, because their V domains are given in pairs (as V domains) with other
+        V domains, are paired by pairs.
         """
         candidates = {
             unit: [
                 other_unit
                 for other_unit in units
-                if other_unit[0].chain_id != unit[0].chain_id and self._hints_allow(unit, other_unit)
+                if (
+                    other_unit[0].chain_id != unit[0].chain_id
+                    or (other_unit != unit and self._hinted(unit, other_unit))
+                )
+                and self._hints_allow(unit, other_unit)
             ]
             for unit in units
         }
@@ -300,6 +332,8 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
                 self._add_binding_site(
                     DIABODY, [second, other_first if second.heavy != other_first.heavy else other_second]
                 )
+            elif not unit_candidates and not self._domain_hints_allow(first, second):
+                self.paired.difference_update(unit)
             else:
                 self._add_binding_site(
                     DIABODY,
@@ -407,18 +441,23 @@ class _BindingSitePairing:  # pylint: disable=too-few-public-methods
             self.paired.update(fab_arm.v_domains)
 
     def _pair_hinted_v_domains(self) -> None:
-        """Pair V domains given in pairs, which are not paired by their format (e.g. V domain only chains)."""
-        v_domains = [v_domain for chain_v_domains in self.v_domains.values() for v_domain in chain_v_domains]
+        """
+        Pair V domains given in pairs, which are not paired by their format (e.g. V domain only chains). Light V domains
+        are not reserved, as light chain Fab arms: a light V domain given in pairs with many heavy V domains pairs with
+        each of them (common light chain).
+        """
+        unpaired_v_domains = [
+            v_domain
+            for chain_v_domains in self.v_domains.values()
+            for v_domain in chain_v_domains
+            if v_domain not in self.paired
+        ]
 
-        for v_domain in sorted(v_domains, key=lambda v_domain: not v_domain.heavy):
-            if v_domain in self.paired:
+        for v_domain in unpaired_v_domains:
+            if not v_domain.heavy:
                 continue
             partners = [
-                partner
-                for partner in v_domains
-                if partner not in self.paired
-                and partner.heavy != v_domain.heavy
-                and self._hinted([v_domain], [partner])
+                partner for partner in unpaired_v_domains if not partner.heavy and self._hinted([v_domain], [partner])
             ]
             if len(partners) == 1:
                 self._add_binding_site(FV, [v_domain, partners[0]])
@@ -509,10 +548,10 @@ def pair_binding_sites(
     - residue_length: length of residues in chain sequence positions, 3 for nucleotide chains.
     - pairs: pairing hints, pairs of chains (chain ID) or V domains (chain ID and domain index) which pair.
     V domains given in pairs pair only with V domains they are given with, except light chain Fab arms (followed by
-    CL), which can be shared by many heavy chain Fab arms (common light chain). They resolve ambiguous Fab arms
-    (e.g. of bispecific antibodies with two different heavy and light chains, given as chains, or tandem Fabs with
-    two different light chains, given as V domains) and diabodies, and pair V domains not paired by their format
-    (e.g. V domain only chains) as Fv.
+    CL) and light V domains paired as Fv, which can be shared by many heavy chain Fab arms or heavy V domains (common
+    light chain). They resolve ambiguous Fab arms (e.g. of bispecific antibodies with two different heavy and light
+    chains, given as chains, or tandem Fabs with two different light chains, given as V domains) and diabodies, and
+    pair V domains not paired by their format (e.g. V domain only chains) as Fv.
     """
     return _BindingSitePairing(chains, residue_length, pairs).pair()
 

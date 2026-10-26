@@ -323,15 +323,15 @@ chain.domains  # V and constant domains in sequence order (ChainDomain)
 
 `annotate_molecule` (API only, requires numbering created with `return_all_domains=True`) annotates all chains of a molecule (`annotate_chain`, with headers `molecule_id|chain_id`) and pairs their V domains into binding sites:
 
-- `scFv` - adjacent heavy and light V domains of a chain joined by a linker of at least 12 residues,
-- `diabody` - the same with a shorter linker, paired with V domains of another copy of the chain or, if two chains are each other's only candidates, of the other chain,
+- `scFv` - adjacent heavy and light V domains of a chain joined by a linker of at least 12 residues, unless one of them is given in `pairs` (by chain ID and domain index) with other V domains,
+- `diabody` - the same with a shorter linker, paired with V domains of another copy of the chain or, if two chains are each other's only candidates, of the other chain. Two units of one chain pair with each other only if they are given in `pairs` with each other (tandem diabody),
 - `Fab` - V domain followed by CH1 paired with V domain followed by CL, one of them heavy and the other light, so domain crossovers (CrossMab) are paired too. Constant regions of C genes without domain definitions (e.g. IGHM, IGHA) count as CH1 or CL. Fab arms of one chain pair only if joined by a linker of at least 20 residues (single chain Fab), and then only with each other. If there are as many CH1 as CL arms, every CL arm pairs with one CH1 arm (e.g. FIT-Ig), otherwise a light chain can pair with many heavy chains (common light chain),
 - `Fv` - V domains stacked in front of Fab V domains (e.g. outer V domains of DVD-Ig), paired by their position, and V domains paired by pairing hints only (e.g. V domain only chains),
 - `single domain` - other heavy V domains (e.g. VHH), other light V domains and V domains of Fab arms are `unpaired`.
 
 Pass every distinct chain once. V domains with more than one possible partner (e.g. Fab arms of bispecific antibodies with two different heavy and light chains) are `ambiguous`, their possible partners are listed as `candidates`.
 
-`pairs` are pairing hints: pairs of chains (chain ID) or V domains (chain ID and domain index) which pair. V domains given in pairs pair only with V domains they are given with, which resolves ambiguous Fab arms and diabodies. Light chain Fab arms (followed by CL) are the exception, they are not reserved by pairs, as a light chain can be shared by many heavy chains. V domains not paired by their format, e.g. chains of V domains only, are paired by hints as `Fv`.
+`pairs` are pairing hints: pairs of chains (chain ID) or V domains (chain ID and domain index) which pair. V domains given in pairs pair only with V domains they are given with, which resolves ambiguous Fab arms and diabodies. Light chain Fab arms (followed by CL) are the exception, they are not reserved by pairs, as a light chain can be shared by many heavy chains. V domains not paired by their format, e.g. chains of V domains only, are paired by hints as `Fv`, and a light V domain given in pairs with many heavy V domains pairs with each of them. Pairs choose partners of diabody units. Chains given in pairs keep their scFv, a V domain given in pairs (chain ID and domain index) forms a scFv only with a V domain it is given with.
 
 ```python
 pairs = [("HC1", "LC1"), ("HC2", "LC2")]  # bispecific antibody with two different heavy and light chains
