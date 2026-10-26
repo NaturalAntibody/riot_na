@@ -11,6 +11,7 @@ from riot_na.api.molecule_annotation import (
     _one_to_one_partners,
     _VDomain,
     binding_site_rows,
+    molecule_layout_rows,
 )
 from riot_na.api.riot_numbering import (
     RiotNumberingAA,
@@ -230,6 +231,59 @@ DIABODIES = {"A": VH + "GGGGS" + VK2, "B": VH2 + "GGGGS" + VK, "C": VH + "GGGGS"
 def test_pairs(riot_aa: RiotNumberingAA, chains: dict[str, str], pairs: Optional[list], expected: list):
     molecule = riot_aa.annotate_molecule("molecule", chains, pairs=pairs)
     assert binding_sites(molecule) == expected
+
+
+@pytest.mark.parametrize(
+    "chains, pairs, expected",
+    [
+        # common light chain is in binding sites of both heavy chains
+        (
+            {"HC1": VH + IGHG1, "HC2": VH2 + IGHG1, "LC": VK + CK},
+            None,
+            {
+                "HC1:1": (1, "Fab", "LC", 1, False, None),
+                "HC2:1": (2, "Fab", "LC", 1, False, None),
+                "LC:1": ("1;2", "Fab;Fab", "HC1;HC2", "1;1", False, None),
+            },
+        ),
+        # light chains are candidates of ambiguous binding sites of heavy chains
+        (
+            BISPECIFIC,
+            None,
+            {
+                "HC1:1": (1, "Fab", None, None, True, "LC1:1;LC2:1"),
+                "HC2:1": (2, "Fab", None, None, True, "LC1:1;LC2:1"),
+                "LC1:1": ("1;2", "Fab;Fab", None, None, True, "HC1:1;HC2:1"),
+                "LC2:1": ("1;2", "Fab;Fab", None, None, True, "HC1:1;HC2:1"),
+            },
+        ),
+        (
+            {"H": VH, "L1": VK, "L2": VK2},
+            [("H", "L1"), ("H", "L2")],
+            {
+                "H:1": (1, "Fv", None, None, True, "L1:1;L2:1"),
+                "L1:1": (1, "Fv", None, None, True, "H:1"),
+                "L2:1": (1, "Fv", None, None, True, "H:1"),
+            },
+        ),
+    ],
+    ids=["common-light-chain", "bispecific", "ambiguous-Fv"],
+)
+def test_layout_binding_sites(riot_aa: RiotNumberingAA, chains: dict[str, str], pairs: Optional[list], expected: dict):
+    molecule = riot_aa.annotate_molecule("molecule", chains, pairs=pairs)
+    v_domain_rows = {
+        f"{row['chain_id']}:{row['domain_index']}": (
+            row["binding_site_id"],
+            row["binding_site_type"],
+            row["partner_chain_id"],
+            row["partner_domain_index"],
+            row["ambiguous"],
+            row["candidates"],
+        )
+        for row in molecule_layout_rows(molecule)
+        if row["rearrangement_index"] is not None and row["domain"] in ("VH", "VK", "VL")
+    }
+    assert v_domain_rows == expected
 
 
 def test_invalid_pairs(riot_aa: RiotNumberingAA):

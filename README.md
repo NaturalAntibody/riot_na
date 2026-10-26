@@ -358,7 +358,7 @@ write_binding_sites_csv(Path("binding_sites.csv"), [molecule])  # one row per bi
 write_molecules_json(Path("molecules.json"), [molecule])  # all details, including AIRR records and constant domain numbering
 ```
 
-V domains are referred to by chain and domain index (1-based position among all domains of the chain) in the CSV files. AIRR records of the chains have `sequence_header` `molecule_id|chain_id`.
+V domains are referred to by chain and domain index (1-based position among all domains of the chain) in the CSV files. AIRR records of the chains have `sequence_header` `molecule_id|chain_id`. In the layout, V domains of more than one binding site (e.g. a common light chain) have the values of all of them, separated by `;`, and V domains which are only candidates of ambiguous binding sites (e.g. light chains of a bispecific antibody without `pairs`) have these binding sites, with their V domains as `candidates`.
 
 ## Germline database
 RIOT uses OGRDB as a primary source of germline alleles. Database version as of 22.01.2024 was used.

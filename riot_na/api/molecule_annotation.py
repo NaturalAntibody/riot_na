@@ -21,6 +21,7 @@ pair only with V domains they are given with, which resolves ambiguous Fab arms 
 arms (followed by CL) are not reserved by pairs, they can be shared by heavy chain Fab arms (common light chain).
 """
 
+from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import Any, Mapping, Optional, Sequence, Union
 
@@ -517,13 +518,20 @@ def pair_binding_sites(
 
 
 def molecule_layout_rows(molecule: MoleculeAnnotation) -> list[dict[str, Any]]:
-    """Domains of all chains of a molecule, one row per domain, with binding sites of V domains."""
+    """
+    Domains of all chains of a molecule, one row per domain, with binding sites of V domains. V domains of more than
+    one binding site (e.g. common light chains) have values of all of them, separated by ";". V domains which are
+    only candidates of ambiguous binding sites (e.g. light chains of bispecific antibodies without pairing hints) have
+    these binding sites and their V domains as candidates.
+    """
     domain_indices = _domain_indices(molecule)
-    binding_sites: dict[VDomainRef, BindingSite] = {}
+    member_binding_sites: dict[VDomainRef, list[BindingSite]] = defaultdict(list)
+    candidate_binding_sites: dict[VDomainRef, list[BindingSite]] = defaultdict(list)
     for binding_site in molecule.binding_sites:
-        for v_domain in (binding_site.heavy_domain, binding_site.light_domain):
-            if v_domain:
-                binding_sites[v_domain] = binding_site
+        for v_domain in _binding_site_v_domains(binding_site):
+            member_binding_sites[v_domain].append(binding_site)
+        for candidate in binding_site.candidates:
+            candidate_binding_sites[candidate].append(binding_site)
 
     rows = []
     for chain_id, chain in molecule.chains.items():
@@ -558,21 +566,60 @@ def molecule_layout_rows(molecule: MoleculeAnnotation) -> list[dict[str, Any]]:
                 }
 
                 v_domain = VDomainRef(chain_id, domain.rearrangement_index)
-                binding_site = binding_sites[v_domain]
-                partner = (
-                    binding_site.light_domain if v_domain == binding_site.heavy_domain else binding_site.heavy_domain
+                row |= _v_domain_binding_sites(
+                    v_domain, member_binding_sites[v_domain], candidate_binding_sites[v_domain], domain_indices
                 )
-                row |= {
-                    "binding_site_id": binding_site.binding_site_id,
-                    "binding_site_type": binding_site.binding_site_type,
-                    "partner_chain_id": partner.chain_id if partner else None,
-                    "partner_domain_index": domain_indices[partner] if partner else None,
-                    "ambiguous": binding_site.ambiguous,
-                    "candidates": _format_v_domains(binding_site.candidates, domain_indices),
-                }
 
             rows.append({field: row.get(field) for field in LAYOUT_FIELDS})
     return rows
+
+
+def _v_domain_binding_sites(
+    v_domain: VDomainRef,
+    member_binding_sites: Sequence[BindingSite],
+    candidate_binding_sites: Sequence[BindingSite],
+    domain_indices: dict[VDomainRef, int],
+) -> dict[str, Any]:
+    """
+    Layout columns of binding sites of a V domain: binding sites the V domain is in, with their partner V domains
+    and candidates, or else ambiguous binding sites the V domain is a candidate of, with their V domains as candidates.
+    """
+    if member_binding_sites:
+        binding_sites = member_binding_sites
+        partners = [
+            partner
+            for binding_site in binding_sites
+            for partner in _binding_site_v_domains(binding_site)
+            if partner != v_domain
+        ]
+        candidates = [candidate for binding_site in binding_sites for candidate in binding_site.candidates]
+    else:
+        binding_sites = candidate_binding_sites
+        partners = []
+        candidates = [
+            candidate for binding_site in binding_sites for candidate in _binding_site_v_domains(binding_site)
+        ]
+
+    return {
+        "binding_site_id": _join_values([binding_site.binding_site_id for binding_site in binding_sites]),
+        "binding_site_type": _join_values([binding_site.binding_site_type for binding_site in binding_sites]),
+        "partner_chain_id": _join_values([partner.chain_id for partner in partners]),
+        "partner_domain_index": _join_values([domain_indices[partner] for partner in partners]),
+        # binding sites with candidates are ambiguous
+        "ambiguous": any(binding_site.ambiguous for binding_site in binding_sites),
+        "candidates": _format_v_domains(list(dict.fromkeys(candidates)), domain_indices),
+    }
+
+
+def _binding_site_v_domains(binding_site: BindingSite) -> list[VDomainRef]:
+    return [v_domain for v_domain in (binding_site.heavy_domain, binding_site.light_domain) if v_domain]
+
+
+def _join_values(values: Sequence[Any]) -> Any:
+    """The value, values separated by ";" if there are more of them, None if there are none."""
+    if len(values) > 1:
+        return ";".join(str(value) for value in values)
+    return values[0] if values else None
 
 
 def binding_site_rows(molecule: MoleculeAnnotation) -> list[dict[str, Any]]:
