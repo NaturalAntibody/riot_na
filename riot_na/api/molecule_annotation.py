@@ -620,32 +620,25 @@ def _v_domain_binding_sites(
     domain_indices: dict[VDomainRef, int],
 ) -> dict[str, Any]:
     """
-    Layout columns of binding sites of a V domain: binding sites the V domain is in, with their partner V domains
-    and candidates, or else ambiguous binding sites the V domain is a candidate of, with their V domains as candidates.
+    Layout columns of binding sites of a V domain: binding sites the V domain is in, with their partner V domains,
+    or else ambiguous binding sites the V domain is a candidate of. Candidates of the V domain are candidates of its
+    binding sites and V domains of other binding sites it is a candidate of (its possible partners).
     """
-    if member_binding_sites:
-        binding_sites = member_binding_sites
-        partners = [
-            partner
-            for binding_site in binding_sites
-            for partner in _binding_site_v_domains(binding_site)
-            if partner != v_domain
-        ]
-        candidates = [candidate for binding_site in binding_sites for candidate in binding_site.candidates]
-    else:
-        binding_sites = candidate_binding_sites
-        partners = []
-        candidates = [
-            candidate for binding_site in binding_sites for candidate in _binding_site_v_domains(binding_site)
-        ]
+    binding_sites = member_binding_sites or candidate_binding_sites
+    partners = [_partner(binding_site, v_domain) for binding_site in member_binding_sites]
+    candidates = [candidate for binding_site in member_binding_sites for candidate in binding_site.candidates] + [
+        site_v_domain
+        for binding_site in candidate_binding_sites
+        if binding_site not in member_binding_sites
+        for site_v_domain in _binding_site_v_domains(binding_site)
+    ]
 
     return {
         "binding_site_id": _join_values([binding_site.binding_site_id for binding_site in binding_sites]),
         "binding_site_type": _join_values([binding_site.binding_site_type for binding_site in binding_sites]),
-        "partner_chain_id": _join_values([partner.chain_id for partner in partners]),
-        "partner_domain_index": _join_values([domain_indices[partner] for partner in partners]),
-        # binding sites with candidates are ambiguous
-        "ambiguous": any(binding_site.ambiguous for binding_site in binding_sites),
+        "partner_chain_id": _join_values([partner.chain_id if partner else None for partner in partners]),
+        "partner_domain_index": _join_values([domain_indices[partner] if partner else None for partner in partners]),
+        "ambiguous": bool(candidates) or any(binding_site.ambiguous for binding_site in binding_sites),
         "candidates": _format_v_domains(list(dict.fromkeys(candidates)), domain_indices),
     }
 
@@ -654,11 +647,20 @@ def _binding_site_v_domains(binding_site: BindingSite) -> list[VDomainRef]:
     return [v_domain for v_domain in (binding_site.heavy_domain, binding_site.light_domain) if v_domain]
 
 
+def _partner(binding_site: BindingSite, v_domain: VDomainRef) -> Optional[VDomainRef]:
+    return binding_site.light_domain if binding_site.heavy_domain == v_domain else binding_site.heavy_domain
+
+
 def _join_values(values: Sequence[Any]) -> Any:
-    """The value, values separated by ";" if there are more of them, None if there are none."""
-    if len(values) > 1:
-        return ";".join(str(value) for value in values)
-    return values[0] if values else None
+    """
+    The value of a single binding site, values of more binding sites separated by ";" (empty if missing), None if
+    there are no values.
+    """
+    if all(value is None for value in values):
+        return None
+    if len(values) == 1:
+        return values[0]
+    return ";".join("" if value is None else str(value) for value in values)
 
 
 def binding_site_rows(molecule: MoleculeAnnotation) -> list[dict[str, Any]]:

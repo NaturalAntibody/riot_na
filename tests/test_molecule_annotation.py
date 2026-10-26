@@ -312,8 +312,20 @@ def test_pairs(riot_aa: RiotNumberingAA, chains: dict[str, str], pairs: Optional
                 "L2:1": (1, "Fv", None, None, True, "H:1"),
             },
         ),
+        # LC2 pairs with the second Fab arm of HCA and is a candidate of the other heavy chain Fab arms
+        (
+            {"HCA": VH + CH1 + "GGGGS" + VH2 + IGHG1, "HCB": VH + IGHG1, "LC1": VK + CK, "LC2": VK2 + CK},
+            [(("HCA", 3), "LC2")],
+            {
+                "HCA:1": (1, "Fab", None, None, True, "LC1:1;LC2:1"),
+                "HCA:3": (2, "Fab", "LC2", 1, False, None),
+                "HCB:1": (3, "Fab", None, None, True, "LC1:1;LC2:1"),
+                "LC1:1": ("1;3", "Fab;Fab", None, None, True, "HCA:1;HCB:1"),
+                "LC2:1": (2, "Fab", "HCA", 3, True, "HCA:1;HCB:1"),
+            },
+        ),
     ],
-    ids=["common-light-chain", "bispecific", "ambiguous-Fv"],
+    ids=["common-light-chain", "bispecific", "ambiguous-Fv", "paired-candidate"],
 )
 def test_layout_binding_sites(riot_aa: RiotNumberingAA, chains: dict[str, str], pairs: Optional[list], expected: dict):
     molecule = riot_aa.annotate_molecule("molecule", chains, pairs=pairs)
