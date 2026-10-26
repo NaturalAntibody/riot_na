@@ -176,13 +176,17 @@ class ConstantRegionAligner:  # pylint: disable=too-many-instance-attributes
             for domain_alignment in sorted(domain_alignments, key=lambda domain_alignment: domain_alignment.query_start)
         ]
 
+    def aligned_species(self, species: Organism) -> list[Organism]:
+        """
+        Species of C genes aligned to constant domains following V domains of the species: C genes of the species
+        first, so they win ties, then C genes of the default species.
+        """
+        return list(dict.fromkeys([*self.c_gene_species[species], *self.c_gene_species[self.default_species]]))
+
     def _align_interval(self, query: str, interval: QueryInterval) -> Optional[ConstantDomainAlignment]:
         interval_query = query[interval.start : interval.end]
         candidates = []
-        # C genes of the species of the interval are aligned first, so they win ties
-        for species in dict.fromkeys(
-            [*self.c_gene_species[interval.species], *self.c_gene_species[self.default_species]]
-        ):
+        for species in self.aligned_species(interval.species):
             for domain, aligner in self.domain_aligners[species].items():
                 alignment = aligner.align(interval_query)[0].best_alignment
                 if alignment is not None:

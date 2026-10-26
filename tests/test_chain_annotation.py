@@ -185,6 +185,16 @@ def test_constant_region_fragments_follow_v_domains(riot_aa: RiotNumberingAA):
     assert riot_aa.annotate_chain("", VK + "TVAAP" + VL).layout == "VK-CL-VL"
 
 
+def test_constant_domains_are_aligned_to_c_genes_of_v_domain_species_first(riot_aa: RiotNumberingAA):
+    # C genes of the species of the preceding V domain win ties, in the same order in every process
+    assert riot_aa.constant_region_aligner
+    assert riot_aa.constant_region_aligner.aligned_species(Organism.VICUGNA_PACOS) == [
+        Organism.VICUGNA_PACOS,
+        Organism.HOMO_SAPIENS,
+    ]
+    assert riot_aa.constant_region_aligner.aligned_species(Organism.HOMO_SAPIENS) == [Organism.HOMO_SAPIENS]
+
+
 def test_tandem_fabs(riot_aa: RiotNumberingAA):
     query = VH + IGHG1[:98] + LINKER + VH + IGHG1
     chain = riot_aa.annotate_chain("", query)
