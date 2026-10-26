@@ -1,9 +1,14 @@
 from collections.abc import Iterator, Sequence
 from dataclasses import replace
 from itertools import groupby
-from typing import Optional
+from typing import Optional, Protocol
 
 from riot_na.data.model import AlignmentEntry, AlignmentString, Cigar, Locus
+
+
+class QueryAlignment(Protocol):
+    @property
+    def q_end(self) -> int: ...
 
 
 def get_cigar_op_groups(cigar: Cigar) -> Iterator[tuple[int, str]]:
@@ -60,6 +65,15 @@ def infer_reading_frame(t_start: int, t_frame: int) -> int:
 
 def offset_alignments(offset: int, aln: AlignmentEntry) -> AlignmentEntry:
     return replace(aln, q_start=aln.q_start + offset, q_end=aln.q_end + offset)
+
+
+def v_domain_end(v_alignment: QueryAlignment, j_alignment: Optional[QueryAlignment], j_query_start: int = 0) -> int:
+    """
+    End of a V domain in the query of its V alignment: end of its J alignment or, if J was not found, of its V
+    alignment. C region follows it. j_query_start is the start of the query of the J alignment, if J was aligned
+    to the query left after the V alignment.
+    """
+    return j_query_start + j_alignment.q_end if j_alignment else v_alignment.q_end
 
 
 def select_c_alignment(

@@ -6,7 +6,11 @@ from typing import Optional, Sequence
 
 from ssw_aligner import StripedSmithWaterman
 
-from riot_na.alignment.alignment_utils import infer_reading_frame, select_c_alignment
+from riot_na.alignment.alignment_utils import (
+    infer_reading_frame,
+    select_c_alignment,
+    v_domain_end,
+)
 from riot_na.alignment.gene_aligner import (
     GENE_SELECTION_SPECIES_ORDER,
     GeneAlignerAA,
@@ -136,11 +140,13 @@ class VJCAlignerAA:
             j_aligner = self.j_aligners[species][locus]
             j_aa_alignment = j_aligner.align(query_j)[0].best_alignment
 
-            # C follows J or V, if J was not found
-            query_c = query_j
             if j_aa_alignment is not None:
                 result.j = j_aa_alignment
-                query_c = query_j[j_aa_alignment.q_end :]
+
+            # C follows J or V, if J was not found
+            query_c = v_aa_alignment.q_seq[
+                v_domain_end(v_aa_alignment, j_aa_alignment, j_query_start=v_aa_alignment.q_end) :
+            ]
 
             if self.c_aligners and query_c:
                 result.c = select_c_alignment(
@@ -184,9 +190,7 @@ class VJCAlignmentTranslatorAA:
             aligned_sequence = query_sequence[alignment_start:alignment_end]
             aligned_sequence_aa = translate(aligned_sequence, reading_frame)
 
-            aligned_sequence_no_c = query_sequence[
-                alignment_start : alignments.j.q_end if alignments.j else alignments.v.q_end
-            ]
+            aligned_sequence_no_c = query_sequence[alignment_start : v_domain_end(alignments.v, alignments.j)]
             alignes_sequence_no_c_aa = translate(aligned_sequence_no_c, reading_frame)
 
             species = v_alignment.species
@@ -289,7 +293,7 @@ class VJCAlignmentTranslatorAA:
                 extended_j_aa_alignment = None
 
             masked_aa_for_c, c_gene_id, c_gene_aa, c_aa_alignment = self.generate_c_aa_alignment(
-                alignments, aligned_sequence_aa, species, extended_j_aa_alignment, v_aa_alignment.q_end
+                alignments, aligned_sequence_aa, species, v_aa_alignment, extended_j_aa_alignment
             )
 
             if self.c_aligners is not None and c_aa_alignment is not None:
@@ -367,12 +371,12 @@ class VJCAlignmentTranslatorAA:
         alignments: AlignmentsNT,
         aligned_sequence_aa: str,
         species: Organism,
+        v_aa_alignment: InternalAlignmentEntryAA,
         extended_j_aa_alignment: AlignmentEntryAA | None,
-        j_offset: int,
     ) -> tuple[str, str | None, str | None, InternalAlignmentEntryAA | None]:
         if alignments.c:
-            # C follows J or V, if J was not found
-            c_offset = j_offset + extended_j_aa_alignment.q_end if extended_j_aa_alignment else j_offset
+            # C follows J or V, if J was not found, J is aligned to the query left after V alignment
+            c_offset = v_domain_end(v_aa_alignment, extended_j_aa_alignment, j_query_start=v_aa_alignment.q_end)
             masked_aa_for_c = aligned_sequence_aa[c_offset:]
 
             c_gene_id = alignments.c.target_id

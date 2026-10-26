@@ -6,6 +6,7 @@ from riot_na.alignment.alignment_utils import (
     fold_cigar,
     has_frameshift,
     unfold_cigar,
+    v_domain_end,
 )
 from riot_na.alignment.translate import translate
 from riot_na.data.model import (
@@ -390,7 +391,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         if self.v_gene_alignment is None:
             return self.rearrangement
 
-        alignment_end = self.j_gene_alignment.q_end if self.j_gene_alignment else self.v_gene_alignment.q_end
+        alignment_end = v_domain_end(self.v_gene_alignment, self.j_gene_alignment)
         sequence_alignment_segment = self.sequence[self.v_gene_alignment.q_start : alignment_end]
 
         v_germline_segment = self.v_gene_alignment.t_seq[self.v_gene_alignment.t_start : self.v_gene_alignment.t_end]

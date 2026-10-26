@@ -14,6 +14,7 @@ from riot_na.alignment.aa_gene_alignments import (
     create_vjc_aligner_aa,
     create_vjc_alignment_translator_aa,
 )
+from riot_na.alignment.alignment_utils import v_domain_end
 from riot_na.alignment.constant_region_aligner import ConstantRegionAligner
 from riot_na.alignment.gene_aligner import GeneAlignerAA
 from riot_na.alignment.nt_gene_alignments import VDJCAlignerNT, create_vdjc_aligner_nt
@@ -84,11 +85,10 @@ def create_constant_region_aligner(
 def v_domain_span_aa(alignments: AlignmentsAA) -> VDomainSpan:
     assert alignments.v
     segment_start = alignments.segment_start or 0
-    # J is aligned to the query left after V alignment
-    v_domain_end = alignments.v.q_end + (alignments.j.q_end if alignments.j else 0)
     return VDomainSpan(
         segment_start + alignments.v.q_start,
-        segment_start + v_domain_end,
+        # J is aligned to the query left after V alignment
+        segment_start + v_domain_end(alignments.v, alignments.j, j_query_start=alignments.v.q_end),
         alignments.v.species,
         alignments.v.locus,
     )
@@ -97,10 +97,9 @@ def v_domain_span_aa(alignments: AlignmentsAA) -> VDomainSpan:
 def v_domain_span_nt(alignments: AlignmentsNT) -> VDomainSpan:
     assert alignments.v
     segment_start = alignments.segment_start or 0
-    v_domain_end = alignments.j.q_end if alignments.j else alignments.v.q_end
     return VDomainSpan(
         segment_start + alignments.v.q_start,
-        segment_start + v_domain_end,
+        segment_start + v_domain_end(alignments.v, alignments.j),
         alignments.v.species,
         alignments.v.locus,
     )
@@ -117,7 +116,7 @@ def number_c_region(
         return None
 
     # C is aligned to the query left after V and J alignments (or V alignment, if J was not found)
-    c_query_offset = aa_alignments.v.q_end + (aa_alignments.j.q_end if aa_alignments.j else 0)
+    c_query_offset = v_domain_end(aa_alignments.v, aa_alignments.j, j_query_start=aa_alignments.v.q_end)
     return scheme_aligner.number_c_alignment(query, aa_alignments.c, c_scheme, c_query_offset)
 
 
