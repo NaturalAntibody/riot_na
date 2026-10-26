@@ -5,8 +5,12 @@ from typing import Optional
 
 import pytest
 from click.testing import CliRunner
+from ssw_aligner import StripedSmithWaterman
 
-from riot_na import ChainType, CScheme, Organism, Scheme
+from riot_na import ChainType, CScheme, Locus, Organism, Scheme
+from riot_na.alignment.alignment_utils import align_c, select_c_alignment
+from riot_na.alignment.gene_aligner import AA_ALIGNER_PARAMS, ALIGNER_PARAMS
+from riot_na.alignment.skbio_alignment import align, align_aa
 from riot_na.alignment.translate import translate
 from riot_na.api.riot_numbering import (
     RiotNumberingAA,
@@ -326,6 +330,61 @@ def test_c_numbering_of_engineered_chains(
         last_position,
     )
     assert_positional_mapping_consistent(query, airr)
+
+
+C_QUERIES_AA = [
+    secreted_ighg("IGHG1"),
+    C_GERMLINES_AA["IGKC"],
+    C_GERMLINES_AA["IGLC2"],
+    C_GERMLINES_AA["IGHM"],
+    secreted_ighg("IGHG1")[:20],
+    C_GERMLINES_AA["IGKC"][1:20],
+    3 * "GGGGS" + VK,
+    "TTTPAPRPPTPAPTIASQPLSLRPEACRPAAGGAVHTRGLDFACDIYIWAPLAGTCGVLLLSLVITLYC",
+]
+
+
+@pytest.mark.parametrize("query", C_QUERIES_AA)
+def test_c_alignment_score_bounds(query: str):
+    """C genes of other loci than V locus are aligned only if their alignments can score higher, by these bounds."""
+    for c_aligner in get_or_create_riot_aa().vjc_aligner_aa.c_aligners[Organism.HOMO_SAPIENS].values():
+        aligner = StripedSmithWaterman(query, **AA_ALIGNER_PARAMS)
+        max_score = c_aligner.max_alignment_score(query)
+        for gene in c_aligner.gene_lookup.values():
+            alignment = align_aa(aligner, query, gene.name, gene.sequence, db_length=c_aligner.db_length)
+            assert alignment.alignment_score is not None and alignment.alignment_score <= max_score
+
+
+@pytest.mark.parametrize(
+    "query", [NT_GERMLINES["IGHG1"], NT_GERMLINES["IGKC"], NT_GERMLINES["IGLC2"][:60], 5 * NT_LINKER]
+)
+def test_nucleotide_c_alignment_score_bounds(query: str):
+    for c_aligner in get_or_create_riot_nt().vdjc_aligner.c_aligners[Organism.HOMO_SAPIENS].values():
+        aligner = StripedSmithWaterman(query, **ALIGNER_PARAMS)
+        max_score = c_aligner.max_alignment_score(query)
+        for gene in c_aligner.gene_lookup.values():
+            alignment = align(aligner, gene.name, gene.sequence, db_length=c_aligner.db_length, query=query)
+            assert alignment.alignment_score <= max_score
+
+
+@pytest.mark.parametrize("v_locus", list(Locus))
+@pytest.mark.parametrize("query", C_QUERIES_AA)
+def test_c_alignment_of_all_loci(query: str, v_locus: Locus):
+    c_aligners = get_or_create_riot_aa().vjc_aligner_aa.c_aligners[Organism.HOMO_SAPIENS]
+    aligned_loci = []
+
+    def align_query(c_aligner):
+        aligned_loci.append(c_aligner)
+        return c_aligner.align(query)[0].best_alignment
+
+    expected = select_c_alignment(
+        [c_aligner.align(query)[0].best_alignment for c_aligner in c_aligners.values()], v_locus
+    )
+    assert align_c(c_aligners, v_locus, query, align_query) == expected
+
+    # light chain C genes can't score higher than heavy chain C genes on heavy chain constant regions
+    if query == secreted_ighg("IGHG1") and v_locus == Locus.IGH:
+        assert aligned_loci == [c_aligners[Locus.IGH]]
 
 
 def test_c_numbering_multiple_domains_scfv_fc():

@@ -1,10 +1,12 @@
+import math
 import os
-from functools import partial
+from functools import cached_property, partial
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
 from ssw_aligner import StripedSmithWaterman
 
+from riot_na.alignment.alignment_metrics import GumbellParams, compute_bit_score
 from riot_na.alignment.skbio_alignment import (
     align_aa,  # type: ignore  # pylint: disable=import-error
 )
@@ -131,6 +133,17 @@ class GeneAligner:
         alignments = self._align_sequences(query, prefiltering_result)
         return [AlignmentSegment(alignments)]
 
+    def max_alignment_score(self, query: str) -> float:
+        """
+        Upper bound of alignment scores (bit scores) of the query to the genes: aligned nucleotides score at most
+        match_score, mismatches and gaps lower the score.
+        """
+        return compute_bit_score(ALIGNER_PARAMS["match_score"] * min(len(query), self._max_gene_length))
+
+    @cached_property
+    def _max_gene_length(self) -> int:
+        return max((len(gene.sequence) for gene in self.gene_lookup.values()), default=0)
+
 
 AA_ALIGNER_PARAMS = {
     "gap_open_penalty": 11,
@@ -138,6 +151,20 @@ AA_ALIGNER_PARAMS = {
     "protein": True,
     "substitution_matrix": BLOSUM_62,
 }
+
+# best substitution score of every residue, residues missing in the matrix get the best score of the matrix
+_MAX_SUBSTITUTION_SCORES_AA = {
+    residue: max(0, math.ceil(max(scores.values()))) for residue, scores in BLOSUM_62.items()
+}
+_MAX_SUBSTITUTION_SCORE_AA = max(_MAX_SUBSTITUTION_SCORES_AA.values())
+
+
+def max_raw_alignment_score_aa(sequence: str) -> int:
+    """
+    Upper bound of raw scores of local alignments of the sequence (to any sequence): aligned residues score at most
+    their best substitution score, gaps lower the score.
+    """
+    return sum(_MAX_SUBSTITUTION_SCORES_AA.get(residue, _MAX_SUBSTITUTION_SCORE_AA) for residue in sequence)
 
 
 class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
@@ -256,6 +283,16 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
         prefiltering_result = self._prefilter(query)
         alignments = self._align_sequences(query, prefiltering_result)
         return [AlignmentSegment(alignments)]
+
+    def max_alignment_score(self, query: str) -> float:
+        """Upper bound of alignment scores (bit scores) of the query to the genes (see max_raw_alignment_score_aa)."""
+        return compute_bit_score(
+            min(self._max_gene_raw_score, max_raw_alignment_score_aa(query)), gumbell_params=GumbellParams.AA
+        )
+
+    @cached_property
+    def _max_gene_raw_score(self) -> int:
+        return max((max_raw_alignment_score_aa(gene.sequence) for gene in self.gene_lookup.values()), default=0)
 
     def align_to_genes(self, query: str, gene_ids: Sequence[str]) -> Sequence[AlignmentEntryAA]:
         """
