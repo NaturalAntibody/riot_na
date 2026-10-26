@@ -427,7 +427,7 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 # filter out matches of non antibody regions following V region, e.g. proline rich CAR hinges
                 # to IgG and IgA hinges. Short C regions (e.g. CH1 fragments in Fabs) start at the C germline start.
                 "min_seq_identity": float(os.environ.get("MIN_SEQ_IDENTITY_C_AA", 0.4)),
-                "min_internal_alignment_length": int(os.environ.get("MIN_INTERNAL_ALIGNMENT_LENGTH_C_AA", 30)),
+                "min_internal_alignment_length": int(os.environ.get("MIN_INTERNAL_ALIGNMENT_LENGTH_C_AA", 50)),
                 # the first C residue is encoded by the J-C junction codon (its first nucleotide comes from J), so it is
                 # missing or different when J ends differently, e.g. absorbed by J alignment or mutated. C fragments
                 # without it start right after J (or at the start of the query of the constant region aligner)
