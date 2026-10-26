@@ -427,6 +427,13 @@ def test_c_fragments_without_junction_residue(riot_aa: RiotNumberingAA, query: s
     assert (airr.c_call, airr.c_germline_start_aa) == (c_gene, 2)
 
 
+def test_c_fragments_without_junction_residue_follow_j(riot_aa: RiotNumberingAA):
+    # the Whitlow linker ends with STKG, as CH1 without its first residue (A118), it doesn't follow J
+    airr = riot_aa.run_on_sequence("", VH + "GSTSGSGKPGSGEGSTKG" + VK)
+
+    assert airr.c_call is None
+
+
 @pytest.mark.parametrize("v_domain", [VH, VK], ids=["VH", "VK"])
 def test_non_antibody_regions_are_not_c_regions(riot_aa: RiotNumberingAA, v_domain: str):
     # CAR: CD8a hinge and transmembrane, CD28 and CD3z signalling domains
