@@ -13,16 +13,19 @@ from riot_na.api.riot_numbering import (
     v_domain_span_aa,
     v_domain_span_nt,
 )
+from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import ConstantDomain
 from riot_na.data.scheme_mapping_facade import CSchemeMappingFacade
 from riot_na.schemes.constant_domains import GermlineDomain, get_germline_domains
 from tests.test_c_numbering import (
     C_GERMLINES_AA,
+    NT_GERMLINES,
     NT_LINKER,
     VH,
     VK,
     VL,
     nt_rearrangement,
+    read_germlines,
     secreted_ighg,
 )
 
@@ -276,6 +279,32 @@ def test_v_domains_without_j_end_with_fr4(riot_aa: RiotNumberingAA, riot_nt: Rio
     assert v_domain_span_nt(nt_alignments).end == len(heavy_chain)
     nt_alignments.j = None
     assert v_domain_span_nt(nt_alignments).end == len(heavy_chain)
+
+
+def test_nucleotide_v_domains_end_with_germline_fr4(riot_nt: RiotNumberingNT):
+    # alpaca ighJ-6 germline continues after FR4 (SS-GESS), the hinge following the VHH is not a part of it
+    alpaca_v = read_germlines(GENE_DB_DIR / "gene_db" / "v_genes" / "alpaca.fasta")["VH3-S36"]
+    alpaca_j = read_germlines(GENE_DB_DIR / "gene_db" / "j_genes" / "alpaca" / "igh.fasta")["ighJ-6"]
+    vhh = (
+        alpaca_v[: len(alpaca_v) // 3 * 3]
+        + "GCAGCAGGTCGTTATGGTAGCAGCTGGTATCCAGAT"
+        + alpaca_j[2 : alpaca_j.index("GGTGAGTCCTCA")]
+    )
+    hinge_fc = NT_GERMLINES["IGHG1"][NT_GERMLINES["IGHG1"].index("GAGCCCAAATCT") :]
+
+    chain = riot_nt.annotate_chain("", vhh + hinge_fc)
+    assert (chain.domains[0].domain, chain.domains[0].sequence_end) == ("VH", len(vhh))
+    assert chain.domains[1].domain == "H"
+
+
+def test_nucleotide_constant_region_fragments_follow_v_domains_in_frame(riot_nt: RiotNumberingNT):
+    # the linker encodes the start of IGKC (RTVAAPSVFIFPPS) out of the reading frame of the V domains
+    vh = nt_rearrangement("IGHV3-23*01", "GGCTAC", "IGHJ4*02", 2)
+    vk = nt_rearrangement("IGKV1-27*01", "CAGCAGAGTTACAGTACCCCT", "IGKJ1*01", 1)
+    linker = "G" + "CGTACCGTGGCCGCACCGTCTGTTTTCATTTTTCCACCTAGC" + "GG"
+    assert translate(linker, 1) == "RTVAAPSVFIFPPS"
+
+    assert riot_nt.annotate_chain("", vh + linker + vk).layout == "VH-[45]-VK"
 
 
 def test_nucleotide_v_domains_end_with_fr4_residues(riot_nt: RiotNumberingNT):

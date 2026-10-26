@@ -113,7 +113,9 @@ def v_domain_span_nt(alignments: AlignmentsNT) -> VDomainSpan:
     else:
         fr4_end = fr4_end_by_j_motif(translate(v.q_seq, frame), (v.q_end - frame) // 3, v.locus)
         end = frame + 3 * fr4_end if fr4_end is not None else v.q_end
-    return VDomainSpan(segment_start + v.q_start, segment_start + end, v.species, v.locus)
+    return VDomainSpan(
+        segment_start + v.q_start, segment_start + end, v.species, v.locus, frame=(segment_start + frame) % 3
+    )
 
 
 def number_c_region(

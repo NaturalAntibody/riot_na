@@ -69,11 +69,13 @@ def j_end_nt(sequence: str, j_alignment: AlignmentEntryNT, frame: int) -> int:
 
     translation = translate(sequence, frame)
     germline_translation = translate(j_alignment.t_seq, j_alignment.reading_frame)
+    # J germlines can have residues after FR4 (e.g. alpaca ighJ-6), V domains end with FR4
+    germline_end = fr4_end_by_j_motif(germline_translation, 0, j_alignment.locus) or len(germline_translation)
     # codons of the first nucleotides after the alignment, partially aligned codons are scored as residues too
     residue = (j_alignment.q_end - frame) // 3
     germline_residue = (j_alignment.t_end - j_alignment.reading_frame) // 3
     end_residue, score, best_score = residue, 0.0, 0.0
-    while residue < len(translation) and germline_residue < len(germline_translation):
+    while residue < len(translation) and germline_residue < germline_end:
         score += BLOSUM_62.get(translation[residue], {}).get(germline_translation[germline_residue], MIN_RESIDUE_SCORE)
         residue += 1
         germline_residue += 1
@@ -90,6 +92,8 @@ class VDomainSpan:
     end: int
     species: Organism
     locus: Locus
+    # reading frame of nucleotide chains, None for amino acid chains
+    frame: Optional[int] = None
 
 
 @dataclass(frozen=True)
@@ -124,14 +128,18 @@ def constant_region_intervals(
     C genes of the default species if no V domain precedes them.
     """
     intervals = []
-    start, species, locus = 0, default_species, None
+    start, species, locus, frame = 0, default_species, None, None
     for v_domain in v_domains:
         if v_domain.start > start:
-            intervals.append(QueryInterval(start, v_domain.start, species, locus, follows_v_domain=locus is not None))
-        start, species, locus = max(start, v_domain.end), v_domain.species, v_domain.locus
+            intervals.append(
+                QueryInterval(start, v_domain.start, species, locus, follows_v_domain=locus is not None, frame=frame)
+            )
+        start, species, locus, frame = max(start, v_domain.end), v_domain.species, v_domain.locus, v_domain.frame
 
     if sequence_length > start:
-        intervals.append(QueryInterval(start, sequence_length, species, locus, follows_v_domain=locus is not None))
+        intervals.append(
+            QueryInterval(start, sequence_length, species, locus, follows_v_domain=locus is not None, frame=frame)
+        )
     return intervals
 
 
@@ -184,7 +192,13 @@ def align_constant_domains_nt(
         # residues encoded entirely within the intervals
         frame_intervals = split_at_stop_codons(
             [
-                replace(interval, start=-(-(interval.start - frame) // 3), end=(interval.end - frame) // 3)
+                replace(
+                    interval,
+                    start=-(-(interval.start - frame) // 3),
+                    end=(interval.end - frame) // 3,
+                    # constant region fragments follow V domains in their reading frame
+                    follows_v_domain=interval.follows_v_domain and interval.frame in (None, frame),
+                )
                 for interval in intervals
             ],
             translation,

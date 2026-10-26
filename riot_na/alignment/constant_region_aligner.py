@@ -62,6 +62,8 @@ class QueryInterval:
     locus: Optional[Locus] = None
     # the interval starts at the end of a V domain, so it can start with a constant region fragment
     follows_v_domain: bool = False
+    # reading frame of the preceding V domain of nucleotide chains, None for amino acid chains
+    frame: Optional[int] = None
 
 
 @dataclass(frozen=True)
