@@ -315,6 +315,20 @@ domains: list[SegmentedAirrRearrangementEntryAA] = riot_aa.run_on_sequence(
 [(domain.segment_start, domain.segment_end, domain.v_call) for domain in domains]
 ```
 
+### Migrating from 5.x
+
+Single domain and multidomain numbering are separate since 6.0, `return_all_domains` is removed:
+
+| 5.x                                                                                  | 6.x                                                                    |
+|--------------------------------------------------------------------------------------|------------------------------------------------------------------------|
+| `create_riot_aa(return_all_domains=True)` + `run_on_sequence(..., return_all_domains=True)` | `create_multidomain_riot_aa()` + `run_on_sequence(...)`           |
+| `create_riot_nt(return_all_domains=True)` + `run_on_sequence(..., return_all_domains=True)` | `create_multidomain_riot_nt()` + `run_on_sequence(...)`           |
+| `get_or_create_riot_aa(return_all_domains=True)` / `get_or_create_riot_nt(return_all_domains=True)` | `get_or_create_multidomain_riot_aa()` / `get_or_create_multidomain_riot_nt()` |
+| `create_riot_aa(return_all_domains=True)` + `run_on_sequence(...)` (best domain only)  | `max(create_multidomain_riot_aa().run_on_sequence(...))` (highest V score) |
+| `create_vjc_aligner_aa(use_segment_aligner=True)` / `create_vdjc_aligner_nt(use_segment_aligner=True)` | `create_segment_vjc_aligner_aa()` / `create_segment_vdjc_aligner_nt()` |
+
+`run_on_sequence` arguments after `extend_alignment` (`v_gene`, `j_gene`, `c_scheme`) are keyword-only.
+
 ## Germline database
 RIOT uses OGRDB as a primary source of germline alleles. Database version as of 22.01.2024 was used.
 C genes are imported from igblast FTP site fhttps://ftp.ncbi.nih.gov/blast/executables/igblast/release/database/ncbi_human_c_genes.tar
