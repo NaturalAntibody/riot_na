@@ -24,6 +24,7 @@ import itertools
 import multiprocessing as mp
 import pickle
 import sys
+from collections import Counter
 from pathlib import Path
 from typing import Any, Iterator, Optional, Sequence
 
@@ -231,6 +232,104 @@ def compare_cmd(ncpu: Optional[int], single: bool, multidomain: bool) -> None:
         ok &= _report("Multidomain", compare_molecules(headers, baseline["multidomain"], actual_domains))
     if not ok:
         sys.exit(1)
+
+
+MODE_COMPARISON_FIELDS = (
+    "locus",
+    "v_call",
+    "j_call",
+    "c_call",
+    "fwr1_aa",
+    "cdr1_aa",
+    "fwr2_aa",
+    "cdr2_aa",
+    "fwr3_aa",
+    "cdr3_aa",
+    "fwr4_aa",
+    "scheme_residue_mapping",
+    "c_scheme_residue_mapping",
+)
+
+
+def _short(value: Any, max_length: int = 60) -> str:
+    text = repr(value)
+    return text if len(text) <= max_length else text[: max_length - 3] + "..."
+
+
+def _matching_domain(
+    single_domain: AirrRearrangementEntryAA, domains: MoleculeDomains
+) -> Optional[SegmentedAirrRearrangementEntryAA]:
+    """Domain of the same V gene as the single domain result, or the best scoring domain."""
+    domains_with_v = [domain for domain in domains if domain.v_call]
+    same_v = [domain for domain in domains_with_v if domain.v_call == single_domain.v_call]
+    return max(same_v or domains_with_v, default=None)
+
+
+def compare_modes(
+    headers: Sequence[str],
+    single_domain: Sequence[AirrRearrangementEntryAA],
+    multidomain: Sequence[MoleculeDomains],
+    *,
+    max_examples: int = 10,
+) -> list[str]:
+    """
+    Compare single domain results with the matching domain of multidomain results (domain-independent fields:
+    gene calls, regions and numbering). Returns a human-readable summary.
+    """
+    outcomes: Counter[str] = Counter()
+    field_differences: Counter[str] = Counter()
+    examples: list[str] = []
+
+    for header, single, domains in zip(headers, single_domain, multidomain):
+        domain_count = "1 domain" if len(domains) == 1 else "2+ domains"
+        domain = _matching_domain(single, domains)
+        if not single.v_call or domain is None:
+            outcome = {
+                (False, True): "no V in both modes",
+                (True, True): "V in single domain mode only",
+                (False, False): "V in multidomain mode only",
+            }[(bool(single.v_call), domain is None)]
+            outcomes[outcome] += 1
+            continue
+
+        differing = [name for name in MODE_COMPARISON_FIELDS if getattr(single, name) != getattr(domain, name)]
+        outcomes[f"{domain_count}: {'same' if not differing else 'different'}"] += 1
+        field_differences.update(differing)
+        if differing and len(examples) < max_examples:
+            examples.append(
+                f"{header!r} ({domain_count}): "
+                + "; ".join(
+                    f"{name}: {_short(getattr(single, name))} vs {_short(getattr(domain, name))}"
+                    for name in differing[:3]
+                )
+            )
+
+    return [
+        f"{len(headers)} molecules",
+        *(f"  {outcome}: {count}" for outcome, count in sorted(outcomes.items())),
+        "differing fields (single domain vs matching domain):",
+        *(f"  {name}: {count}" for name, count in field_differences.most_common()),
+        "examples:",
+        *(f"  {example}" for example in examples),
+    ]
+
+
+@cli.command("compare-modes")
+@click.option("--ncpu", type=int, default=None, show_default="physical cores", help="Worker processes.")
+@click.option("--baseline/--no-baseline", default=False, show_default=True, help="Use results stored in baseline.")
+def compare_modes_cmd(ncpu: Optional[int], baseline: bool) -> None:
+    """Compare single domain and multidomain results of the same molecules."""
+    if baseline:
+        payload = load_baseline(BASELINE)
+        headers, single_domain, multidomain = payload["headers"], payload["single_domain"], payload["multidomain"]
+    else:
+        molecules = read_therapeutics()
+        headers = [header for header, _ in molecules]
+        single_domain = number_single_domain(molecules, n_processes=ncpu)
+        multidomain = number_multidomain(molecules, n_processes=ncpu)
+
+    for line in compare_modes(headers, single_domain, multidomain):
+        click.echo(line)
 
 
 if __name__ == "__main__":
