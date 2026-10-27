@@ -11,10 +11,21 @@ Binary format: a single pickle blob with metadata + entries of both modes.
 Generate baseline::
 
     poetry run python -m tests.regression.multidomain_baseline generate --ncpu 8
+    poetry run python -m tests.regression.multidomain_baseline generate --suffix ssw  # -> baseline_airr_therapeutics_aa_ssw.pkl
 
 Compare against baseline after changing the code::
 
     poetry run python -m tests.regression.multidomain_baseline compare --ncpu 8
+    poetry run python -m tests.regression.multidomain_baseline compare --suffix ssw
+
+Compare two stored baselines by suffix, without re-numbering ('' = unsuffixed file)::
+
+    poetry run python -m tests.regression.multidomain_baseline diff ssw parasail
+    poetry run python -m tests.regression.multidomain_baseline diff '' parasail --no-single
+
+When mismatches are found, ``compare`` and ``diff`` write results to JSONL (default
+``multidomain_regression_result.jsonl`` next to the baseline, override with ``--output-path``): one record
+per differing domain (with ``diffs``). Mismatch counts are printed to stdout.
 """
 
 from __future__ import annotations
@@ -23,10 +34,9 @@ import csv
 import itertools
 import multiprocessing as mp
 import pickle
-import sys
 from collections import Counter
 from pathlib import Path
-from typing import Any, Iterator, Optional, Sequence
+from typing import Any, Optional, Sequence
 
 import click
 from psutil import cpu_count
@@ -43,11 +53,19 @@ from riot_na.data.model import (
     Scheme,
     SegmentedAirrRearrangementEntryAA,
 )
-from tests.regression.ngs_baseline import _diff_entry
+from tests.regression.ngs_baseline import (
+    _diff_entry,
+    _finish,
+    _output_path_option,
+    _query_sequence,
+    _report,
+    _with_suffix,
+)
 
 DATA_DIR = Path(__file__).resolve().parents[2] / "data"
 THERAPEUTICS_CSV = DATA_DIR / "therapeutics.csv"
 BASELINE = DATA_DIR / "baseline_airr_therapeutics_aa.pkl"
+RESULT_JSONL = DATA_DIR / "multidomain_regression_result.jsonl"
 
 BASELINE_FORMAT_VERSION = 2
 SCHEME = Scheme.IMGT
@@ -150,45 +168,65 @@ def load_baseline(path: Path) -> dict[str, Any]:
     return payload
 
 
-def _molecule_problems(header: str, expected: Sequence[Any], actual: Sequence[Any]) -> Iterator[str]:
-    if len(expected) != len(actual):
-        yield f"{header!r}: domain count mismatch: baseline={len(expected)} actual={len(actual)}"
-        return
-    for idx, (exp, act) in enumerate(zip(expected, actual)):
-        if exp == act:
-            continue
-        field_diffs = _diff_entry(exp, act) if type(exp) is type(act) else [f"type {type(exp)} vs {type(act)}"]
-        yield f"{header!r} domain {idx}: " + "; ".join(field_diffs[:10])
-
-
 def compare_molecules(
     headers: Sequence[str],
     expected: Sequence[Sequence[Any]],
     actual: Sequence[Sequence[Any]],
-    *,
-    max_report: int = 20,
-) -> list[str]:
-    """Compare domains of every molecule, return human-readable mismatch descriptions (empty if identical)."""
-    problems = list(
-        itertools.chain.from_iterable(
-            _molecule_problems(header, exp, act) for header, exp, act in zip(headers, expected, actual)
-        )
-    )
-    if len(expected) != len(actual):
-        problems.insert(0, f"molecule count mismatch: baseline={len(expected)} actual={len(actual)}")
-    if len(problems) > max_report:
-        problems = problems[:max_report] + [f"... {len(problems) - max_report} more mismatches"]
-    return problems
+) -> dict[str, Any]:
+    """Compare domains of every molecule, return a result in the format of ngs_baseline.compare_entries."""
+    mismatches: list[dict[str, Any]] = []
+    for idx, (header, exp_domains, act_domains) in enumerate(zip(headers, expected, actual)):
+        if len(exp_domains) != len(act_domains):
+            diffs = {"__domain_count__": {"expected": len(exp_domains), "actual": len(act_domains)}}
+            mismatches.append(
+                {
+                    "index": idx,
+                    "sequence_header": header,
+                    "query_sequence": _query_sequence(*exp_domains, *act_domains),
+                    "diffs": diffs,
+                }
+            )
+            continue
+        for domain_idx, (exp, act) in enumerate(zip(exp_domains, act_domains)):
+            if exp != act:
+                mismatches.append(
+                    {
+                        "index": idx,
+                        "sequence_header": header,
+                        "query_sequence": _query_sequence(exp, act),
+                        "domain": domain_idx,
+                        "diffs": _diff_entry(exp, act),
+                    }
+                )
+
+    return {
+        "ok": not mismatches and len(expected) == len(actual),
+        "n_expected": len(expected),
+        "n_actual": len(actual),
+        "n_mismatched_entries": len(mismatches),
+        "mismatches": mismatches,
+    }
 
 
-def _report(mode: str, problems: list[str]) -> bool:
-    if problems:
-        click.echo(f"{mode} mismatches:", err=True)
-        for problem in problems:
-            click.echo(f"  {problem}", err=True)
-        return False
-    click.echo(f"{mode} OK")
-    return True
+def _mode_results(
+    headers: Sequence[str],
+    expected: dict[str, Any],
+    actual: dict[str, Any],
+) -> list[dict[str, Any]]:
+    """Compare every mode present in ``actual`` (single_domain / multidomain payload keys) and report it."""
+    results = []
+    for key, label in (("single_domain", "Single domain"), ("multidomain", "Multidomain")):
+        if key not in actual:
+            continue
+        if key == "single_domain":
+            result = compare_molecules(headers, [[e] for e in expected[key]], [[a] for a in actual[key]])
+            for mismatch in result["mismatches"]:
+                mismatch.pop("domain", None)  # always 0 in single domain mode
+        else:
+            result = compare_molecules(headers, expected[key], actual[key])
+        results.append({"dataset": label, **result})
+        _report(label, result)
+    return results
 
 
 @click.group()
@@ -199,13 +237,20 @@ def cli() -> None:
 @cli.command("generate")
 @click.option("--limit", type=int, default=None, show_default="all", help="Only process the first N molecules.")
 @click.option("--ncpu", type=int, default=None, show_default="physical cores", help="Worker processes.")
-def generate_cmd(limit: Optional[int], ncpu: Optional[int]) -> None:
+@click.option(
+    "--suffix",
+    type=str,
+    default=None,
+    help="Append '_<suffix>' to baseline file name, e.g. baseline_airr_therapeutics_aa_<suffix>.pkl.",
+)
+def generate_cmd(limit: Optional[int], ncpu: Optional[int], suffix: str = "") -> None:
     """Generate single domain and multidomain AA baselines."""
+    baseline_path = _with_suffix(BASELINE, suffix)
     molecules = read_therapeutics(limit=limit)
     single_domain = number_single_domain(molecules, n_processes=ncpu)
     multidomain = number_multidomain(molecules, n_processes=ncpu)
-    click.echo(f"Writing therapeutics baseline -> {BASELINE}")
-    save_baseline(BASELINE, molecules, single_domain, multidomain)
+    click.echo(f"Writing therapeutics baseline -> {baseline_path}")
+    save_baseline(baseline_path, molecules, single_domain, multidomain)
     click.echo(f"Done: {len(molecules)} molecules, {sum(map(len, multidomain))} multidomain domains.")
 
 
@@ -213,25 +258,54 @@ def generate_cmd(limit: Optional[int], ncpu: Optional[int]) -> None:
 @click.option("--ncpu", type=int, default=None, show_default="physical cores", help="Worker processes.")
 @click.option("--single/--no-single", default=True, show_default=True, help="Compare single domain mode.")
 @click.option("--multidomain/--no-multidomain", default=True, show_default=True, help="Compare multidomain mode.")
-def compare_cmd(ncpu: Optional[int], single: bool, multidomain: bool) -> None:
+@click.option(
+    "--suffix",
+    type=str,
+    default=None,
+    help="Compare against baseline generated with the same '--suffix'.",
+)
+@_output_path_option(RESULT_JSONL)
+def compare_cmd(ncpu: Optional[int], single: bool, multidomain: bool, output_path: Path, suffix: str = "") -> None:
     """Re-run numbering and compare against pickled baseline."""
-    baseline = load_baseline(BASELINE)
+    baseline_path = _with_suffix(BASELINE, suffix)
+    baseline = load_baseline(baseline_path)
     headers = baseline["headers"]
     molecules = read_therapeutics(limit=len(headers))
     if [header for header, _ in molecules] != headers:
         raise ValueError(f"{THERAPEUTICS_CSV} molecules differ from the baseline")
 
-    click.echo(f"Comparing therapeutics: {THERAPEUTICS_CSV} vs {BASELINE}")
-    ok = True
+    click.echo(f"Comparing therapeutics: {THERAPEUTICS_CSV} vs {baseline_path}")
+    actual: dict[str, Any] = {}
     if single:
-        actual = number_single_domain(molecules, n_processes=ncpu)
-        expected = baseline["single_domain"]
-        ok &= _report("Single domain", compare_molecules(headers, [[e] for e in expected], [[a] for a in actual]))
+        actual["single_domain"] = number_single_domain(molecules, n_processes=ncpu)
     if multidomain:
-        actual_domains = number_multidomain(molecules, n_processes=ncpu)
-        ok &= _report("Multidomain", compare_molecules(headers, baseline["multidomain"], actual_domains))
-    if not ok:
-        sys.exit(1)
+        actual["multidomain"] = number_multidomain(molecules, n_processes=ncpu)
+    _finish(_mode_results(headers, baseline, actual), output_path)
+
+
+@cli.command("diff")
+@click.argument("suffix_a")
+@click.argument("suffix_b")
+@click.option("--single/--no-single", default=True, show_default=True, help="Diff single domain mode.")
+@click.option("--multidomain/--no-multidomain", default=True, show_default=True, help="Diff multidomain mode.")
+@_output_path_option(RESULT_JSONL)
+def diff_cmd(suffix_a: str, suffix_b: str, single: bool, multidomain: bool, output_path: Path) -> None:
+    """Compare two stored baselines identified by SUFFIX_A and SUFFIX_B ('' = unsuffixed).
+
+    SUFFIX_A is reported as "expected", SUFFIX_B as "actual".
+    """
+    path_a = _with_suffix(BASELINE, suffix_a)
+    path_b = _with_suffix(BASELINE, suffix_b)
+    payload_a = load_baseline(path_a)
+    payload_b = load_baseline(path_b)
+    for key in ("scheme", "c_scheme", "headers"):
+        if payload_a[key] != payload_b[key]:
+            raise ValueError(f"{key} differs between {path_a.name} and {path_b.name}")
+
+    click.echo(f"Diffing therapeutics: {path_a} vs {path_b}")
+    modes = [key for key, enabled in (("single_domain", single), ("multidomain", multidomain)) if enabled]
+    actual = {key: payload_b[key] for key in modes}
+    _finish(_mode_results(payload_a["headers"], payload_a, actual), output_path)
 
 
 MODE_COMPARISON_FIELDS = (
@@ -317,10 +391,11 @@ def compare_modes(
 @cli.command("compare-modes")
 @click.option("--ncpu", type=int, default=None, show_default="physical cores", help="Worker processes.")
 @click.option("--baseline/--no-baseline", default=False, show_default=True, help="Use results stored in baseline.")
-def compare_modes_cmd(ncpu: Optional[int], baseline: bool) -> None:
+@click.option("--suffix", type=str, default=None, help="With --baseline, use baseline generated with this '--suffix'.")
+def compare_modes_cmd(ncpu: Optional[int], baseline: bool, suffix: str = "") -> None:
     """Compare single domain and multidomain results of the same molecules."""
     if baseline:
-        payload = load_baseline(BASELINE)
+        payload = load_baseline(_with_suffix(BASELINE, suffix))
         headers, single_domain, multidomain = payload["headers"], payload["single_domain"], payload["multidomain"]
     else:
         molecules = read_therapeutics()
