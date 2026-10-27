@@ -33,7 +33,6 @@ from __future__ import annotations
 import csv
 import itertools
 import multiprocessing as mp
-import sys
 from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
@@ -55,10 +54,7 @@ from riot_na.data.model import (
     SegmentedAirrRearrangementEntryAA,
 )
 
-if __package__ in (None, ""):  # run as a script: make the repo root importable
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from tests.regression.common import (  # noqa: E402  # pylint: disable=wrong-import-position
+from .common import (
     diff_entry,
     finish,
     load_pickle,
