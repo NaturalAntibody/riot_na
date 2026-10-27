@@ -18,13 +18,14 @@ import itertools
 import multiprocessing as mp
 import pickle
 import sys
+from collections.abc import Sequence
 from dataclasses import fields
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Any
 
 import click
+import tqdm
 from psutil import cpu_count
-from tqdm import tqdm
 
 from riot_na.api.api_mp import _worker_call, _worker_initializer
 from riot_na.common.fasta import parse_fasta
@@ -37,7 +38,7 @@ from riot_na.data.model import (
     Scheme,
 )
 
-NGS_DIR = Path(__file__).resolve().parents[2] / "data" / "ngs"
+NGS_DIR = Path(__file__).resolve().parents[2] / "data" / "ngs_regression_data"
 FASTA_NT = NGS_DIR / "ngs_sample_clean_nt.fasta"
 FASTA_AA = NGS_DIR / "ngs_sample_clean_aa.fasta"
 BASELINE_NT = NGS_DIR / "baseline_airr_nt.pkl"
@@ -52,8 +53,8 @@ def number_fasta(
     input_type: InputType,
     *,
     scheme: Scheme = SCHEME,
-    limit: Optional[int] = None,
-    n_processes: Optional[int] = None,
+    limit: int | None = None,
+    n_processes: int | None = None,
     db_dir: Path = GENE_DB_DIR,
 ) -> list[AirrRearrangementEntryNT] | list[AirrRearrangementEntryAA]:
     """Run riot NT/AA numbering over a FASTA file and return AIRR entries."""
@@ -71,7 +72,7 @@ def number_fasta(
         initargs=(None, scheme, db_dir, input_type, False, False),
     ) as pool:
         results = list(
-            tqdm(
+            tqdm.tqdm(
                 pool.imap(_worker_call, records, chunksize=32),
                 total=total,
                 desc=f"numbering {fasta_path.name}",
@@ -158,8 +159,8 @@ def generate_baseline_nt(
     *,
     fasta_path: Path = FASTA_NT,
     baseline_path: Path = BASELINE_NT,
-    limit: Optional[int] = None,
-    n_processes: Optional[int] = None,
+    limit: int | None = None,
+    n_processes: int | None = None,
 ) -> Path:
     entries = number_fasta(fasta_path, InputType.NT, limit=limit, n_processes=n_processes)
     save_baseline(baseline_path, entries, fasta_path=fasta_path, input_type=InputType.NT)
@@ -170,8 +171,8 @@ def generate_baseline_aa(
     *,
     fasta_path: Path = FASTA_AA,
     baseline_path: Path = BASELINE_AA,
-    limit: Optional[int] = None,
-    n_processes: Optional[int] = None,
+    limit: int | None = None,
+    n_processes: int | None = None,
 ) -> Path:
     entries = number_fasta(fasta_path, InputType.AA, limit=limit, n_processes=n_processes)
     save_baseline(baseline_path, entries, fasta_path=fasta_path, input_type=InputType.AA)
@@ -183,7 +184,7 @@ def compare_to_baseline(
     baseline_path: Path,
     input_type: InputType,
     *,
-    n_processes: Optional[int] = None,
+    n_processes: int | None = None,
 ) -> list[str]:
     """Re-number FASTA and return mismatch descriptions vs baseline (empty if OK)."""
     if not fasta_path.exists():
@@ -227,7 +228,7 @@ def cli() -> None:
 
 @cli.command("generate")
 @_common_options
-def generate_cmd(limit: Optional[int], ncpu: Optional[int]) -> None:
+def generate_cmd(limit: int | None, ncpu: int | None) -> None:
     """Generate NT and AA baselines."""
     click.echo(f"Writing NT baseline -> {BASELINE_NT}")
     generate_baseline_nt(limit=limit, n_processes=ncpu)
@@ -238,9 +239,14 @@ def generate_cmd(limit: Optional[int], ncpu: Optional[int]) -> None:
 
 @cli.command("generate-nt")
 @_common_options
-@click.option("--fasta", type=click.Path(path_type=Path, exists=True), default=FASTA_NT, show_default=True)
+@click.option(
+    "--fasta",
+    type=click.Path(path_type=Path, exists=True),
+    default=FASTA_NT,
+    show_default=True,
+)
 @click.option("--output", type=click.Path(path_type=Path), default=BASELINE_NT, show_default=True)
-def generate_nt_cmd(limit: Optional[int], ncpu: Optional[int], fasta: Path, output: Path) -> None:
+def generate_nt_cmd(limit: int | None, ncpu: int | None, fasta: Path, output: Path) -> None:
     """Generate NT baseline only."""
     click.echo(f"Writing NT baseline -> {output}")
     generate_baseline_nt(fasta_path=fasta, baseline_path=output, limit=limit, n_processes=ncpu)
@@ -249,9 +255,14 @@ def generate_nt_cmd(limit: Optional[int], ncpu: Optional[int], fasta: Path, outp
 
 @cli.command("generate-aa")
 @_common_options
-@click.option("--fasta", type=click.Path(path_type=Path, exists=True), default=FASTA_AA, show_default=True)
+@click.option(
+    "--fasta",
+    type=click.Path(path_type=Path, exists=True),
+    default=FASTA_AA,
+    show_default=True,
+)
 @click.option("--output", type=click.Path(path_type=Path), default=BASELINE_AA, show_default=True)
-def generate_aa_cmd(limit: Optional[int], ncpu: Optional[int], fasta: Path, output: Path) -> None:
+def generate_aa_cmd(limit: int | None, ncpu: int | None, fasta: Path, output: Path) -> None:
     """Generate AA baseline only."""
     click.echo(f"Writing AA baseline -> {output}")
     generate_baseline_aa(fasta_path=fasta, baseline_path=output, limit=limit, n_processes=ncpu)
@@ -268,7 +279,7 @@ def generate_aa_cmd(limit: Optional[int], ncpu: Optional[int], fasta: Path, outp
 )
 @click.option("--nt/--no-nt", default=True, show_default=True, help="Compare NT baseline.")
 @click.option("--aa/--no-aa", default=True, show_default=True, help="Compare AA baseline.")
-def compare_cmd(ncpu: Optional[int], nt: bool, aa: bool) -> None:
+def compare_cmd(ncpu: int | None, nt: bool, aa: bool) -> None:
     """Re-run numbering and compare against pickled baselines."""
     failed = False
     if nt:
