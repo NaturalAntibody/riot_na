@@ -19,7 +19,6 @@ from riot_na.data.constants import BLOSUM_62
 from riot_na.data.model import (
     AlignmentEntryAA,
     AlignmentEntryNT,
-    AlignmentSegment,
     Gene,
     GeneAA,
     GermlineGene,
@@ -128,10 +127,11 @@ class GeneAligner:
 
         return result
 
-    def align(self, query: str, both_strains: bool) -> Sequence[AlignmentSegment]:
+    def align(self, query: str, both_strains: bool) -> Optional[AlignmentEntryNT]:
+        """Best alignment (lowest e-value) of the query to the genes."""
         prefiltering_result = self._prefilter(query, both_strains)
         alignments = self._align_sequences(query, prefiltering_result)
-        return [AlignmentSegment(alignments)]
+        return min(alignments, default=None)
 
     def max_alignment_score(self, query: str) -> float:
         """
@@ -279,10 +279,11 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
 
         return result
 
-    def align(self, query: str) -> Sequence[AlignmentSegment]:
+    def align(self, query: str) -> Optional[AlignmentEntryAA]:
+        """Best alignment (lowest e-value) of the query to the genes."""
         prefiltering_result = self._prefilter(query)
         alignments = self._align_sequences(query, prefiltering_result)
-        return [AlignmentSegment(alignments)]
+        return min(alignments, default=None)
 
     def max_alignment_score(self, query: str) -> float:
         """Upper bound of alignment scores (bit scores) of the query to the genes (see max_raw_alignment_score_aa)."""

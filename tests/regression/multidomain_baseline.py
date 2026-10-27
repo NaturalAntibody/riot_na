@@ -36,12 +36,16 @@ import multiprocessing as mp
 from collections import Counter
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, cast
+from typing import Any
 
 import click
 from psutil import cpu_count
 from tqdm import tqdm
 
+from riot_na.api.multidomain_riot_numbering import (
+    MultidomainRiotNumberingAA,
+    create_multidomain_riot_aa,
+)
 from riot_na.api.riot_numbering import RiotNumberingAA, create_riot_aa
 from riot_na.data.model import (
     AirrRearrangementEntryAA,
@@ -87,7 +91,7 @@ def read_therapeutics(csv_path: Path = THERAPEUTICS_CSV, limit: int | None = Non
 
 
 _single_domain_numbering: RiotNumberingAA | None = None
-_multidomain_numbering: RiotNumberingAA | None = None
+_multidomain_numbering: MultidomainRiotNumberingAA | None = None
 
 
 def _init_single_domain_worker() -> None:
@@ -97,7 +101,7 @@ def _init_single_domain_worker() -> None:
 
 def _init_multidomain_worker() -> None:
     global _multidomain_numbering  # pylint: disable=global-statement
-    _multidomain_numbering = create_riot_aa(return_all_domains=True)
+    _multidomain_numbering = create_multidomain_riot_aa()
 
 
 def _number_single_domain(molecule: Molecule) -> AirrRearrangementEntryAA:
@@ -109,10 +113,7 @@ def _number_single_domain(molecule: Molecule) -> AirrRearrangementEntryAA:
 def _number_multidomain(molecule: Molecule) -> MoleculeDomains:
     assert _multidomain_numbering is not None
     header, sequence = molecule
-    domains = _multidomain_numbering.run_on_sequence(
-        header, sequence, SCHEME, return_all_domains=True, c_scheme=C_SCHEME
-    )
-    return cast(MoleculeDomains, domains)  # the builder returns segmented entries, the API is typed more loosely
+    return _multidomain_numbering.run_on_sequence(header, sequence, SCHEME, c_scheme=C_SCHEME)
 
 
 def number_single_domain(

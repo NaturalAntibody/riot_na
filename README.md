@@ -152,7 +152,7 @@ Instead of searching the germline database, amino acid sequences can be aligned 
 against chosen V and J germlines, given by their exact names. Prefiltering is skipped then,
 but the regular alignment thresholds still apply, so a germline that is a very poor match for
 the query may end up with no alignment at all. Both germlines have to be given together, C genes
-are not assigned, and this is not supported together with `return_all_domains`.
+are not assigned, and this is not supported in multidomain numbering.
 
 ```python
 from riot_na import create_riot_aa, Organism, Scheme, RiotNumberingAA, AirrRearrangementEntryAA
@@ -208,7 +208,7 @@ C-terminal G446 and K447 of secreted chains are not numbered. Scheme mappings ar
 `python -m notebooks.data_processing.c_scheme_mappings`.
 
 ### Caching
-We provide two cached wrappers for `create_riot_nt()` and `crate_riot_aa()` functions - `get_or_create_riot_nt()` | `get_or_create_riot_aa()`. They can be used exactly the same way as base functions:
+We provide cached wrappers for `create_riot_nt()` and `create_riot_aa()` functions - `get_or_create_riot_nt()` | `get_or_create_riot_aa()` (and `get_or_create_multidomain_riot_nt()` | `get_or_create_multidomain_riot_aa()` for multidomain numbering). They can be used exactly the same way as base functions:
 
 ```python
 from riot_na import get_or_create_riot_aa, Organism, Scheme, RiotNumberingAA, AirrRearrangementEntryAA
@@ -293,9 +293,41 @@ For a pure Python solution (without the use of `cachetools` package) you can che
 
 
 ## Multidomains support
-RIOT's multidomains support allows detection and numbering of multiple immunoglobulin domains within a single protein sequence, such as therapeutic antibodies containing both heavy chain (VH) and light chain (VL) domains. When enabled with the --multiple-domains flag (or return_all_domains=True in the API), RIOT returns separate numbering results for each detected domain rather than just the best single match. The system automatically identifies domain boundaries, truncates sequences at the beginning of each V gene segment, and provides additional metadata including the original query sequence and segment start/end positions for each domain. This is particularly useful for analyzing therapeutic constructs like bispecific antibodies, CAR-T constructs, or other multi-domain fusion proteins where each immunoglobulin domain needs independent numbering and analysis.
+RIOT's multidomains support allows detection and numbering of multiple immunoglobulin domains within a single protein sequence, such as therapeutic antibodies containing both heavy chain (VH) and light chain (VL) domains. When enabled with the --multiple-domains flag (or with multidomain numbering in the API), RIOT returns separate numbering results for each detected domain rather than just the best single match. The system automatically identifies domain boundaries, truncates sequences at the beginning of each V gene segment, and provides additional metadata including the original query sequence and segment start/end positions for each domain. This is particularly useful for analyzing therapeutic constructs like bispecific antibodies, CAR-T constructs, or other multi-domain fusion proteins where each immunoglobulin domain needs independent numbering and analysis.
 
-Each domain is reported with the constant region following it (up to the next domain). Constant regions are searched among C genes of all loci, so they are also assigned (and numbered with `c_scheme`) when they follow a variable domain of another locus, e.g. in VL-CH1 and VH-CL chains of CrossMabs or in scFv-Fc fusions, and when the J gene is not found. This applies to single domain mode as well. In the API, `return_all_domains=True` has to be passed both to `create_riot_aa` / `create_riot_nt` and to `run_on_sequence`.
+Each domain is reported with the constant region following it (up to the next domain). Constant regions are searched among C genes of all loci, so they are also assigned (and numbered with `c_scheme`) when they follow a variable domain of another locus, e.g. in VL-CH1 and VH-CL chains of CrossMabs or in scFv-Fc fusions, and when the J gene is not found. This applies to single domain mode as well.
+
+Multidomain numbering is created with `create_multidomain_riot_aa` / `create_multidomain_riot_nt` (or the cached
+`get_or_create_multidomain_riot_aa` / `get_or_create_multidomain_riot_nt`). Its `run_on_sequence` returns a list of
+`SegmentedAirrRearrangementEntryAA` / `SegmentedAirrRearrangementEntryNT`, one per domain (a single entry without
+alignments if no domain is found). Multidomain numbering uses a different, segment based V gene search, so a single
+domain sequence may get different results than in single domain numbering.
+
+```python
+from riot_na import create_multidomain_riot_aa, Organism, Scheme, MultidomainRiotNumberingAA, SegmentedAirrRearrangementEntryAA
+
+riot_aa: MultidomainRiotNumberingAA = create_multidomain_riot_aa(allowed_species = (Organism.HOMO_SAPIENS,))
+domains: list[SegmentedAirrRearrangementEntryAA] = riot_aa.run_on_sequence(
+                    header = "scFv",
+                    query_sequence = scfv_sequence,
+                    scheme = Scheme.IMGT
+                )
+[(domain.segment_start, domain.segment_end, domain.v_call) for domain in domains]
+```
+
+### Migrating from 5.x
+
+Single domain and multidomain numbering are separate since 6.0, `return_all_domains` is removed:
+
+| 5.x                                                                                  | 6.x                                                                    |
+|--------------------------------------------------------------------------------------|------------------------------------------------------------------------|
+| `create_riot_aa(return_all_domains=True)` + `run_on_sequence(..., return_all_domains=True)` | `create_multidomain_riot_aa()` + `run_on_sequence(...)`           |
+| `create_riot_nt(return_all_domains=True)` + `run_on_sequence(..., return_all_domains=True)` | `create_multidomain_riot_nt()` + `run_on_sequence(...)`           |
+| `get_or_create_riot_aa(return_all_domains=True)` / `get_or_create_riot_nt(return_all_domains=True)` | `get_or_create_multidomain_riot_aa()` / `get_or_create_multidomain_riot_nt()` |
+| `create_riot_aa(return_all_domains=True)` + `run_on_sequence(...)` (best domain only)  | `max(create_multidomain_riot_aa().run_on_sequence(...))` (highest V score) |
+| `create_vjc_aligner_aa(use_segment_aligner=True)` / `create_vdjc_aligner_nt(use_segment_aligner=True)` | `create_segment_vjc_aligner_aa()` / `create_segment_vdjc_aligner_nt()` |
+
+`run_on_sequence` arguments after `extend_alignment` (`v_gene`, `j_gene`, `c_scheme`) are keyword-only.
 
 ## Germline database
 RIOT uses OGRDB as a primary source of germline alleles. Database version as of 22.01.2024 was used.

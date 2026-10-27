@@ -12,6 +12,10 @@ from riot_na.alignment.alignment_utils import align_c, select_c_alignment
 from riot_na.alignment.gene_aligner import AA_ALIGNER_PARAMS, ALIGNER_PARAMS
 from riot_na.alignment.skbio_alignment import align, align_aa
 from riot_na.alignment.translate import translate
+from riot_na.api.multidomain_riot_numbering import (
+    get_or_create_multidomain_riot_aa,
+    get_or_create_multidomain_riot_nt,
+)
 from riot_na.api.riot_numbering import (
     RiotNumberingAA,
     RiotNumberingNT,
@@ -299,9 +303,9 @@ def test_no_c_numbering(riot_aa: RiotNumberingAA):
 
 
 def test_c_numbering_multiple_domains():
-    riot_aa = get_or_create_riot_aa(return_all_domains=True)
+    riot_aa = get_or_create_multidomain_riot_aa()
     query = VH + secreted_ighg("IGHG1") + "GGGGSGGGGS" + SEQUENCES_AA["L"]
-    heavy, light = riot_aa.run_on_sequence("", query, return_all_domains=True, c_scheme=CScheme.EU)
+    heavy, light = riot_aa.run_on_sequence("", query, c_scheme=CScheme.EU)  # pylint: disable=unbalanced-tuple-unpacking
 
     assert heavy.c_scheme_residue_mapping and heavy.c_scheme_residue_mapping["297"] == "N"
     assert light.c_scheme_residue_mapping and light.c_scheme_residue_mapping["214"] == "C"
@@ -375,11 +379,9 @@ def test_c_alignment_of_all_loci(query: str, v_locus: Locus):
 
     def align_query(c_aligner):
         aligned_loci.append(c_aligner)
-        return c_aligner.align(query)[0].best_alignment
+        return c_aligner.align(query)
 
-    expected = select_c_alignment(
-        [c_aligner.align(query)[0].best_alignment for c_aligner in c_aligners.values()], v_locus
-    )
+    expected = select_c_alignment([c_aligner.align(query) for c_aligner in c_aligners.values()], v_locus)
     assert align_c(c_aligners, v_locus, query, align_query) == expected
 
     # light chain C genes can't score higher than heavy chain C genes on heavy chain constant regions
@@ -388,10 +390,10 @@ def test_c_alignment_of_all_loci(query: str, v_locus: Locus):
 
 
 def test_c_numbering_multiple_domains_scfv_fc():
-    riot_aa = get_or_create_riot_aa(return_all_domains=True)
+    riot_aa = get_or_create_multidomain_riot_aa()
     # scFv fused to CH1, hinge and Fc, C follows VL
     query = VH + "GGGGSGGGGSGGGGS" + VK + secreted_ighg("IGHG1")
-    heavy, light = riot_aa.run_on_sequence("", query, return_all_domains=True, c_scheme=CScheme.EU)
+    heavy, light = riot_aa.run_on_sequence("", query, c_scheme=CScheme.EU)  # pylint: disable=unbalanced-tuple-unpacking
 
     assert heavy.c_call is None
     assert light.locus == "igk"
@@ -450,10 +452,10 @@ def test_non_antibody_regions_are_not_c_regions(riot_aa: RiotNumberingAA, v_doma
 
 
 def test_c_numbering_multiple_domains_nucleotides():
-    riot_nt = get_or_create_riot_nt(return_all_domains=True)
+    riot_nt = get_or_create_multidomain_riot_nt()
     heavy_chain = nt_rearrangement("IGHV3-23*01", "GGCTAC", "IGHJ4*02", 2, "IGHG1")
 
-    (airr,) = riot_nt.run_on_sequence("", heavy_chain, return_all_domains=True, c_scheme=CScheme.EU)
+    (airr,) = riot_nt.run_on_sequence("", heavy_chain, c_scheme=CScheme.EU)
     # whole C region is in the domain, spurious V matches in C region do not split it
     assert (airr.c_call, airr.c_sequence_end) == ("IGHG1", len(heavy_chain))
     assert airr.c_scheme_residue_mapping and list(airr.c_scheme_residue_mapping)[-1] == "445"
@@ -466,7 +468,7 @@ def test_c_numbering_multiple_domains_nucleotides():
         + NT_LINKER
         + nt_rearrangement("IGKV3-11*01", "TGGCCGCTC", "IGKJ4*01", 1)
     )
-    domains = riot_nt.run_on_sequence("", query, return_all_domains=True, c_scheme=CScheme.EU)
+    domains = riot_nt.run_on_sequence("", query, c_scheme=CScheme.EU)
 
     assert [(domain.v_call, domain.c_call) for domain in domains] == [
         ("IGHV3-23*01", "IGHG1"),

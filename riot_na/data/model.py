@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, unique
 from typing import Generic, Optional, Sequence, TypeVar
 
@@ -608,15 +608,15 @@ AlignmentEntry = TypeVar("AlignmentEntry", AlignmentEntryNT, AlignmentEntryAA)
 
 @dataclass
 class AlignmentSegment(Generic[AlignmentEntry]):
+    """V gene alignments of a domain found in the query by the segment aligner."""
+
+    segment_start: int
+    segment_end: int
     alignments: Sequence[AlignmentEntry]
-    best_alignment: Optional[AlignmentEntry] = None  # Best alignment for this segment
-    segment_start: Optional[int] = None
-    segment_end: Optional[int] = None
+    best_alignment: AlignmentEntry = field(init=False)
 
     def __post_init__(self):
-        """Set the best alignment after initialization"""
-        if self.alignments:
-            self.best_alignment = min(self.alignments)  # Lowest e-value first
+        self.best_alignment = min(self.alignments)  # Lowest e-value first
 
 
 @dataclass
@@ -625,8 +625,6 @@ class AlignmentsNT:
     d: Optional[AlignmentEntryNT] = None
     j: Optional[AlignmentEntryNT] = None
     c: Optional[AlignmentEntryNT] = None
-    segment_start: Optional[int] = None
-    segment_end: Optional[int] = None
 
 
 @dataclass
@@ -634,8 +632,24 @@ class AlignmentsAA:
     v: Optional[AlignmentEntryAA] = None
     j: Optional[AlignmentEntryAA] = None
     c: Optional[AlignmentEntryAA] = None
-    segment_start: Optional[int] = None
-    segment_end: Optional[int] = None
+
+
+@dataclass
+class SegmentAlignmentsNT:
+    """Alignments of a domain found in query[segment_start:segment_end]."""
+
+    alignments: AlignmentsNT
+    segment_start: int
+    segment_end: int
+
+
+@dataclass
+class SegmentAlignmentsAA:
+    """Alignments of a domain found in query[segment_start:segment_end]."""
+
+    alignments: AlignmentsAA
+    segment_start: int
+    segment_end: int
 
 
 @dataclass

@@ -55,7 +55,7 @@ def v_aligner():
 
 def test_align_to_selected_genes(vjc_aligner):
     # when
-    alignments = vjc_aligner.produce_aa_alignments_for_genes(HEAVY_QUERY, v_gene="IGHV3-7*01", j_gene="IGHJ6*02")[0]
+    alignments = vjc_aligner.produce_aa_alignments_for_genes(HEAVY_QUERY, v_gene="IGHV3-7*01", j_gene="IGHJ6*02")
 
     # then
     assert alignments.v is not None
@@ -204,15 +204,6 @@ def test_human_gene_is_selected_if_more_species_have_a_gene_of_the_name():
 def test_both_genes_are_required(riot_aa):
     with pytest.raises(AssertionError, match="Both v_gene and j_gene"):
         riot_aa.run_on_sequence("header", HEAVY_QUERY, Scheme.IMGT, v_gene="IGHV3-23*01")
-
-
-def test_gene_selection_rejected_in_multiple_domains_mode():
-    # given
-    riot = create_riot_aa(allowed_species=(Organism.HOMO_SAPIENS,), return_all_domains=True)
-
-    # then
-    with pytest.raises(AssertionError, match="multiple domains mode"):
-        riot.run_on_sequence("header", HEAVY_QUERY, Scheme.IMGT, v_gene="IGHV3-23*01", j_gene="IGHJ4*02")
 
 
 def test_file_run_validates_genes_before_starting_workers(tmp_path, monkeypatch):
