@@ -27,7 +27,6 @@ from __future__ import annotations
 
 import itertools
 import multiprocessing as mp
-import sys
 from collections.abc import Sequence
 from pathlib import Path
 from typing import Any
@@ -47,10 +46,7 @@ from riot_na.data.model import (
     Scheme,
 )
 
-if __package__ in (None, ""):  # run as a script: make the repo root importable
-    sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-
-from tests.regression.common import (  # noqa: E402  # pylint: disable=wrong-import-position
+from .common import (
     compare_entries,
     finish,
     limit_option,
