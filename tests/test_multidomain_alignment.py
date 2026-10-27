@@ -1,12 +1,12 @@
 import pytest
 
 from riot_na import Locus, Organism, Scheme
-from riot_na.api.riot_numbering import (
-    RiotNumberingAA,
-    RiotNumberingNT,
-    create_riot_aa,
-    get_or_create_riot_aa,
-    get_or_create_riot_nt,
+from riot_na.api.multidomain_riot_numbering import (
+    MultidomainRiotNumberingAA,
+    MultidomainRiotNumberingNT,
+    create_multidomain_riot_aa,
+    get_or_create_multidomain_riot_aa,
+    get_or_create_multidomain_riot_nt,
 )
 
 
@@ -14,21 +14,21 @@ class TestMultiDomainAlignments:
     """Test real-world multi-domain therapeutic antibody scenarios."""
 
     @pytest.fixture
-    def human_riot_aa(self) -> RiotNumberingAA:
+    def human_riot_aa(self) -> MultidomainRiotNumberingAA:
         """Get amino acid numbering API."""
-        return create_riot_aa(allowed_species=(Organism.HOMO_SAPIENS,), return_all_domains=True)
+        return create_multidomain_riot_aa(allowed_species=(Organism.HOMO_SAPIENS,))
 
     @pytest.fixture
-    def riot_aa(self) -> RiotNumberingAA:
+    def riot_aa(self) -> MultidomainRiotNumberingAA:
         """Get amino acid numbering API."""
-        return get_or_create_riot_aa(return_all_domains=True)
+        return get_or_create_multidomain_riot_aa()
 
     @pytest.fixture
-    def riot_nt(self) -> RiotNumberingNT:
+    def riot_nt(self) -> MultidomainRiotNumberingNT:
         """Get nucleotide numbering API."""
-        return get_or_create_riot_nt(return_all_domains=True)
+        return get_or_create_multidomain_riot_nt()
 
-    def test_devextinetug_amino_acid(self, riot_aa: RiotNumberingAA):
+    def test_devextinetug_amino_acid(self, riot_aa: MultidomainRiotNumberingAA):
         """Test Devextinetug construct (amino acid)."""
         devextinetug_sequence = (
             "EIQLQQSGPELGKPGASVKVSCRASGFSFADYYIYWVKQSHGKSLELIGYIDPFNGGDTYNQIFKGKATLTVDKSSSTAFMYLNSLTSEDSAVYYCAAFRNPSFDFWGQGTTLTVSS"
@@ -51,11 +51,9 @@ class TestMultiDomainAlignments:
             },
         }
 
-        results = riot_aa.run_on_sequence(
-            "devextinetug", devextinetug_sequence, scheme=Scheme.IMGT, return_all_domains=True
-        )
+        results = riot_aa.run_on_sequence("devextinetug", devextinetug_sequence, scheme=Scheme.IMGT)
 
-        assert isinstance(results, list), "Should return list when return_all_domains=True"
+        assert isinstance(results, list), "Should return list of domains"
         assert len(results) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
         for i, domain in enumerate(results):
             assert (
@@ -69,7 +67,7 @@ class TestMultiDomainAlignments:
                 domain.j_call == expected_genes[f"domain_{i + 1}"]["j_call"]
             ), f"Expected J call {expected_genes[f'domain_{i + 1}']['j_call']}, got {domain.j_call}"
 
-    def test_scfv_anti_cd19_amino_acid(self, riot_aa: RiotNumberingAA):
+    def test_scfv_anti_cd19_amino_acid(self, riot_aa: MultidomainRiotNumberingAA):
         """Test scFv construct (anti-CD19) - VH-linker-VL format (amino acid)."""
         # Real anti-CD19 scFv sequence with extended domains for better recognition
         # This represents a typical CAR-T or therapeutic scFv construct
@@ -97,11 +95,10 @@ class TestMultiDomainAlignments:
             },
         }
 
-        # Test with return_all_domains=True to get all domains
-        results = riot_aa.run_on_sequence("anti_CD19_scFv", scfv_sequence, scheme=Scheme.IMGT, return_all_domains=True)
+        results = riot_aa.run_on_sequence("anti_CD19_scFv", scfv_sequence, scheme=Scheme.IMGT)
 
         # Should return multiple domains (expecting 2: VH and VL)
-        assert isinstance(results, list), "Should return list when return_all_domains=True"
+        assert isinstance(results, list), "Should return list of domains"
         assert len(results) == 2, "Should detect 2 domains"
 
         for i, domain in enumerate(results):
@@ -118,7 +115,7 @@ class TestMultiDomainAlignments:
                 domain.c_call == expected_genes[f"domain_{i + 1}"]["c_call"]
             ), f"Expected C call {expected_genes[f'domain_{i + 1}']['c_call']}, got {domain.c_call}"
 
-    def test_scfv_anti_her2_nucleotide(self, riot_nt: RiotNumberingNT):
+    def test_scfv_anti_her2_nucleotide(self, riot_nt: MultidomainRiotNumberingNT):
         """Test scFv construct (anti-HER2) - nucleotide sequence."""
         # Real anti-HER2 scFv nucleotide sequence (trastuzumab-derived VH-linker-VL)
         scfv_nt_sequence = (
@@ -149,9 +146,9 @@ class TestMultiDomainAlignments:
 
         # Test with different numbering schemes
         for scheme in [Scheme.IMGT, Scheme.CHOTHIA]:
-            result = riot_nt.run_on_sequence("anti_HER2_scFv", scfv_nt_sequence, scheme=scheme, return_all_domains=True)
+            result = riot_nt.run_on_sequence("anti_HER2_scFv", scfv_nt_sequence, scheme=scheme)
 
-            assert isinstance(result, list), "Should return list when return_all_domains=True"
+            assert isinstance(result, list), "Should return list of domains"
             assert len(result) == 2, "Should detect 2 domains"
 
             for i, domain in enumerate(result):
@@ -171,7 +168,7 @@ class TestMultiDomainAlignments:
                     domain.c_call == expected_genes[f"domain_{i + 1}"]["c_call"]
                 ), f"Expected C call {expected_genes[f'domain_{i + 1}']['c_call']}, got {domain.c_call}"
 
-    def test_simple_scfv_with_constant_region(self, riot_aa: RiotNumberingAA):
+    def test_simple_scfv_with_constant_region(self, riot_aa: MultidomainRiotNumberingAA):
         """Test a simpler scFv with part of constant region for better recognition."""
         # Single scFv with extended constant region (more realistic for API testing)
         scfv_with_constant = (
@@ -198,13 +195,10 @@ class TestMultiDomainAlignments:
             },
         }
 
-        # Test with return_all_domains=True to detect multiple domains
-        results = riot_aa.run_on_sequence(
-            "scFv_with_constant", scfv_with_constant, scheme=Scheme.IMGT, return_all_domains=True
-        )
+        results = riot_aa.run_on_sequence("scFv_with_constant", scfv_with_constant, scheme=Scheme.IMGT)
 
         # Should return list with at least 1 domain
-        assert isinstance(results, list), "Should return list when return_all_domains=True"
+        assert isinstance(results, list), "Should return list of domains"
         assert len(results) == 2, "Should detect 2 domains"
         for i, domain in enumerate(results):
             assert (
@@ -220,7 +214,7 @@ class TestMultiDomainAlignments:
                 domain.c_call == expected_genes[f"domain_{i + 1}"]["c_call"]
             ), f"Expected C call {expected_genes[f'domain_{i + 1}']['c_call']}, got {domain.c_call}"
 
-    def test_car_t_construct_with_multiple_domains(self, riot_aa: RiotNumberingAA):
+    def test_car_t_construct_with_multiple_domains(self, riot_aa: MultidomainRiotNumberingAA):
         """Test CAR-T receptor construct with multiple functional domains."""
         # Realistic CAR-T construct: scFv + hinge + transmembrane + signaling domains
         # This tests very long multi-domain constructs used in cell therapy
@@ -255,9 +249,9 @@ class TestMultiDomainAlignments:
         }
 
         # Test with IMGT scheme
-        result = riot_aa.run_on_sequence("CAR_T_construct", car_t_sequence, scheme=Scheme.IMGT, return_all_domains=True)
+        result = riot_aa.run_on_sequence("CAR_T_construct", car_t_sequence, scheme=Scheme.IMGT)
 
-        assert isinstance(result, list), "Should return list when return_all_domains=True"
+        assert isinstance(result, list), "Should return list of domains"
         assert len(result) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
         for i, domain in enumerate(result):
             assert (
@@ -273,7 +267,7 @@ class TestMultiDomainAlignments:
                 domain.c_call == expected_genes[f"domain_{i + 1}"]["c_call"]
             ), f"Expected C call {expected_genes[f'domain_{i + 1}']['c_call']}, got {domain.c_call}"
 
-    def test_diabody_construct(self, riot_aa: RiotNumberingAA):
+    def test_diabody_construct(self, riot_aa: MultidomainRiotNumberingAA):
         """Test diabody construct (VH-VL with short linker for dimerization)."""
         # Diabody format: VH1-short_linker-VL1 (forces heterodimerization)
         diabody_sequence = (
@@ -299,12 +293,10 @@ class TestMultiDomainAlignments:
                 "locus": Locus.IGK.value,
             },
         }
-        result = riot_aa.run_on_sequence(
-            "diabody_construct", diabody_sequence, scheme=Scheme.IMGT, return_all_domains=True
-        )
+        result = riot_aa.run_on_sequence("diabody_construct", diabody_sequence, scheme=Scheme.IMGT)
 
         # Should identify as heavy chain (VH first)
-        assert isinstance(result, list), "Should return list when return_all_domains=True"
+        assert isinstance(result, list), "Should return list of domains"
         assert len(result) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
         for i, domain in enumerate(result):
             assert (
@@ -320,7 +312,7 @@ class TestMultiDomainAlignments:
                 domain.c_call == expected_genes[f"domain_{i + 1}"]["c_call"]
             ), f"Expected C call {expected_genes[f'domain_{i + 1}']['c_call']}, got {domain.c_call}"
 
-    def test_trispecific_antibody_construct(self, riot_aa: RiotNumberingAA):
+    def test_trispecific_antibody_construct(self, riot_aa: MultidomainRiotNumberingAA):
         """Test trispecific antibody construct with three different binding domains."""
         # Complex trispecific format: scFv1 + scFv2 + scFv3
         trispecific_sequence = (
@@ -381,11 +373,9 @@ class TestMultiDomainAlignments:
             },
         }
 
-        result = riot_aa.run_on_sequence(
-            "trispecific_Ab", trispecific_sequence, scheme=Scheme.IMGT, return_all_domains=True
-        )
+        result = riot_aa.run_on_sequence("trispecific_Ab", trispecific_sequence, scheme=Scheme.IMGT)
 
-        assert isinstance(result, list), "Should return list when return_all_domains=True"
+        assert isinstance(result, list), "Should return list of domains"
         assert len(result) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
         for i, domain in enumerate(result):
             assert (
@@ -401,7 +391,7 @@ class TestMultiDomainAlignments:
                 domain.c_call == expected_genes[f"domain_{i + 1}"]["c_call"]
             ), f"Expected C call for domain {i + 1} {expected_genes[f'domain_{i + 1}']['c_call']}, got {domain.c_call}"
 
-    def test_trastuzumab_therapeutic_antibody(self, riot_aa: RiotNumberingAA):
+    def test_trastuzumab_therapeutic_antibody(self, riot_aa: MultidomainRiotNumberingAA):
         """Test a therapeutic antibody sequence (based on trastuzumab)."""
         # Realistic full-length antibody sequence (heavy chain with full constant region)
         # This represents what you'd see in actual therapeutic development
@@ -421,11 +411,9 @@ class TestMultiDomainAlignments:
             },
         }
 
-        result = riot_aa.run_on_sequence(
-            "trastuzumab_heavy", trastuzumab_heavy, scheme=Scheme.IMGT, return_all_domains=True
-        )
+        result = riot_aa.run_on_sequence("trastuzumab_heavy", trastuzumab_heavy, scheme=Scheme.IMGT)
 
-        assert isinstance(result, list), "Should return list when return_all_domains=True"
+        assert isinstance(result, list), "Should return list of domains"
         assert len(result) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
         for i, domain in enumerate(result):
             assert (
@@ -441,7 +429,7 @@ class TestMultiDomainAlignments:
                 domain.c_call == expected_genes[f"domain_{i + 1}"]["c_call"]
             ), f"Expected C call for domain {i + 1} {expected_genes[f'domain_{i + 1}']['c_call']}, got {domain.c_call}"
 
-    def test_acapatamab_therapeutic_antibody(self, riot_aa: RiotNumberingAA):
+    def test_acapatamab_therapeutic_antibody(self, riot_aa: MultidomainRiotNumberingAA):
         """Test a therapeutic antibody sequence (based on acapatamab)."""
 
         acapatamab_full_sequence = "QVQLVESGGGLVKPGESLRLSCAASGFTFSDYYMYWVRQAPGKCLEWVAIISDGGYYTYYSDIIKGRFTISRDNAKNSLYLQMNSLKAEDTAVYYCARGFPLLRHGAMDYWGQGTLVTVSSGGGGSGGGGSGGGGSDIQMTQSPSSLSASVGDRVTITCKASQNVDTNVAWYQQKPGQAPKSLIYSASYVYWDVPSRFSGSASGTDFTLTISSVQSEDFATYYCQQYDQQLITFGCGTKLEIKSGGGGSEVQLVESGGGLVQPGGSLKLSCAASGFTFNKYAMNWVRQAPGKGLEWVARIRSKYNNYATYYADSVKDRFTISRDDSKNTAYLQMNNLKTEDTAVYYCVRHGNFGNSYISYWAYWGQGTLVTVSSGGGGSGGGGSGGGGSQTVVTQEPSLTVSPGGTVTLTCGSSTGAVTSGNYPNWVQQKPGQAPRGLIGGTKFLAPGTPARFSGSLLGGKAALTLSGVQPEDEAEYYCVLWYSNRWVFGGGTKLTVLGGGGDKTHTCPPCPAPELLGGPSVFLFPPKPKDTLMISRTPEVTCVVVDVSHEDPEVKFNWYVDGVEVHNAKTKPCEEQYGSTYRCVSVLTVLHQDWLNGKEYKCKVSNKALPAPIEKTISKAKGQPREPQVYTLPPSREEMTKNQVSLTCLVKGFYPSDIAVEWESNGQPENNYKTTPPVLDSDGSFFLYSKLTVDKSRWQQGNVFSCSVMHEALHNHYTQKSLSLSPGKGGGGSGGGGSGGGGSGGGGSGGGGSGGGGSDKTHTCPPCPAPELLGGPSVFLFPPKPKDTLMISRTPEVTCVVVDVSHEDPEVKFNWYVDGVEVHNAKTKPCEEQYGSTYRCVSVLTVLHQDWLNGKEYKCKVSNKALPAPIEKTISKAKGQPREPQVYTLPPSREEMTKNQVSLTCLVKGFYPSDIAVEWESNGQPENNYKTTPPVLDSDGSFFLYSKLTVDKSRWQQGNVFSCSVMHEALHNHYTQKSLSLSPGK"
@@ -474,11 +462,9 @@ class TestMultiDomainAlignments:
             },
         }
 
-        result = riot_aa.run_on_sequence(
-            "acapatamab_heavy", acapatamab_full_sequence, scheme=Scheme.IMGT, return_all_domains=True
-        )
+        result = riot_aa.run_on_sequence("acapatamab_heavy", acapatamab_full_sequence, scheme=Scheme.IMGT)
 
-        assert isinstance(result, list), "Should return list when return_all_domains=True"
+        assert isinstance(result, list), "Should return list of domains"
         assert len(result) == len(expected_genes), f"Should detect {len(expected_genes)} domains"
         for i, domain in enumerate(result):
             domain_key = f"domain_{i + 1}"
@@ -495,10 +481,3 @@ class TestMultiDomainAlignments:
             assert (
                 domain.c_call == expected["c_call"]
             ), f"Expected C call for {domain_key} {expected['c_call']}, got {domain.c_call}"
-
-
-def test_return_all_domains_requires_multiple_domains_numbering():
-    with pytest.raises(ValueError, match="return_all_domains"):
-        get_or_create_riot_aa().run_on_sequence("", "EVQLVESGGGLVQPGGSLRLSCAAS", return_all_domains=True)
-    with pytest.raises(ValueError, match="return_all_domains"):
-        get_or_create_riot_nt().run_on_sequence("", "GAGGTGCAGCTGGTGGAGTCTGGG", return_all_domains=True)

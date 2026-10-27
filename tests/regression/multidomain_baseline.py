@@ -31,6 +31,10 @@ import click
 from psutil import cpu_count
 from tqdm import tqdm
 
+from riot_na.api.multidomain_riot_numbering import (
+    MultidomainRiotNumberingAA,
+    create_multidomain_riot_aa,
+)
 from riot_na.api.riot_numbering import RiotNumberingAA, create_riot_aa
 from riot_na.data.model import (
     AirrRearrangementEntryAA,
@@ -62,29 +66,30 @@ def read_therapeutics(csv_path: Path = THERAPEUTICS_CSV, limit: Optional[int] = 
         ]
 
 
-_numbering: Optional[RiotNumberingAA] = None
+_single_domain_numbering: Optional[RiotNumberingAA] = None
+_multidomain_numbering: Optional[MultidomainRiotNumberingAA] = None
 
 
 def _init_single_domain_worker() -> None:
-    global _numbering  # pylint: disable=global-statement
-    _numbering = create_riot_aa()
+    global _single_domain_numbering  # pylint: disable=global-statement
+    _single_domain_numbering = create_riot_aa()
 
 
 def _init_multidomain_worker() -> None:
-    global _numbering  # pylint: disable=global-statement
-    _numbering = create_riot_aa(return_all_domains=True)
+    global _multidomain_numbering  # pylint: disable=global-statement
+    _multidomain_numbering = create_multidomain_riot_aa()
 
 
 def _number_single_domain(molecule: Molecule) -> AirrRearrangementEntryAA:
-    assert _numbering is not None
+    assert _single_domain_numbering is not None
     header, sequence = molecule
-    return _numbering.run_on_sequence(header, sequence, SCHEME, c_scheme=C_SCHEME)
+    return _single_domain_numbering.run_on_sequence(header, sequence, SCHEME, c_scheme=C_SCHEME)
 
 
 def _number_multidomain(molecule: Molecule) -> MoleculeDomains:
-    assert _numbering is not None
+    assert _multidomain_numbering is not None
     header, sequence = molecule
-    return _numbering.run_on_sequence(header, sequence, SCHEME, return_all_domains=True, c_scheme=C_SCHEME)
+    return _multidomain_numbering.run_on_sequence(header, sequence, SCHEME, c_scheme=C_SCHEME)
 
 
 def number_single_domain(

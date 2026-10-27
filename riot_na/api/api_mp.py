@@ -1,12 +1,17 @@
 import itertools
 import multiprocessing as mp
+from contextlib import contextmanager
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Iterator, Optional
 
 from psutil import cpu_count
 from tqdm import tqdm
 
 from riot_na.alignment.aa_gene_alignments import create_vjc_aligner_aa
+from riot_na.api.multidomain_riot_numbering import (
+    create_multidomain_riot_aa,
+    create_multidomain_riot_nt,
+)
 from riot_na.api.riot_numbering import create_riot_aa, create_riot_nt
 from riot_na.common.fasta import FastaRecord, parse_fasta
 from riot_na.common.io import count_fasta_records, write_airr_iter_to_csv
@@ -29,78 +34,106 @@ class _WorkerNT:
         allowed_species: Optional[tuple[Organism, ...]] = None,
         scheme: Scheme = Scheme.IMGT,
         db_dir: Path = GENE_DB_DIR,
-        return_all_domains: bool = False,
         c_scheme: Optional[CScheme] = None,
     ) -> None:
-        self.numbering = create_riot_nt(
-            allowed_species=allowed_species, db_dir=db_dir, return_all_domains=return_all_domains
-        )
+        self.numbering = create_riot_nt(allowed_species=allowed_species, db_dir=db_dir)
         self.scheme = scheme
-        self.return_all_domains = return_all_domains
         self.c_scheme = c_scheme
 
-    def __call__(self, fasta_record: FastaRecord) -> AirrRearrangementEntryNT | list[SegmentedAirrRearrangementEntryNT]:
-        try:
-            res = self.numbering.run_on_sequence(
-                fasta_record.description,
-                fasta_record.seq,
-                self.scheme,
-                return_all_domains=self.return_all_domains,
-                c_scheme=self.c_scheme,
+    def __call__(self, fasta_record: FastaRecord) -> AirrRearrangementEntryNT:
+        with _report_failing_record(fasta_record, self.scheme):
+            return self.numbering.run_on_sequence(
+                fasta_record.description, fasta_record.seq, self.scheme, c_scheme=self.c_scheme
             )
-        except Exception as exc:
-            print(fasta_record.description)
-            print(self.scheme)
-            print(f"seq: {fasta_record.seq}")
-            raise exc
-
-        return res
 
 
-class _WorkerAA:
+class _MultidomainWorkerNT:
     def __init__(
         self,
         allowed_species: Optional[tuple[Organism, ...]] = None,
         scheme: Scheme = Scheme.IMGT,
         db_dir: Path = GENE_DB_DIR,
-        return_all_domains: bool = False,
+        c_scheme: Optional[CScheme] = None,
+    ) -> None:
+        self.numbering = create_multidomain_riot_nt(allowed_species=allowed_species, db_dir=db_dir)
+        self.scheme = scheme
+        self.c_scheme = c_scheme
+
+    def __call__(self, fasta_record: FastaRecord) -> list[SegmentedAirrRearrangementEntryNT]:
+        with _report_failing_record(fasta_record, self.scheme):
+            return self.numbering.run_on_sequence(
+                fasta_record.description, fasta_record.seq, self.scheme, c_scheme=self.c_scheme
+            )
+
+
+class _WorkerAA:
+    def __init__(  # pylint: disable=too-many-arguments
+        self,
+        allowed_species: Optional[tuple[Organism, ...]] = None,
+        scheme: Scheme = Scheme.IMGT,
+        db_dir: Path = GENE_DB_DIR,
         extend_alignment: bool = False,
         v_gene: Optional[str] = None,
         j_gene: Optional[str] = None,
         c_scheme: Optional[CScheme] = None,
     ) -> None:
-        self.numbering = create_riot_aa(
-            allowed_species=allowed_species, db_dir=db_dir, return_all_domains=return_all_domains
-        )
+        self.numbering = create_riot_aa(allowed_species=allowed_species, db_dir=db_dir)
         self.scheme = scheme
         self.extend_alignment = extend_alignment
-        self.return_all_domains = return_all_domains
         self.v_gene = v_gene
         self.j_gene = j_gene
         self.c_scheme = c_scheme
 
-    def __call__(self, fasta_record: FastaRecord) -> AirrRearrangementEntryAA | list[SegmentedAirrRearrangementEntryAA]:
-        try:
-            res = self.numbering.run_on_sequence(
+    def __call__(self, fasta_record: FastaRecord) -> AirrRearrangementEntryAA:
+        with _report_failing_record(fasta_record, self.scheme):
+            return self.numbering.run_on_sequence(
                 fasta_record.description,
                 fasta_record.seq,
                 self.scheme,
-                extend_alignment=self.extend_alignment,
-                return_all_domains=self.return_all_domains,
+                self.extend_alignment,
                 v_gene=self.v_gene,
                 j_gene=self.j_gene,
                 c_scheme=self.c_scheme,
             )
-        except Exception as exc:
-            print(fasta_record.description)
-            print(self.scheme)
-            print(f"seq: {fasta_record.seq}")
-            raise exc
-
-        return res
 
 
-def _worker_initializer(
+class _MultidomainWorkerAA:
+    def __init__(
+        self,
+        allowed_species: Optional[tuple[Organism, ...]] = None,
+        scheme: Scheme = Scheme.IMGT,
+        db_dir: Path = GENE_DB_DIR,
+        extend_alignment: bool = False,
+        c_scheme: Optional[CScheme] = None,
+    ) -> None:
+        self.numbering = create_multidomain_riot_aa(allowed_species=allowed_species, db_dir=db_dir)
+        self.scheme = scheme
+        self.extend_alignment = extend_alignment
+        self.c_scheme = c_scheme
+
+    def __call__(self, fasta_record: FastaRecord) -> list[SegmentedAirrRearrangementEntryAA]:
+        with _report_failing_record(fasta_record, self.scheme):
+            return self.numbering.run_on_sequence(
+                fasta_record.description,
+                fasta_record.seq,
+                self.scheme,
+                self.extend_alignment,
+                c_scheme=self.c_scheme,
+            )
+
+
+@contextmanager
+def _report_failing_record(fasta_record: FastaRecord, scheme: Scheme) -> Iterator[None]:
+    try:
+        yield
+    except Exception:
+        print(fasta_record.description)
+        print(scheme)
+        print(f"seq: {fasta_record.seq}")
+        raise
+
+
+def _worker_initializer(  # pylint: disable=too-many-arguments
     allowed_species: Optional[tuple[Organism, ...]] = None,
     scheme: Scheme = Scheme.IMGT,
     db_dir: Path = GENE_DB_DIR,
@@ -112,12 +145,17 @@ def _worker_initializer(
     c_scheme: Optional[CScheme] = None,
 ):
     global worker  # pylint: disable=global-statement,global-variable-undefined
-    if input_type == InputType.NT:
-        worker = _WorkerNT(allowed_species, scheme, db_dir, return_all_domains, c_scheme)  # type: ignore
-    else:
-        worker = _WorkerAA(  # type: ignore
-            allowed_species, scheme, db_dir, return_all_domains, extend_alignment, v_gene, j_gene, c_scheme
-        )
+    match input_type, return_all_domains:
+        case InputType.NT, False:
+            worker = _WorkerNT(allowed_species, scheme, db_dir, c_scheme)  # type: ignore
+        case InputType.NT, True:
+            worker = _MultidomainWorkerNT(allowed_species, scheme, db_dir, c_scheme)  # type: ignore
+        case InputType.AA, False:
+            worker = _WorkerAA(  # type: ignore
+                allowed_species, scheme, db_dir, extend_alignment, v_gene, j_gene, c_scheme
+            )
+        case InputType.AA, True:
+            worker = _MultidomainWorkerAA(allowed_species, scheme, db_dir, extend_alignment, c_scheme)  # type: ignore
 
 
 def _worker_call(*args, **kwds):

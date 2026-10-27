@@ -1,15 +1,15 @@
-from riot_na.alignment.aa_gene_alignments import create_vjc_aligner_aa
+from riot_na.alignment.segment_aa_gene_alignments import create_segment_vjc_aligner_aa
 from riot_na.data.model import Locus, Organism
 
 
 def test_produce_aa_alignments():
     # given
-    aligner = create_vjc_aligner_aa(use_segment_aligner=True)
+    aligner = create_segment_vjc_aligner_aa()
 
     query_sequence = "QVQLQQWGAGLLKPSETLSLTCAVFGGSFSGYYWSWIRQPPGKGLEWIGEINHRGNTNDNPSLKSRVTISVDTSKNQFALKLSSVTAADTAVYYCARERGYTYGNFDHWGQGTLVTVSSASTKGPSVFPLAPSSKSTSGGTAALGCLVKDYFPEPVTVSWNSGALTSGVHTFPAVLQSSGLYSLSSVVTVPSSSLGTQTYICNVNHKPSNTKVDKKVEPKSCDKTHTCPPCPAPELLGGPSVFLFPPKPKDTLMISRTPEVTCVVVDVSHEDPEVKFNWYVDGVEVHNAKTKPREEQYNSTYRVVSVLTVLHQDWLNGKEYKCKVSNKALPAPIEKTISKAKGQPREPQVYTLPPSRDELTKNQVSLTCLVKGFYPSDIAVEWESNGQPENNYKTTPPVLDSDGSFFLYSKLTVDKSRWQQGNVFSCSVMHEALHNHYTQKSLSLSPGK"
 
     # when
-    alignments = aligner.produce_aa_alignments(query_sequence)[0]
+    alignments = aligner.produce_aa_alignments(query_sequence)[0].alignments
 
     # then
     assert alignments.v is not None
@@ -75,12 +75,12 @@ def test_produce_aa_alignments():
 
 def test_produce_aa_alignments_therapeutic():
     # given
-    aligner = create_vjc_aligner_aa(use_segment_aligner=True)
+    aligner = create_segment_vjc_aligner_aa()
 
     query_sequence = "EVQLVESGGGSVQPGGSLRLSCTASGFTISRSYWICWVRQAPGKGLEWVGCIYGDNDITPLYANWAKGRFTISRDTSKNTVYLQMNSLRAEDTATYYCARLGYADYAYDLWGQGTTVTVSS"
 
     # when
-    alignments = aligner.produce_aa_alignments(query_sequence)[0]
+    alignments = aligner.produce_aa_alignments(query_sequence)[0].alignments
 
     # then
     assert alignments.v is not None

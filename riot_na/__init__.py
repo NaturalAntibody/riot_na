@@ -11,12 +11,22 @@ from riot_na.api.riot_numbering import (
     get_or_create_riot_aa,
     get_or_create_riot_nt,
 )
+from riot_na.api.multidomain_riot_numbering import (
+    MultidomainRiotNumberingAA,
+    MultidomainRiotNumberingNT,
+    create_multidomain_riot_aa,
+    create_multidomain_riot_nt,
+    get_or_create_multidomain_riot_aa,
+    get_or_create_multidomain_riot_nt,
+)
 from riot_na.api.api_mp import run_on_file_mp
 from riot_na.data.scheme_regions import get_regions_definitions, get_region
 from riot_na.data.scheme_definitions import Regions, ChainRegions
 from riot_na.data.model import (
     AirrRearrangementEntryNT,
     AirrRearrangementEntryAA,
+    SegmentedAirrRearrangementEntryNT,
+    SegmentedAirrRearrangementEntryAA,
     ShortRegion,
     ChainType,
     Scheme,
@@ -36,6 +46,12 @@ __all__ = [
     "create_riot_nt",
     "get_or_create_riot_aa",
     "get_or_create_riot_nt",
+    "MultidomainRiotNumberingAA",
+    "MultidomainRiotNumberingNT",
+    "create_multidomain_riot_aa",
+    "create_multidomain_riot_nt",
+    "get_or_create_multidomain_riot_aa",
+    "get_or_create_multidomain_riot_nt",
     "run_on_file_mp",
     "get_regions_definitions",
     "get_region",
@@ -43,6 +59,8 @@ __all__ = [
     "ChainRegions",
     "AirrRearrangementEntryNT",
     "AirrRearrangementEntryAA",
+    "SegmentedAirrRearrangementEntryNT",
+    "SegmentedAirrRearrangementEntryAA",
     "ShortRegion",
     "ChainType",
     "Scheme",
