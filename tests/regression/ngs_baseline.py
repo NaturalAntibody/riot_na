@@ -6,10 +6,17 @@ Generate baselines (current ssw-aligner / riot stack)::
 
     poetry run python -m tests.regression.ngs_baseline generate
     poetry run python -m tests.regression.ngs_baseline generate --limit 100 --ncpu 8
+    poetry run python -m tests.regression.ngs_baseline generate --suffix ssw  # -> baseline_airr_nt_ssw.pkl
 
 Compare against baselines after swapping the aligner::
 
     poetry run python -m tests.regression.ngs_baseline compare --ncpu 8
+    poetry run python -m tests.regression.ngs_baseline compare --suffix ssw
+
+Compare two stored baseline sets by suffix, without re-numbering ('' = unsuffixed files)::
+
+    poetry run python -m tests.regression.ngs_baseline diff ssw parasail
+    poetry run python -m tests.regression.ngs_baseline diff '' parasail --no-aa
 """
 
 from __future__ import annotations
@@ -179,6 +186,23 @@ def generate_baseline_aa(
     return baseline_path
 
 
+def compare_baselines(baseline_a: Path, baseline_b: Path) -> list[str]:
+    """Compare two stored baselines and return mismatch descriptions (empty if identical)."""
+    for path in (baseline_a, baseline_b):
+        if not path.exists():
+            raise FileNotFoundError(path)
+
+    payload_a = load_baseline(baseline_a)
+    payload_b = load_baseline(baseline_b)
+    for key in ("input_type", "fasta_name", "scheme"):
+        if payload_a[key] != payload_b[key]:
+            raise ValueError(
+                f"{key} differs: {baseline_a.name}={payload_a[key]!r} {baseline_b.name}={payload_b[key]!r}"
+            )
+
+    return compare_entries(payload_a["entries"], payload_b["entries"])
+
+
 def compare_to_baseline(
     fasta_path: Path,
     baseline_path: Path,
@@ -226,14 +250,29 @@ def cli() -> None:
     """NGS AIRR regression baseline tools."""
 
 
+def _with_suffix(path: Path, suffix: str) -> Path:
+    """Return ``<stem>_<suffix><ext>`` for ``path`` (unchanged when suffix is empty)."""
+    if not suffix:
+        return path
+    return path.with_name(f"{path.stem}_{suffix}{path.suffix}")
+
+
 @cli.command("generate")
 @_common_options
-def generate_cmd(limit: int | None, ncpu: int | None) -> None:
+@click.option(
+    "--suffix",
+    type=str,
+    default=None,
+    help="Append '_<suffix>' to baseline file names, e.g. baseline_airr_nt_<suffix>.pkl.",
+)
+def generate_cmd(limit: int | None, ncpu: int | None, suffix: str = "") -> None:
     """Generate NT and AA baselines."""
-    click.echo(f"Writing NT baseline -> {BASELINE_NT}")
-    generate_baseline_nt(limit=limit, n_processes=ncpu)
-    click.echo(f"Writing AA baseline -> {BASELINE_AA}")
-    generate_baseline_aa(limit=limit, n_processes=ncpu)
+    baseline_nt = _with_suffix(BASELINE_NT, suffix)
+    baseline_aa = _with_suffix(BASELINE_AA, suffix)
+    click.echo(f"Writing NT baseline -> {baseline_nt}")
+    generate_baseline_nt(baseline_path=baseline_nt, limit=limit, n_processes=ncpu)
+    click.echo(f"Writing AA baseline -> {baseline_aa}")
+    generate_baseline_aa(baseline_path=baseline_aa, limit=limit, n_processes=ncpu)
     click.echo("Done.")
 
 
@@ -279,12 +318,20 @@ def generate_aa_cmd(limit: int | None, ncpu: int | None, fasta: Path, output: Pa
 )
 @click.option("--nt/--no-nt", default=True, show_default=True, help="Compare NT baseline.")
 @click.option("--aa/--no-aa", default=True, show_default=True, help="Compare AA baseline.")
-def compare_cmd(ncpu: int | None, nt: bool, aa: bool) -> None:
+@click.option(
+    "--suffix",
+    type=str,
+    default=None,
+    help="Compare against baselines generated with the same '--suffix'.",
+)
+def compare_cmd(ncpu: int | None, nt: bool, aa: bool, suffix: str = "") -> None:
     """Re-run numbering and compare against pickled baselines."""
+    baseline_nt = _with_suffix(BASELINE_NT, suffix)
+    baseline_aa = _with_suffix(BASELINE_AA, suffix)
     failed = False
     if nt:
-        click.echo(f"Comparing NT: {FASTA_NT} vs {BASELINE_NT}")
-        problems = compare_to_baseline(FASTA_NT, BASELINE_NT, InputType.NT, n_processes=ncpu)
+        click.echo(f"Comparing NT: {FASTA_NT} vs {baseline_nt}")
+        problems = compare_to_baseline(FASTA_NT, baseline_nt, InputType.NT, n_processes=ncpu)
         if problems:
             failed = True
             click.echo("NT mismatches:", err=True)
@@ -293,8 +340,8 @@ def compare_cmd(ncpu: int | None, nt: bool, aa: bool) -> None:
         else:
             click.echo("NT OK")
     if aa:
-        click.echo(f"Comparing AA: {FASTA_AA} vs {BASELINE_AA}")
-        problems = compare_to_baseline(FASTA_AA, BASELINE_AA, InputType.AA, n_processes=ncpu)
+        click.echo(f"Comparing AA: {FASTA_AA} vs {baseline_aa}")
+        problems = compare_to_baseline(FASTA_AA, baseline_aa, InputType.AA, n_processes=ncpu)
         if problems:
             failed = True
             click.echo("AA mismatches:", err=True)
@@ -302,6 +349,32 @@ def compare_cmd(ncpu: int | None, nt: bool, aa: bool) -> None:
                 click.echo(f"  {problem}", err=True)
         else:
             click.echo("AA OK")
+    if failed:
+        sys.exit(1)
+
+
+@cli.command("diff")
+@click.argument("suffix_a")
+@click.argument("suffix_b")
+@click.option("--nt/--no-nt", default=True, show_default=True, help="Diff NT baselines.")
+@click.option("--aa/--no-aa", default=True, show_default=True, help="Diff AA baselines.")
+def diff_cmd(suffix_a: str, suffix_b: str, nt: bool, aa: bool) -> None:
+    """Compare two stored baseline sets identified by SUFFIX_A and SUFFIX_B ('' = unsuffixed)."""
+    failed = False
+    for enabled, label, base_path in ((nt, "NT", BASELINE_NT), (aa, "AA", BASELINE_AA)):
+        if not enabled:
+            continue
+        path_a = _with_suffix(base_path, suffix_a)
+        path_b = _with_suffix(base_path, suffix_b)
+        click.echo(f"Diffing {label}: {path_a} vs {path_b}")
+        problems = compare_baselines(path_a, path_b)
+        if problems:
+            failed = True
+            click.echo(f"{label} mismatches:", err=True)
+            for problem in problems:
+                click.echo(f"  {problem}", err=True)
+        else:
+            click.echo(f"{label} OK")
     if failed:
         sys.exit(1)
 
