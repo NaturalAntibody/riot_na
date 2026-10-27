@@ -5,8 +5,8 @@ from typing import Literal, Optional, overload
 
 from cachetools import cached
 
-from riot_na.airr.airr_builder import AirrBuilder, SegmentedAirrBuilder
-from riot_na.airr.airr_builder_aa import AirrBuilderAA, SegmentedAirrBuilderAA
+from riot_na.airr.airr_builder import AirrBuilder
+from riot_na.airr.airr_builder_aa import AirrBuilderAA
 from riot_na.alignment.aa_gene_alignments import (
     VJCAlignerAA,
     VJCAlignmentTranslatorAA,
@@ -27,6 +27,8 @@ from riot_na.data.model import (
     CScheme,
     Organism,
     Scheme,
+    SegmentedAirrRearrangementEntryAA,
+    SegmentedAirrRearrangementEntryNT,
 )
 from riot_na.schemes.region_offsets import (
     infer_aa_region_offsets,
@@ -103,7 +105,7 @@ class RiotNumberingNT:
         return_all_domains: Literal[True] = ...,
         *,
         c_scheme: Optional[CScheme] = ...,
-    ) -> list[AirrRearrangementEntryNT]: ...
+    ) -> list[SegmentedAirrRearrangementEntryNT]: ...
 
     @overload
     def run_on_sequence(
@@ -127,7 +129,7 @@ class RiotNumberingNT:
         return_all_domains: bool = ...,
         *,
         c_scheme: Optional[CScheme] = ...,
-    ) -> AirrRearrangementEntryNT | list[AirrRearrangementEntryNT]: ...
+    ) -> AirrRearrangementEntryNT | list[SegmentedAirrRearrangementEntryNT]: ...
 
     def run_on_sequence(
         self,
@@ -137,7 +139,7 @@ class RiotNumberingNT:
         extend_alignment: bool = True,
         return_all_domains: bool = False,
         c_scheme: Optional[CScheme] = None,
-    ) -> AirrRearrangementEntryNT | list[AirrRearrangementEntryNT]:  # pylint: disable=too-many-statements
+    ) -> AirrRearrangementEntryNT | list[SegmentedAirrRearrangementEntryNT]:  # pylint: disable=too-many-statements
         """
         Align and number nucleotide sequence.
 
@@ -230,10 +232,22 @@ class RiotNumberingNT:
 
             # produce airr result
             # this is separated on purpose to enable other output formats
-            airr_builder = AirrBuilder(header, sequence or query_sequence, scheme)
+            airr_builder: AirrBuilder = AirrBuilder(
+                AirrRearrangementEntryNT(
+                    sequence_header=header, sequence=sequence or query_sequence, numbering_scheme=scheme.value
+                )
+            )
             if return_all_domains:
-                airr_builder = SegmentedAirrBuilder(header, sequence, scheme, query_sequence)
-                airr_builder.with_segment_start_end(segment_start, segment_end)
+                airr_builder = AirrBuilder(
+                    SegmentedAirrRearrangementEntryNT(
+                        sequence_header=header,
+                        sequence=sequence,
+                        numbering_scheme=scheme.value,
+                        query_sequence=query_sequence,
+                        segment_start=segment_start + 1,
+                        segment_end=segment_end,
+                    )
+                )
 
             if alignment.v:
                 airr_builder.with_v_gene_alignment(alignment.v)
@@ -277,9 +291,20 @@ class RiotNumberingNT:
         if not results:
             results = [
                 (
-                    AirrBuilder(header, sequence, scheme).build()
+                    AirrBuilder(
+                        AirrRearrangementEntryNT(
+                            sequence_header=header, sequence=sequence, numbering_scheme=scheme.value
+                        )
+                    ).build()
                     if not return_all_domains
-                    else SegmentedAirrBuilder(header, sequence, scheme, query_sequence).build()
+                    else AirrBuilder(
+                        SegmentedAirrRearrangementEntryNT(
+                            sequence_header=header,
+                            sequence=sequence,
+                            numbering_scheme=scheme.value,
+                            query_sequence=query_sequence,
+                        )
+                    ).build()
                 )
             ]
 
@@ -319,7 +344,7 @@ class RiotNumberingAA:
         v_gene: Optional[str] = ...,
         j_gene: Optional[str] = ...,
         c_scheme: Optional[CScheme] = ...,
-    ) -> list[AirrRearrangementEntryAA]: ...
+    ) -> list[SegmentedAirrRearrangementEntryAA]: ...
 
     @overload
     def run_on_sequence(
@@ -347,7 +372,7 @@ class RiotNumberingAA:
         v_gene: Optional[str] = ...,
         j_gene: Optional[str] = ...,
         c_scheme: Optional[CScheme] = ...,
-    ) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]: ...
+    ) -> AirrRearrangementEntryAA | list[SegmentedAirrRearrangementEntryAA]: ...
 
     def run_on_sequence(
         self,
@@ -359,7 +384,7 @@ class RiotNumberingAA:
         v_gene: Optional[str] = None,
         j_gene: Optional[str] = None,
         c_scheme: Optional[CScheme] = None,
-    ) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]:  # pylint: disable=too-many-statements
+    ) -> AirrRearrangementEntryAA | list[SegmentedAirrRearrangementEntryAA]:  # pylint: disable=too-many-statements
         """
         Align and number amino acid sequence.
 
@@ -446,10 +471,22 @@ class RiotNumberingAA:
 
             # produce airr result
             # this is separated on purpose to enable other output formats
-            airr_builder = AirrBuilderAA(header, query_sequence, scheme)
+            airr_builder: AirrBuilderAA = AirrBuilderAA(
+                AirrRearrangementEntryAA(
+                    sequence_header=header, sequence_aa=query_sequence, numbering_scheme=scheme.value
+                )
+            )
             if return_all_domains:
-                airr_builder = SegmentedAirrBuilderAA(header, sequence_aa, scheme, query_sequence)
-                airr_builder.with_segment_start_end(segment_start, segment_end)
+                airr_builder = AirrBuilderAA(
+                    SegmentedAirrRearrangementEntryAA(
+                        sequence_header=header,
+                        sequence_aa=sequence_aa,
+                        numbering_scheme=scheme.value,
+                        query_sequence=query_sequence,
+                        segment_start=segment_start + 1,
+                        segment_end=segment_end,
+                    )
+                )
 
             if alignment.v:
                 airr_builder.with_v_gene_alignment_aa(alignment.v)
@@ -485,9 +522,20 @@ class RiotNumberingAA:
         if not results:
             results = [
                 (
-                    AirrBuilderAA(header, sequence_aa, scheme).build()
+                    AirrBuilderAA(
+                        AirrRearrangementEntryAA(
+                            sequence_header=header, sequence_aa=sequence_aa, numbering_scheme=scheme.value
+                        )
+                    ).build()
                     if not return_all_domains
-                    else SegmentedAirrBuilderAA(header, sequence_aa, scheme, query_sequence).build()
+                    else AirrBuilderAA(
+                        SegmentedAirrRearrangementEntryAA(
+                            sequence_header=header,
+                            sequence_aa=sequence_aa,
+                            numbering_scheme=scheme.value,
+                            query_sequence=query_sequence,
+                        )
+                    ).build()
                 )
             ]
 

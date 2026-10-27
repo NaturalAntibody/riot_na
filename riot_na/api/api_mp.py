@@ -39,7 +39,7 @@ class _WorkerNT:
         self.return_all_domains = return_all_domains
         self.c_scheme = c_scheme
 
-    def __call__(self, fasta_record: FastaRecord) -> AirrRearrangementEntryNT | list[AirrRearrangementEntryNT]:
+    def __call__(self, fasta_record: FastaRecord) -> AirrRearrangementEntryNT | list[SegmentedAirrRearrangementEntryNT]:
         try:
             res = self.numbering.run_on_sequence(
                 fasta_record.description,
@@ -79,7 +79,7 @@ class _WorkerAA:
         self.j_gene = j_gene
         self.c_scheme = c_scheme
 
-    def __call__(self, fasta_record: FastaRecord) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]:
+    def __call__(self, fasta_record: FastaRecord) -> AirrRearrangementEntryAA | list[SegmentedAirrRearrangementEntryAA]:
         try:
             res = self.numbering.run_on_sequence(
                 fasta_record.description,
