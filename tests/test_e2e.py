@@ -8,6 +8,7 @@ from riot_na import (
     Locus,
     Scheme,
 )
+from riot_na.api.multidomain_riot_numbering import get_or_create_multidomain_riot_nt
 from riot_na.api.riot_numbering import get_or_create_riot_aa, get_or_create_riot_nt
 from riot_na.common.io import write_airr_iter_to_csv
 from riot_na.data.model import SegmentedAirrRearrangementEntryNT
@@ -32,9 +33,9 @@ def test_e2e_nucleotides():
         assert airr_light.j_call
         assert ChainType.from_locus(Locus(airr_light.locus)) == ChainType.LIGHT
 
-    riot_numbering_nt = get_or_create_riot_nt(return_all_domains=True)
+    riot_numbering_nt = get_or_create_multidomain_riot_nt()
     airrs_list: list[SegmentedAirrRearrangementEntryNT] = riot_numbering_nt.run_on_sequence(
-        "", SEQUENCES_NT["H"] + "GGGGGGSGGGG" + SEQUENCES_NT["L"], scheme=Scheme.IMGT, return_all_domains=True
+        "", SEQUENCES_NT["H"] + "GGGGGGSGGGG" + SEQUENCES_NT["L"], scheme=Scheme.IMGT
     )
     assert airrs_list[0].v_call
     assert airrs_list[0].j_call

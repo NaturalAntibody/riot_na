@@ -1,27 +1,28 @@
 # pylint: skip-file
-from riot_na.alignment.nt_gene_alignments import create_vdjc_aligner_nt
+from riot_na.alignment.segment_nt_gene_alignments import create_segment_vdjc_aligner_nt
 from riot_na.data.model import Locus, Organism
 
 
 def test_produce_nt_alignments():
 
     # given
-    aligner = create_vdjc_aligner_nt(use_segment_aligner=True)
+    aligner = create_segment_vdjc_aligner_nt()
 
     query_sequence = "AACAACACATGTCCAATGTCCTCTCCACAGACACTGAACACACTGACTCTAACCATGGGAAGGAGCTGGATCTTTCTCTTCCTCCTGTCAGGAACTGCAGGTGTCCACTCTGAGGTCCAGCTGCAACAGTCTGGACCTGTGCTGGTGAAGCCTGGGGCTTCAGTGAAGATGTCCTGTAAGGCTTCTGGATACACATTCACTGACTACTATATGAACTGGGTGAAGCAGAGCCATGGAAAGAGACTTGAGTGGATTGGAGTTATTAATCCTTACAACGGTGGTACTAACTATAACCAGAAGTTCAAGGGCAAGGCCACATTGACTGTTGACAAGTCCTCCAGCACAGCCTACATGGAGCTCAACAGCCTGACATCTGAGGACTCTGCAGTCTATTACTGTGCAGATGGGATTATTACGAATTGGTATTTCGATGTCTGGGGCACAGGGACCACGGTCACCGTCTCCTCAGCCAAAACGACACCCCCATCTGTCTATCCACTGGCCCCTGGATCTGCTGCCCAAACTAACTCCATGGTGACCCTGGGATGCCTGGTCAAGGGCTATTTCCCTGAGCCAGTGACAGTGACCTGGAACTCTGGATCCCTGTCCAGCGGTGTGCACACCTTCCCAGCTGTCCTGCAGTCTGACCTCTACACTCTGAGCAGCTCAGTGACTGTCCCCTCCAGCACCTGGCCCAGCCAGACCGTCACCTGCAACGTTGCCCACCCGGCCAGCAGCACCAAGGTGGACAAGAAAATTGTGCCCAGGGATTGTGGTTGTAAGCCTTGCATATGTACAGTCCCAGAAGT"
 
     # when
-    alignments = aligner.produce_nt_alignments(query_sequence)[0]
+    domain = aligner.produce_nt_alignments(query_sequence)[0]
+    alignments = domain.alignments
 
     # then
     assert alignments.v is not None
     assert alignments.v.target_id == "IGHV-2ZSK"
     assert alignments.v.alignment_score == 445.8980348533401
     assert alignments.v.seq_identity == 0.9896907216494846
-    assert alignments.v.e_value == 5.147860973643458e-78
-    assert alignments.segment_start == 85
-    assert alignments.v.q_start == 26
-    assert alignments.v.q_end == 402 - alignments.segment_start
+    assert alignments.v.e_value == 5.048316700672452e-78
+    assert domain.segment_start == 99
+    assert alignments.v.q_start == 111 - domain.segment_start
+    assert alignments.v.q_end == 402 - domain.segment_start
     assert alignments.v.q_len == 291
     assert alignments.v.t_start == 0
     assert alignments.v.t_end == 291
@@ -33,7 +34,7 @@ def test_produce_nt_alignments():
     assert (
         alignments.v.q_seq
         == "AACAACACATGTCCAATGTCCTCTCCACAGACACTGAACACACTGACTCTAACCATGGGAAGGAGCTGGATCTTTCTCTTCCTCCTGTCAGGAACTGCAGGTGTCCACTCTGAGGTCCAGCTGCAACAGTCTGGACCTGTGCTGGTGAAGCCTGGGGCTTCAGTGAAGATGTCCTGTAAGGCTTCTGGATACACATTCACTGACTACTATATGAACTGGGTGAAGCAGAGCCATGGAAAGAGACTTGAGTGGATTGGAGTTATTAATCCTTACAACGGTGGTACTAACTATAACCAGAAGTTCAAGGGCAAGGCCACATTGACTGTTGACAAGTCCTCCAGCACAGCCTACATGGAGCTCAACAGCCTGACATCTGAGGACTCTGCAGTCTATTACTGTGCAGATGGGATTATTACGAATTGGTATTTCGATGTCTGGGGCACAGGGACCACGGTCACCGTCTCCTCAGCCAAAACGACACCCCCATCTGTCTATCCACTGGCCCCTGGATCTGCTGCCCAAACTAACTCCATGGTGACCCTGGGATGCCTGGTCAAGGGCTATTTCCCTGAGCCAGTGACAGTGACCTGGAACTCTGGATCCCTGTCCAGCGGTGTGCACACCTTCCCAGCTGTCCTGCAGTCTGACCTCTACACTCTGAGCAGCTCAGTGACTGTCCCCTCCAGCACCTGGCCCAGCCAGACCGTCACCTGCAACGTTGCCCACCCGGCCAGCAGCACCAAGGTGGACAAGAAAATTGTGCCCAGGGATTGTGGTTGTAAGCCTTGCATATGTACAGTCCCAGAAGT"[
-            alignments.segment_start : alignments.segment_end
+            domain.segment_start : domain.segment_end
         ]
     )
     assert (
@@ -47,8 +48,8 @@ def test_produce_nt_alignments():
     assert alignments.d.alignment_score == 14.301386420997765
     assert alignments.d.seq_identity == 0.9
     assert alignments.d.e_value == 24.1875
-    assert alignments.d.q_start == 408 - alignments.segment_start
-    assert alignments.d.q_end == 418 - alignments.segment_start
+    assert alignments.d.q_start == 408 - domain.segment_start
+    assert alignments.d.q_end == 418 - domain.segment_start
     assert alignments.d.q_len == 10
     assert alignments.d.t_start == 6
     assert alignments.d.t_end == 16
@@ -65,8 +66,8 @@ def test_produce_nt_alignments():
     assert alignments.j.alignment_score == 75.06770154324091
     assert alignments.j.seq_identity == 0.9795918367346939
     assert alignments.j.e_value == 8.791403161012568e-10
-    assert alignments.j.q_start == 420 - alignments.segment_start
-    assert alignments.j.q_end == 469 - alignments.segment_start
+    assert alignments.j.q_start == 420 - domain.segment_start
+    assert alignments.j.q_end == 469 - domain.segment_start
     assert alignments.j.q_len == 49
     assert alignments.j.t_start == 4
     assert alignments.j.t_end == 53
@@ -88,8 +89,8 @@ def test_produce_nt_alignments():
     assert alignments.c.alignment_score == 209.06521694100786
     assert alignments.c.seq_identity == 0.7833333333333333
     assert alignments.c.e_value == 3.1801713964550777e-34
-    assert alignments.c.q_start == 538 - alignments.segment_start
-    assert alignments.c.q_end == 775 - alignments.segment_start
+    assert alignments.c.q_start == 538 - domain.segment_start
+    assert alignments.c.q_end == 775 - domain.segment_start
     assert alignments.c.q_len == 237
     assert alignments.c.t_start == 70
     assert alignments.c.t_end == 310

@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, unique
 from typing import Generic, Optional, Sequence, TypeVar
 
@@ -102,6 +102,15 @@ class Scheme(str, Enum):
     CHOTHIA = "chothia"
     IMGT = "imgt"
     MARTIN = "martin"
+
+
+@unique
+class CScheme(str, Enum):
+    """Numbering schemes of the constant region (human IGHG1-4, IGKC and IGLC)."""
+
+    EU = "eu"
+    KABAT = "kabat"
+    IMGT = "imgt"
 
 
 @unique
@@ -245,6 +254,9 @@ class AirrRearrangementEntryNT:  # pylint: disable=too-many-instance-attributes
     sequence_aa_scheme_cigar: Optional[Cigar] = None
     scheme_residue_mapping: Optional[dict[str, str]] = None
     positional_scheme_mapping: Optional[dict[int, str]] = None
+    c_numbering_scheme: Optional[str] = None
+    c_scheme_residue_mapping: Optional[dict[str, str]] = None
+    c_positional_scheme_mapping: Optional[dict[int, str]] = None
     exc: Optional[str] = None
     additional_validation_flags: Optional[EntryValidationResults] = None
 
@@ -351,6 +363,9 @@ class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
     sequence_aa_scheme_cigar: Optional[Cigar] = None
     scheme_residue_mapping: Optional[dict[str, str]] = None
     positional_scheme_mapping: Optional[dict[int, str]] = None
+    c_numbering_scheme: Optional[str] = None
+    c_scheme_residue_mapping: Optional[dict[str, str]] = None
+    c_positional_scheme_mapping: Optional[dict[int, str]] = None
     exc: Optional[str] = None
     additional_validation_flags: Optional[EntryValidationResults] = None
 
@@ -399,6 +414,12 @@ def serialize_airr_entry(entry: AirrRearrangementEntry_co) -> dict[str, str]:
     )
     entry_dict["positional_scheme_mapping"] = entry_dict["positional_scheme_mapping"] and base64_encode(
         json.dumps(entry_dict["positional_scheme_mapping"], separators=(",", ":"))
+    )
+    entry_dict["c_scheme_residue_mapping"] = entry_dict["c_scheme_residue_mapping"] and base64_encode(
+        json.dumps(entry_dict["c_scheme_residue_mapping"], separators=(",", ":"))
+    )
+    entry_dict["c_positional_scheme_mapping"] = entry_dict["c_positional_scheme_mapping"] and base64_encode(
+        json.dumps(entry_dict["c_positional_scheme_mapping"], separators=(",", ":"))
     )
     entry_dict["exc"] = entry_dict["exc"] and base64_encode(entry_dict["exc"])
     entry_dict["additional_validation_flags"] = entry_dict["additional_validation_flags"] and base64_encode(
@@ -587,15 +608,15 @@ AlignmentEntry = TypeVar("AlignmentEntry", AlignmentEntryNT, AlignmentEntryAA)
 
 @dataclass
 class AlignmentSegment(Generic[AlignmentEntry]):
+    """V gene alignments of a domain found in the query by the segment aligner."""
+
+    segment_start: int
+    segment_end: int
     alignments: Sequence[AlignmentEntry]
-    best_alignment: Optional[AlignmentEntry] = None  # Best alignment for this segment
-    segment_start: Optional[int] = None
-    segment_end: Optional[int] = None
+    best_alignment: AlignmentEntry = field(init=False)
 
     def __post_init__(self):
-        """Set the best alignment after initialization"""
-        if self.alignments:
-            self.best_alignment = min(self.alignments)  # Lowest e-value first
+        self.best_alignment = min(self.alignments)  # Lowest e-value first
 
 
 @dataclass
@@ -604,8 +625,6 @@ class AlignmentsNT:
     d: Optional[AlignmentEntryNT] = None
     j: Optional[AlignmentEntryNT] = None
     c: Optional[AlignmentEntryNT] = None
-    segment_start: Optional[int] = None
-    segment_end: Optional[int] = None
 
 
 @dataclass
@@ -613,8 +632,24 @@ class AlignmentsAA:
     v: Optional[AlignmentEntryAA] = None
     j: Optional[AlignmentEntryAA] = None
     c: Optional[AlignmentEntryAA] = None
-    segment_start: Optional[int] = None
-    segment_end: Optional[int] = None
+
+
+@dataclass
+class SegmentAlignmentsNT:
+    """Alignments of a domain found in query[segment_start:segment_end]."""
+
+    alignments: AlignmentsNT
+    segment_start: int
+    segment_end: int
+
+
+@dataclass
+class SegmentAlignmentsAA:
+    """Alignments of a domain found in query[segment_start:segment_end]."""
+
+    alignments: AlignmentsAA
+    segment_start: int
+    segment_end: int
 
 
 @dataclass

@@ -1,29 +1,37 @@
+import math
 import os
-from functools import partial
+from functools import cached_property, partial
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
 from ssw_aligner import StripedSmithWaterman
 
+from riot_na.alignment.alignment_metrics import GumbellParams, compute_bit_score
 from riot_na.alignment.skbio_alignment import (
     align_aa,  # type: ignore  # pylint: disable=import-error
 )
 from riot_na.alignment.skbio_alignment import align
 from riot_na.common.fasta import FastaRecord, parse_fasta
-from riot_na.common.gene_match_utils import create_gene_lookup
+from riot_na.common.gene_match_utils import create_gene_lookup, gene_lookup_key
 from riot_na.common.multi_species_prefiltering import MultiSpeciesPrefiltering
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.constants import BLOSUM_62
 from riot_na.data.model import (
     AlignmentEntryAA,
     AlignmentEntryNT,
-    AlignmentSegment,
     Gene,
     GeneAA,
     GermlineGene,
     Locus,
     Organism,
+    SpeciesGeneMatch,
     SpeciesPrefilteringResult,
+)
+
+# germlines selected by name are looked up in human germlines first, if more species have germlines of the same name
+GENE_SELECTION_SPECIES_ORDER = (
+    Organism.HOMO_SAPIENS,
+    *(species for species in Organism if species != Organism.HOMO_SAPIENS),
 )
 
 ALIGNER_PARAMS = {"match_score": 1, "mismatch_score": -1, "gap_open_penalty": 4, "gap_extend_penalty": 1}
@@ -119,10 +127,22 @@ class GeneAligner:
 
         return result
 
-    def align(self, query: str, both_strains: bool) -> Sequence[AlignmentSegment]:
+    def align(self, query: str, both_strains: bool) -> Optional[AlignmentEntryNT]:
+        """Best alignment (lowest e-value) of the query to the genes."""
         prefiltering_result = self._prefilter(query, both_strains)
         alignments = self._align_sequences(query, prefiltering_result)
-        return [AlignmentSegment(alignments)]
+        return min(alignments, default=None)
+
+    def max_alignment_score(self, query: str) -> float:
+        """
+        Upper bound of alignment scores (bit scores) of the query to the genes: aligned nucleotides score at most
+        match_score, mismatches and gaps lower the score.
+        """
+        return compute_bit_score(ALIGNER_PARAMS["match_score"] * min(len(query), self._max_gene_length))
+
+    @cached_property
+    def _max_gene_length(self) -> int:
+        return max((len(gene.sequence) for gene in self.gene_lookup.values()), default=0)
 
 
 AA_ALIGNER_PARAMS = {
@@ -132,9 +152,23 @@ AA_ALIGNER_PARAMS = {
     "substitution_matrix": BLOSUM_62,
 }
 
+# best substitution score of every residue, residues missing in the matrix get the best score of the matrix
+_MAX_SUBSTITUTION_SCORES_AA = {
+    residue: max(0, math.ceil(max(scores.values()))) for residue, scores in BLOSUM_62.items()
+}
+_MAX_SUBSTITUTION_SCORE_AA = max(_MAX_SUBSTITUTION_SCORES_AA.values())
 
-class GeneAlignerAA:
-    def __init__(
+
+def max_raw_alignment_score_aa(sequence: str) -> int:
+    """
+    Upper bound of raw scores of local alignments of the sequence (to any sequence): aligned residues score at most
+    their best substitution score, gaps lower the score.
+    """
+    return sum(_MAX_SUBSTITUTION_SCORES_AA.get(residue, _MAX_SUBSTITUTION_SCORE_AA) for residue in sequence)
+
+
+class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         genes: Sequence[GeneAA],
         kmer_size: int,
@@ -144,6 +178,9 @@ class GeneAlignerAA:
         e_value_threshold: Optional[float] = None,
         alignment_length_threshold: Optional[int] = None,
         max_cdr3_length: Optional[int] = None,
+        min_seq_identity: Optional[float] = None,
+        min_internal_alignment_length: Optional[int] = None,
+        max_fragment_germline_start: int = 0,
     ) -> None:
         # Initialize the base prefiltering directly with species-aware keys
         self.prefiltering = MultiSpeciesPrefiltering(genes, kmer_size, distance_threshold, top_n, modulo_n)
@@ -154,6 +191,26 @@ class GeneAlignerAA:
         self.e_value_threshold = e_value_threshold
         self.alignment_length_threshold = alignment_length_threshold
         self.max_cdr3_length = max_cdr3_length
+        self.min_seq_identity = min_seq_identity
+        self.min_internal_alignment_length = min_internal_alignment_length
+        self.max_fragment_germline_start = max_fragment_germline_start
+
+    def find_gene(self, gene_id: str) -> Optional[Gene | GeneAA]:
+        """
+        Look up a germline by its exact name, e.g. IGHV3-7*01, in the species the aligner was created for.
+        Human germline is returned if more species have a germline of this name.
+        """
+        for species in GENE_SELECTION_SPECIES_ORDER:
+            for locus in Locus:
+                gene = self.gene_lookup.get(gene_lookup_key(species, locus, gene_id))
+                if gene is not None:
+                    return gene
+        return None
+
+    def get_gene(self, gene_id: str) -> Gene | GeneAA:
+        gene = self.find_gene(gene_id)
+        assert gene is not None, f"Gene {gene_id} not found in germline database"
+        return gene
 
     def _prefilter(self, query: str) -> SpeciesPrefilteringResult:
         """Prefilter genes and return species-aware gene matches."""
@@ -189,6 +246,18 @@ class GeneAlignerAA:
             if self.max_cdr3_length is not None:
                 if alignment.q_start > self.max_cdr3_length:
                     continue
+            if self.min_seq_identity is not None:
+                assert alignment.seq_identity is not None
+                if alignment.seq_identity < self.min_seq_identity:
+                    continue
+            if self.min_internal_alignment_length is not None:
+                # alignments shorter than that have to start at the beginning of the germline, or at most
+                # max_fragment_germline_start residues after it if they start at the beginning of the query too
+                if alignment_length < self.min_internal_alignment_length and (
+                    alignment.t_start > self.max_fragment_germline_start
+                    or (alignment.t_start > 0 and alignment.q_start > self.max_fragment_germline_start)
+                ):
+                    continue
 
             result.append(
                 AlignmentEntryAA(
@@ -210,10 +279,47 @@ class GeneAlignerAA:
 
         return result
 
-    def align(self, query: str) -> Sequence[AlignmentSegment]:
+    def align(self, query: str) -> Optional[AlignmentEntryAA]:
+        """Best alignment (lowest e-value) of the query to the genes."""
         prefiltering_result = self._prefilter(query)
         alignments = self._align_sequences(query, prefiltering_result)
-        return [AlignmentSegment(alignments)]
+        return min(alignments, default=None)
+
+    def max_alignment_score(self, query: str) -> float:
+        """Upper bound of alignment scores (bit scores) of the query to the genes (see max_raw_alignment_score_aa)."""
+        return compute_bit_score(
+            min(self._max_gene_raw_score, max_raw_alignment_score_aa(query)), gumbell_params=GumbellParams.AA
+        )
+
+    @cached_property
+    def _max_gene_raw_score(self) -> int:
+        return max((max_raw_alignment_score_aa(gene.sequence) for gene in self.gene_lookup.values()), default=0)
+
+    def align_to_genes(self, query: str, gene_ids: Sequence[str]) -> Sequence[AlignmentEntryAA]:
+        """
+        Align query to explicitly selected germlines, skipping prefiltering.
+
+        Alignment thresholds are applied just like in the regular, prefiltered path,
+        so a poorly matching germline may yield no alignment at all.
+        """
+        gene_matches = []
+
+        for gene_id in gene_ids:
+            gene = self.get_gene(gene_id)
+            gene_matches.append(
+                SpeciesGeneMatch(
+                    species_gene_id=gene_lookup_key(gene.species, gene.locus, gene.name),
+                    gene_id=gene.name,
+                    rev_comp=False,
+                    coverage=0,
+                    species=gene.species,
+                    locus=gene.locus,
+                )
+            )
+
+        prefiltering_result = SpeciesPrefilteringResult(query=query, rev_comp_query="", top_matches=gene_matches)
+
+        return self._align_sequences(query, prefiltering_result)
 
 
 def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> dict:
@@ -319,6 +425,14 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 "modulo_n": int(os.environ.get("MODULO_N_C_AA", 2)),
                 "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_C_AA", 4)),
                 "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_C_AA", 0.05)),
+                # filter out matches of non antibody regions following V region, e.g. proline rich CAR hinges
+                # to IgG and IgA hinges. Short C regions (e.g. CH1 fragments in Fabs) start at the C germline start.
+                "min_seq_identity": float(os.environ.get("MIN_SEQ_IDENTITY_C_AA", 0.4)),
+                "min_internal_alignment_length": int(os.environ.get("MIN_INTERNAL_ALIGNMENT_LENGTH_C_AA", 50)),
+                # the first C residue is encoded by the J-C junction codon (its first nucleotide comes from J), so it is
+                # missing or different when J ends differently, e.g. absorbed by J alignment or mutated. C fragments
+                # without it start right after J (or at the start of the query of the constant region aligner)
+                "max_fragment_germline_start": int(os.environ.get("MAX_FRAGMENT_GERMLINE_START_C_AA", 1)),
             }
         case _:
             raise ValueError("AA aligner not supported for gene type")

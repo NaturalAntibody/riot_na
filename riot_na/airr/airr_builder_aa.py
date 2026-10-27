@@ -1,5 +1,6 @@
-from typing import Optional
+from typing import Generic, Optional, TypeVar
 
+from riot_na.airr.airr_builder import is_complete_vdj
 from riot_na.airr.airr_validator import validate_airr_entry_aa
 from riot_na.alignment.alignment_utils import (
     align_sequences,
@@ -11,22 +12,24 @@ from riot_na.data.model import (
     AirrRearrangementEntryAA,
     AlignmentEntryAA,
     AlignmentString,
+    CScheme,
     RegionOffsetsAA,
     Scheme,
     SchemeAlignment,
-    SegmentedAirrRearrangementEntryAA,
 )
 
+RearrangementT = TypeVar("RearrangementT", bound=AirrRearrangementEntryAA)
 
-class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
-    def __init__(self, sequence_header: str, sequence: str, scheme: Scheme):
-        self.sequence_header = sequence_header
-        self.sequence_aa = sequence
-        self.scheme = scheme
 
-        self.rearrangement = AirrRearrangementEntryAA(
-            sequence_header=sequence_header, sequence_aa=sequence, numbering_scheme=scheme.value
-        )
+class AirrBuilderAA(Generic[RearrangementT]):  # pylint: disable=too-many-instance-attributes
+    """Builds the given AIRR rearrangement entry, which carries the sequence header, sequence and scheme."""
+
+    def __init__(self, rearrangement: RearrangementT):
+        self.sequence_header = rearrangement.sequence_header
+        self.sequence_aa = rearrangement.sequence_aa
+        self.scheme = Scheme(rearrangement.numbering_scheme)
+
+        self.rearrangement = rearrangement
 
         self.v_gene_sequence_aa: Optional[str] = None
         self.v_gene_alignment_aa: Optional[AlignmentEntryAA] = None
@@ -128,16 +131,6 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
 
         if c_aln is not None:
             assert self.v_gene_alignment_aa is not None
-            assert self.j_gene_alignment_aa is not None
-            assert self.j_gene_alignment_aa.q_end is not None
-            assert self.j_gene_alignment_aa.q_start is not None
-            assert self.j_gene_alignment_aa.t_start is not None
-            assert self.j_gene_alignment_aa.t_end is not None
-            assert self.j_gene_alignment_aa.target_id is not None
-            assert self.j_gene_alignment_aa.cigar is not None
-            assert self.j_gene_alignment_aa.e_value is not None
-            assert self.j_gene_alignment_aa.seq_identity is not None
-            assert self.j_gene_alignment_aa.alignment_score is not None
             assert self.v_gene_alignment_aa.q_end is not None
             assert self.v_gene_alignment_aa.q_start is not None
             assert self.v_gene_alignment_aa.t_start is not None
@@ -147,9 +140,9 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
             assert self.v_gene_alignment_aa.e_value is not None
             assert self.v_gene_alignment_aa.seq_identity is not None
             assert self.v_gene_alignment_aa.alignment_score is not None
-            # offset c_aln by the end of j_gene_alignment_aa
-
-            c_gene_alignment_aa = offset_alignments(self.j_gene_alignment_aa.q_end, c_aln)
+            # offset c_aln by the end of j_gene_alignment_aa or v_gene_alignment_aa, if J was not found
+            c_offset = self.j_gene_alignment_aa.q_end if self.j_gene_alignment_aa else self.v_gene_alignment_aa.q_end
+            c_gene_alignment_aa = offset_alignments(c_offset, c_aln)
             self.c_gene_alignment_aa = c_gene_alignment_aa
             self.rearrangement.c_call = c_gene_alignment_aa.target_id
 
@@ -230,11 +223,19 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
         self.rearrangement.positional_scheme_mapping = mapping
         return self
 
+    def with_c_scheme_numbering(
+        self, c_scheme: CScheme, residue_mapping: dict[str, str], positional_mapping: dict[int, str]
+    ):
+        self.rearrangement.c_numbering_scheme = c_scheme.value
+        self.rearrangement.c_scheme_residue_mapping = residue_mapping
+        self.rearrangement.c_positional_scheme_mapping = positional_mapping
+        return self
+
     def with_scheme_alignment_exc(self, exc: str):
         self.rearrangement.exc = exc
         return self
 
-    def build(self):  # pylint: disable=too-many-statements
+    def build(self) -> RearrangementT:  # pylint: disable=too-many-statements
         if self.v_gene_alignment_aa is None:  # or self.rearrangement.sequence_alignment_aa is None:
             return self.rearrangement
 
@@ -271,7 +272,7 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
         )
         vj_junction_alignment_str = vj_junction_len * "I"
 
-        full_alignment_str = v_aln_str + vj_junction_alignment_str + j_aln_str
+        full_alignment_str = AlignmentString(v_aln_str + vj_junction_alignment_str + j_aln_str)
 
         sequence_alignment_aa, germline_alignment_aa = align_sequences(
             sequence_alignment_aa_segment, germline_segment, full_alignment_str
@@ -279,7 +280,7 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
         self.rearrangement.sequence_alignment_aa = sequence_alignment_aa
         self.rearrangement.germline_alignment_aa = germline_alignment_aa
 
-        if self.rearrangement.cdr3_aa is not None:
+        if self.aa_offsets is not None and self.rearrangement.cdr3_aa is not None:
             jun_start_aa = self.aa_offsets.cdr3_start_aa - 1
             jun_end_aa = self.aa_offsets.cdr3_end_aa + 1
 
@@ -289,11 +290,8 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
         # annotate
         self.rearrangement.stop_codon = "*" in self.rearrangement.sequence_alignment_aa
         if self.aa_offsets:
-            self.rearrangement.complete_vdj = (
-                self.aa_offsets.fwr1_start_aa
-                and self.aa_offsets.fwr1_start_aa != -1
-                and self.aa_offsets.fwr4_end_aa
-                and self.aa_offsets.fwr4_end_aa != -1
+            self.rearrangement.complete_vdj = is_complete_vdj(
+                self.aa_offsets.fwr1_start_aa, self.aa_offsets.fwr4_end_aa
             )
 
         self.rearrangement.productive = bool(
@@ -303,20 +301,3 @@ class AirrBuilderAA:  # pylint: disable=too-many-instance-attributes
         self.rearrangement.additional_validation_flags = validate_airr_entry_aa(self.rearrangement, scheme=self.scheme)
 
         return self.rearrangement
-
-
-class SegmentedAirrBuilderAA(AirrBuilderAA):
-    def __init__(self, sequence_header: str, sequence: str, scheme: Scheme, query_sequence: str):
-        super().__init__(sequence_header, sequence, scheme)
-
-        self.rearrangement: SegmentedAirrRearrangementEntryAA = SegmentedAirrRearrangementEntryAA(
-            sequence_header=sequence_header,
-            sequence_aa=sequence,
-            numbering_scheme=scheme.value,
-            query_sequence=query_sequence,
-        )
-
-    def with_segment_start_end(self, segment_start: int, segment_end: int):
-        self.rearrangement.segment_start = segment_start + 1
-        self.rearrangement.segment_end = segment_end
-        return self
