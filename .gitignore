@@ -41,3 +41,5 @@ dist
 *.so
 
 .github/**/*.md
+
+results/
