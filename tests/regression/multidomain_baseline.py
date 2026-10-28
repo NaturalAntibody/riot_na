@@ -287,9 +287,12 @@ def diff_cmd(suffix_a: str, suffix_b: str, single: bool, multidomain: bool, outp
     path_b = with_suffix(BASELINE, suffix_b)
     payload_a = load_baseline(path_a)
     payload_b = load_baseline(path_b)
-    for key in ("scheme", "c_scheme", "headers"):
+    for key in ("scheme", "headers"):
         if payload_a[key] != payload_b[key]:
             raise ValueError(f"{key} differs between {path_a.name} and {path_b.name}")
+    # baselines of code without constant region numbering have no c_scheme
+    if payload_a.get("c_scheme") != payload_b.get("c_scheme"):
+        click.echo(f"c_scheme differs: {payload_a.get('c_scheme')} vs {payload_b.get('c_scheme')}")
 
     click.echo(f"Diffing therapeutics: {path_a} vs {path_b}")
     modes = [key for key, enabled in (("single_domain", single), ("multidomain", multidomain)) if enabled]
