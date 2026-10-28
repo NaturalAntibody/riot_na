@@ -77,6 +77,13 @@ Options:
   --species [HOMO_SAPIENS|MUS_MUSCULUS|CUSTOM]
                                   Which species germline sequences should be
                                   used. Default is all species.
+  --c-genes-species [human|mouse|alpaca|custom]
+                                  Align constant regions only to C germlines
+                                  of this species, whatever the species of
+                                  the variable region. Useful e.g. for
+                                  humanization analysis. Default is C
+                                  germlines of the species of the variable
+                                  region (none for mouse).
   --input-type [NT|AA]            What kind of sequences are provided on
                                   input. Default is nucleotide sequences.
   -p, --ncpu INTEGER              Number of parallel processes to use. Default
@@ -170,6 +177,19 @@ airr_result: AirrRearrangementEntryAA = riot_aa.run_on_sequence(
 Germline names are matched exactly, against the germlines of `allowed_species` the numbering was
 created with, and unknown names are rejected. If more species have a germline of the same name,
 the human one is used.
+
+### Constant region germlines
+
+By default the constant region is aligned to C germlines of the species detected for the variable region.
+Only human and alpaca have C germlines, so for mouse variable regions the constant region is not aligned.
+`c_genes_organism` (`--c-genes-species` in CLI) makes RIOT align constant regions to C germlines of the given organism
+only, whatever the species of the variable region. It is useful e.g. for humanization analysis:
+
+```python
+riot_aa: RiotNumberingAA = create_riot_aa(c_genes_organism = Organism.HOMO_SAPIENS)
+```
+
+It is available in all `create_*` and `get_or_create_*` functions and in `run_on_file_mp`.
 
 ### Constant region numbering
 

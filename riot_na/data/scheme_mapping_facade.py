@@ -52,10 +52,6 @@ class CSchemeMappingFacade:
                     self.mappings[species.value + "|" + row["gene_id"]] = AlignmentString(row["scheme_cigar"])
 
     def get_mapping(self, organism: Organism, gene_id: str) -> Optional[AlignmentString]:
-        # species without own C germlines are aligned to human ones (see create_vjc_aligner_aa)
-        if organism not in (Organism.HOMO_SAPIENS, Organism.VICUGNA_PACOS, Organism.CUSTOM):
-            organism = Organism.HOMO_SAPIENS
-
         gene_id = gene_id.split("|")[-1]
         return self.mappings.get(organism.value + "|" + gene_id)
 

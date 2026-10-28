@@ -370,7 +370,7 @@ def aa_genes_dir(db_dir: Path) -> Path:
 
 
 def create_jc_aligners_aa(
-    allowed_species: tuple[Organism, ...], genes_dir: Path
+    allowed_species: tuple[Organism, ...], genes_dir: Path, c_genes_organism: Optional[Organism] = None
 ) -> tuple[dict[Organism, dict[Locus, GeneAlignerAA]], dict[Organism, dict[Locus, GeneAlignerAA]]]:
     """J and C aligners of the allowed species by locus."""
     j_aligners: dict[Organism, dict[Locus, GeneAlignerAA]] = {}
@@ -385,50 +385,61 @@ def create_jc_aligners_aa(
             organism_aligners[locus] = j_aligner
             j_aligners[organism] = organism_aligners
 
-    c_aligners: dict[Organism, dict[Locus, GeneAlignerAA]] = {}
-
-    for organism in allowed_species:
-        if organism not in [Organism.HOMO_SAPIENS, Organism.VICUGNA_PACOS, Organism.CUSTOM]:
-            c_organism = Organism.HOMO_SAPIENS
-        else:
-            c_organism = organism
-
-        c_organism_aligner = c_aligners.get(organism, {})
-
-        for locus in Locus:
-
-            # at the moment we only have heavy genes
-            if organism == Organism.VICUGNA_PACOS and locus != Locus.IGH:
-                continue
-
-            c_aligner = create_aa_c_gene_aligner(organism=c_organism, locus=locus, aa_genes_dir=genes_dir)
-            c_organism_aligner[locus] = c_aligner
-        c_aligners[organism] = c_organism_aligner
+    c_aligners = _create_c_aligners_aa(allowed_species, genes_dir, c_genes_organism)
 
     return j_aligners, c_aligners
+
+
+def _create_organism_c_aligners_aa(organism: Organism, genes_dir: Path) -> dict[Locus, GeneAlignerAA]:
+    """C aligners by locus of the organism, empty if there are no C germlines of the organism."""
+    if not (genes_dir / "c_genes" / organism.value).exists():
+        return {}
+
+    return {
+        locus: create_aa_c_gene_aligner(organism=organism, locus=locus, aa_genes_dir=genes_dir)
+        for locus in Locus
+        # at the moment we only have heavy genes
+        if not (organism == Organism.VICUGNA_PACOS and locus != Locus.IGH)
+    }
+
+
+def _create_c_aligners_aa(
+    allowed_species: tuple[Organism, ...], genes_dir: Path, c_genes_organism: Optional[Organism]
+) -> dict[Organism, dict[Locus, GeneAlignerAA]]:
+    """C aligners of the species of the V alignment: of its own C germlines or of c_genes_organism, if given."""
+    if c_genes_organism is None:
+        return {organism: _create_organism_c_aligners_aa(organism, genes_dir) for organism in allowed_species}
+
+    c_organism_aligners = _create_organism_c_aligners_aa(c_genes_organism, genes_dir)
+    if not c_organism_aligners:
+        raise ValueError(f"There are no C germlines of {c_genes_organism} in {genes_dir}")
+    return {organism: c_organism_aligners for organism in allowed_species}
 
 
 def create_vjc_aligner_aa(
     allowed_species: Optional[tuple[Organism, ...]] = None,
     db_dir: Path = GENE_DB_DIR,
+    c_genes_organism: Optional[Organism] = None,
 ) -> VJCAlignerAA:
     allowed_species = allowed_species or DEFAULT_SPECIES
     genes_dir = aa_genes_dir(db_dir)
 
     v_aligner = create_aa_v_gene_aligner(allowed_species=allowed_species, aa_genes_dir=genes_dir)
-    j_aligners, c_aligners = create_jc_aligners_aa(allowed_species, genes_dir)
+    j_aligners, c_aligners = create_jc_aligners_aa(allowed_species, genes_dir, c_genes_organism)
 
     return VJCAlignerAA(v_aligner, j_aligners, c_aligners)
 
 
 def create_vjc_alignment_translator_aa(
-    allowed_species: Optional[tuple[Organism, ...]] = None, db_dir: Path = GENE_DB_DIR
+    allowed_species: Optional[tuple[Organism, ...]] = None,
+    db_dir: Path = GENE_DB_DIR,
+    c_genes_organism: Optional[Organism] = None,
 ) -> VJCAlignmentTranslatorAA:
     allowed_species = allowed_species or DEFAULT_SPECIES
     genes_dir = db_dir / "gene_db" / "aa_genes"
 
     v_aligner = create_aa_v_gene_aligner(allowed_species=allowed_species, aa_genes_dir=genes_dir)
-    j_aligners, c_aligners = create_jc_aligners_aa(allowed_species, genes_dir)
+    j_aligners, c_aligners = create_jc_aligners_aa(allowed_species, genes_dir, c_genes_organism)
 
     return VJCAlignmentTranslatorAA(v_aligner, j_aligners, c_aligners)
 

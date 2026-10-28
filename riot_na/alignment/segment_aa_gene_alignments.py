@@ -55,11 +55,12 @@ class SegmentVJCAlignerAA:
 def create_segment_vjc_aligner_aa(
     allowed_species: Optional[tuple[Organism, ...]] = None,
     db_dir: Path = GENE_DB_DIR,
+    c_genes_organism: Optional[Organism] = None,
 ) -> SegmentVJCAlignerAA:
     allowed_species = allowed_species or DEFAULT_SPECIES
     genes_dir = aa_genes_dir(db_dir)
 
     v_aligner = create_aa_v_gene_aligner(allowed_species=allowed_species, aa_genes_dir=genes_dir)
-    j_aligners, c_aligners = create_jc_aligners_aa(allowed_species, genes_dir)
+    j_aligners, c_aligners = create_jc_aligners_aa(allowed_species, genes_dir, c_genes_organism)
 
     return SegmentVJCAlignerAA(v_aligner, j_aligners, c_aligners)

@@ -19,6 +19,7 @@ from riot_na.api.multidomain_riot_numbering import (
 from riot_na.api.riot_numbering import (
     RiotNumberingAA,
     RiotNumberingNT,
+    create_riot_aa,
     get_or_create_riot_aa,
     get_or_create_riot_nt,
 )
@@ -37,7 +38,10 @@ VH = (
     "QVQLLESGGGLVQPGGSLRLSCAASGFTFSTAAMSWVRQAPGKGLEWVSGISGSGSSTYYADSVKGRFTISRDNSKNTLYLQMNSLRATAVYYCARELSYLYSGYYF"
     "DYWGQGTLVTVSS"
 )
-VK = "EIVLTQSPATLSLSPGERATLSCRASKGVSTSGYSYLHWYQQKPGQAPRLLIYLASYLESGVPARFSGSGSGTDFTLTISSLEPEDFAVYYCQHSRDLPLTFGGGTKVEIK"
+VK_HUMAN = "DIQMTQSPSSLSASVGDRVTITCRASQSISSYLNWYQQKPGKAPKLLIYAASSLQSGVPSRFSGSGSGTDFTLTISSLQPEDFATYYCQQSYSTPYTFGQGTKLEIK"
+VK_MOUSE = (
+    "EIVLTQSPATLSLSPGERATLSCRASKGVSTSGYSYLHWYQQKPGQAPRLLIYLASYLESGVPARFSGSGSGTDFTLTISSLEPEDFAVYYCQHSRDLPLTFGGGTKVEIK"
+)
 VL = "QSALTQPASVSGSPGQSITISCTGTSSDVGGYNYVSWYQQHPGKAPKLMIYDVSNRPSGVSNRFSGSKSGNTASLTISGLQAEDEADYYCSSYTSSSTLVVFGGGTKLTVL"
 LIGHT_GENES = ("IGKC", "IGLC1", "IGLC2", "IGLC3", "IGLC6", "IGLC7")
 
@@ -83,12 +87,12 @@ def secreted_ighg(gene: str) -> str:
 
 @pytest.fixture(name="riot_aa")
 def fixture_riot_aa() -> RiotNumberingAA:
-    return get_or_create_riot_aa()
+    return get_or_create_riot_aa(c_genes_organism=Organism.HOMO_SAPIENS)
 
 
 @pytest.fixture(name="riot_nt")
 def fixture_riot_nt() -> RiotNumberingNT:
-    return get_or_create_riot_nt()
+    return get_or_create_riot_nt(c_genes_organism=Organism.HOMO_SAPIENS)
 
 
 def assert_positional_mapping_consistent(query: str, airr: AirrRearrangementEntryAA):
@@ -135,7 +139,7 @@ def imgt_table_positions(rows: list[dict[str, str]], c_scheme: CScheme) -> list[
 
 
 @pytest.mark.parametrize("c_scheme", list(CScheme))
-@pytest.mark.parametrize("gene, v_domain", [("IGHG1", VH), ("IGKC", VK), ("IGLC1", VL)])
+@pytest.mark.parametrize("gene, v_domain", [("IGHG1", VH), ("IGKC", VK_MOUSE), ("IGLC1", VL)])
 def test_canonical_c_sequences_follow_imgt_tables(
     riot_aa: RiotNumberingAA, gene: str, v_domain: str, c_scheme: CScheme
 ):
@@ -165,7 +169,10 @@ def test_canonical_c_sequences_follow_imgt_tables(
     assert_positional_mapping_consistent(query, airr)
     # V numbering is not affected
     assert airr.numbering_scheme == Scheme.KABAT.value
-    assert airr.scheme_residue_mapping and list(airr.scheme_residue_mapping)[-1] in ("113", "107")
+    assert airr.scheme_residue_mapping and list(airr.scheme_residue_mapping)[-1] in (
+        "113",
+        "107",
+    )
 
 
 @pytest.mark.parametrize("c_scheme", list(CScheme))
@@ -201,43 +208,106 @@ def test_lambda_numbering(riot_aa: RiotNumberingAA, gene: str):
         (
             "IGHG2",
             CScheme.EU,
-            {"219": "C", "220": "C", "222": "V", "233": "P", "234": "V", "235": "A", "237": "G"},
+            {
+                "219": "C",
+                "220": "C",
+                "222": "V",
+                "233": "P",
+                "234": "V",
+                "235": "A",
+                "237": "G",
+            },
             ["221", "236"],
         ),
-        ("IGHG2", CScheme.KABAT, {"246": "P", "247": "V", "248": "A", "250": "G"}, ["249"]),
+        (
+            "IGHG2",
+            CScheme.KABAT,
+            {"246": "P", "247": "V", "248": "A", "250": "G"},
+            ["249"],
+        ),
         # insertions before CH2 position 1 are numbered towards it
         (
             "IGHG2",
             CScheme.IMGT,
-            {"H_12": "P", "CH2_1.5": "A", "CH2_1.4": "P", "CH2_1.3": "P", "CH2_1.2": "V", "CH2_1.1": "A"},
+            {
+                "H_12": "P",
+                "CH2_1.5": "A",
+                "CH2_1.4": "P",
+                "CH2_1.3": "P",
+                "CH2_1.2": "V",
+                "CH2_1.1": "A",
+            },
             ["CH2_1.6", "H_13"],
         ),
         # IGHG3 hinge has 47 residues without EU positions
         (
             "IGHG3",
             CScheme.EU,
-            {"218": "K", "218.1": "T", "218.2": "P", "219": "L", "228": "R", "228.1": "C", "228.45": "R", "229": "C"},
+            {
+                "218": "K",
+                "218.1": "T",
+                "218.2": "P",
+                "219": "L",
+                "228": "R",
+                "228.1": "C",
+                "228.45": "R",
+                "229": "C",
+            },
             ["228.46"],
         ),
         (
             "IGHG3",
             CScheme.KABAT,
-            {"229": "T", "230": "P", "241": "R", "241.1": "C", "241.45": "R", "242": "C"},
+            {
+                "229": "T",
+                "230": "P",
+                "241": "R",
+                "241.1": "C",
+                "241.45": "R",
+                "242": "C",
+            },
             ["231"],
         ),
-        ("IGHG3", CScheme.IMGT, {"H1_1": "E", "H1_17": "P", "H2_1": "E", "H4_15": "P", "CH2_1.6": "A"}, ["H_1"]),
+        (
+            "IGHG3",
+            CScheme.IMGT,
+            {"H1_1": "E", "H1_17": "P", "H2_1": "E", "H4_15": "P", "CH2_1.6": "A"},
+            ["H_1"],
+        ),
         (
             "IGHG4",
             CScheme.EU,
-            {"220": "G", "224": "P", "228": "S", "234": "F", "235": "L", "409": "R", "445": "L"},
+            {
+                "220": "G",
+                "224": "P",
+                "228": "S",
+                "234": "F",
+                "235": "L",
+                "409": "R",
+                "445": "L",
+            },
             ["221", "222", "223"],
         ),
-        ("IGHG4", CScheme.KABAT, {"230": "G", "237": "P", "241": "S", "247": "F"}, ["231", "232", "236"]),
-        ("IGHG4", CScheme.IMGT, {"H_10": "S", "H_12": "P", "CH2_1.3": "F", "CH2_84.4": "N"}, ["H_13"]),
+        (
+            "IGHG4",
+            CScheme.KABAT,
+            {"230": "G", "237": "P", "241": "S", "247": "F"},
+            ["231", "232", "236"],
+        ),
+        (
+            "IGHG4",
+            CScheme.IMGT,
+            {"H_10": "S", "H_12": "P", "CH2_1.3": "F", "CH2_84.4": "N"},
+            ["H_13"],
+        ),
     ],
 )
 def test_ighg_numbering(
-    riot_aa: RiotNumberingAA, gene: str, c_scheme: CScheme, expected: dict[str, str], absent: list[str]
+    riot_aa: RiotNumberingAA,
+    gene: str,
+    c_scheme: CScheme,
+    expected: dict[str, str],
+    absent: list[str],
 ):
     query = VH + secreted_ighg(gene)
     airr = riot_aa.run_on_sequence("", query, Scheme.IMGT, c_scheme=c_scheme)
@@ -262,13 +332,20 @@ def test_c_numbering_insertion_and_deletion(riot_aa: RiotNumberingAA):
     kabat = riot_aa.run_on_sequence("", with_insertion, c_scheme=CScheme.KABAT).c_scheme_residue_mapping
     assert kabat and (kabat["314"], kabat["315"], kabat["317"]) == ("N", "W", "S")
     imgt = riot_aa.run_on_sequence("", with_insertion, c_scheme=CScheme.IMGT).c_scheme_residue_mapping
-    assert imgt and (imgt["CH2_84.4"], imgt["CH2_84.5"], imgt["CH2_85.4"]) == ("N", "W", "S")
+    assert imgt and (imgt["CH2_84.4"], imgt["CH2_84.5"], imgt["CH2_85.4"]) == (
+        "N",
+        "W",
+        "S",
+    )
 
     with_deletion = VH + constant[:n297] + constant[n297 + 1 :]
     airr = riot_aa.run_on_sequence("", with_deletion, c_scheme=CScheme.EU)
     assert airr.c_scheme_residue_mapping
     assert "297" not in airr.c_scheme_residue_mapping
-    assert (airr.c_scheme_residue_mapping["296"], airr.c_scheme_residue_mapping["298"]) == ("Y", "S")
+    assert (
+        airr.c_scheme_residue_mapping["296"],
+        airr.c_scheme_residue_mapping["298"],
+    ) == ("Y", "S")
     assert_positional_mapping_consistent(with_deletion, airr)
 
 
@@ -303,7 +380,7 @@ def test_no_c_numbering(riot_aa: RiotNumberingAA):
 
 
 def test_c_numbering_multiple_domains():
-    riot_aa = get_or_create_multidomain_riot_aa()
+    riot_aa = get_or_create_multidomain_riot_aa(c_genes_organism=Organism.HOMO_SAPIENS)
     query = VH + secreted_ighg("IGHG1") + "GGGGSGGGGS" + SEQUENCES_AA["L"]
     heavy, light = riot_aa.run_on_sequence("", query, c_scheme=CScheme.EU)  # pylint: disable=unbalanced-tuple-unpacking
 
@@ -315,21 +392,33 @@ def test_c_numbering_multiple_domains():
     "query, c_gene, first_position, last_position",
     [
         # CrossMab chains, C follows V of another locus
-        (VK + secreted_ighg("IGHG1"), "IGHG1", "118", "445"),
+        (VK_MOUSE + secreted_ighg("IGHG1"), "IGHG1", "118", "445"),
         (VH + C_GERMLINES_AA["IGKC"], "IGKC", "108", "214"),
         # C without CH1
-        (VH + secreted_ighg("IGHG1")[secreted_ighg("IGHG1").index("DKTHT") :], "IGHG1", "221", "445"),
+        (
+            VH + secreted_ighg("IGHG1")[secreted_ighg("IGHG1").index("DKTHT") :],
+            "IGHG1",
+            "221",
+            "445",
+        ),
     ],
     ids=["VL-CH1", "VH-CL", "VH-hinge-Fc"],
 )
 def test_c_numbering_of_engineered_chains(
-    riot_aa: RiotNumberingAA, query: str, c_gene: str, first_position: str, last_position: str
+    riot_aa: RiotNumberingAA,
+    query: str,
+    c_gene: str,
+    first_position: str,
+    last_position: str,
 ):
     airr = riot_aa.run_on_sequence("", query, c_scheme=CScheme.EU)
 
     assert airr.c_call == c_gene
     assert airr.c_scheme_residue_mapping
-    assert (list(airr.c_scheme_residue_mapping)[0], list(airr.c_scheme_residue_mapping)[-1]) == (
+    assert (
+        list(airr.c_scheme_residue_mapping)[0],
+        list(airr.c_scheme_residue_mapping)[-1],
+    ) == (
         first_position,
         last_position,
     )
@@ -343,7 +432,7 @@ C_QUERIES_AA = [
     C_GERMLINES_AA["IGHM"],
     secreted_ighg("IGHG1")[:20],
     C_GERMLINES_AA["IGKC"][1:20],
-    3 * "GGGGS" + VK,
+    3 * "GGGGS" + VK_MOUSE,
     "TTTPAPRPPTPAPTIASQPLSLRPEACRPAAGGAVHTRGLDFACDIYIWAPLAGTCGVLLLSLVITLYC",
 ]
 
@@ -351,7 +440,9 @@ C_QUERIES_AA = [
 @pytest.mark.parametrize("query", C_QUERIES_AA)
 def test_c_alignment_score_bounds(query: str):
     """C genes of other loci than V locus are aligned only if their alignments can score higher, by these bounds."""
-    for c_aligner in get_or_create_riot_aa().vjc_aligner_aa.c_aligners[Organism.HOMO_SAPIENS].values():
+    c_aligners = get_or_create_riot_aa().vjc_aligner_aa.c_aligners
+    assert c_aligners is not None
+    for c_aligner in c_aligners[Organism.HOMO_SAPIENS].values():
         aligner = StripedSmithWaterman(query, **AA_ALIGNER_PARAMS)
         max_score = c_aligner.max_alignment_score(query)
         for gene in c_aligner.gene_lookup.values():
@@ -360,39 +451,56 @@ def test_c_alignment_score_bounds(query: str):
 
 
 @pytest.mark.parametrize(
-    "query", [NT_GERMLINES["IGHG1"], NT_GERMLINES["IGKC"], NT_GERMLINES["IGLC2"][:60], 5 * NT_LINKER]
+    "query",
+    [
+        NT_GERMLINES["IGHG1"],
+        NT_GERMLINES["IGKC"],
+        NT_GERMLINES["IGLC2"][:60],
+        5 * NT_LINKER,
+    ],
 )
 def test_nucleotide_c_alignment_score_bounds(query: str):
     for c_aligner in get_or_create_riot_nt().vdjc_aligner.c_aligners[Organism.HOMO_SAPIENS].values():
         aligner = StripedSmithWaterman(query, **ALIGNER_PARAMS)
         max_score = c_aligner.max_alignment_score(query)
         for gene in c_aligner.gene_lookup.values():
-            alignment = align(aligner, gene.name, gene.sequence, db_length=c_aligner.db_length, query=query)
+            alignment = align(
+                aligner,
+                gene.name,
+                gene.sequence,
+                db_length=c_aligner.db_length,
+                query=query,
+            )
             assert alignment.alignment_score <= max_score
 
 
 @pytest.mark.parametrize("v_locus", list(Locus))
 @pytest.mark.parametrize("query", C_QUERIES_AA)
 def test_c_alignment_of_all_loci(query: str, v_locus: Locus):
-    c_aligners = get_or_create_riot_aa().vjc_aligner_aa.c_aligners[Organism.HOMO_SAPIENS]
+    c_aligners = get_or_create_riot_aa().vjc_aligner_aa.c_aligners
+    assert c_aligners is not None
+    homo_sapiens_c_aligners = c_aligners[Organism.HOMO_SAPIENS]
     aligned_loci = []
 
     def align_query(c_aligner):
         aligned_loci.append(c_aligner)
         return c_aligner.align(query)
 
-    expected = select_c_alignment([c_aligner.align(query) for c_aligner in c_aligners.values()], v_locus)
-    assert align_c(c_aligners, v_locus, query, align_query) == expected
+    expected = select_c_alignment(
+        [c_aligner.align(query) for c_aligner in homo_sapiens_c_aligners.values()],
+        v_locus,
+    )
+    assert align_c(homo_sapiens_c_aligners, v_locus, query, align_query) == expected
 
     # light chain C genes can't score higher than heavy chain C genes on heavy chain constant regions
     if query == secreted_ighg("IGHG1") and v_locus == Locus.IGH:
-        assert aligned_loci == [c_aligners[Locus.IGH]]
+        assert aligned_loci == [homo_sapiens_c_aligners[Locus.IGH]]
 
 
 def test_c_numbering_multiple_domains_scfv_fc():
-    riot_aa = get_or_create_multidomain_riot_aa()
+    riot_aa = get_or_create_multidomain_riot_aa(c_genes_organism=Organism.HOMO_SAPIENS)
     # scFv fused to CH1, hinge and Fc, C follows VL
-    query = VH + "GGGGSGGGGSGGGGS" + VK + secreted_ighg("IGHG1")
+    query = VH + "GGGGSGGGGSGGGGS" + VK_MOUSE + secreted_ighg("IGHG1")
     heavy, light = riot_aa.run_on_sequence("", query, c_scheme=CScheme.EU)  # pylint: disable=unbalanced-tuple-unpacking
 
     assert heavy.c_call is None
@@ -418,7 +526,7 @@ def test_c_numbering_without_j(riot_aa: RiotNumberingAA):
         # the first C residue is encoded by the J-C junction codon: absorbed by J (FR4 ending with A instead of S)
         (VH[:-1] + C_GERMLINES_AA["IGHG1"][:20], "IGHG1"),
         # J-C junction residue mutated (R108G, G to A)
-        (VK + "G" + C_GERMLINES_AA["IGKC"][1:20], "IGKC"),
+        (VK_MOUSE + "G" + C_GERMLINES_AA["IGKC"][1:20], "IGKC"),
         (VL + "A" + C_GERMLINES_AA["IGLC2"][1:20], "IGLC2"),
     ],
     ids=["IGHG1", "IGKC", "IGLC2"],
@@ -431,12 +539,12 @@ def test_c_fragments_without_junction_residue(riot_aa: RiotNumberingAA, query: s
 
 def test_c_fragments_without_junction_residue_follow_j(riot_aa: RiotNumberingAA):
     # the Whitlow linker ends with STKG, as CH1 without its first residue (A118), it doesn't follow J
-    airr = riot_aa.run_on_sequence("", VH + "GSTSGSGKPGSGEGSTKG" + VK)
+    airr = riot_aa.run_on_sequence("", VH + "GSTSGSGKPGSGEGSTKG" + VK_MOUSE)
 
     assert airr.c_call is None
 
 
-@pytest.mark.parametrize("v_domain", [VH, VK], ids=["VH", "VK"])
+@pytest.mark.parametrize("v_domain", [VH, VK_MOUSE], ids=["VH", "VK"])
 def test_non_antibody_regions_are_not_c_regions(riot_aa: RiotNumberingAA, v_domain: str):
     # CAR: CD8a hinge and transmembrane, CD28 and CD3z signalling domains
     car_t_tail = (
@@ -452,7 +560,7 @@ def test_non_antibody_regions_are_not_c_regions(riot_aa: RiotNumberingAA, v_doma
 
 
 def test_c_numbering_multiple_domains_nucleotides():
-    riot_nt = get_or_create_multidomain_riot_nt()
+    riot_nt = get_or_create_multidomain_riot_nt(c_genes_organism=Organism.HOMO_SAPIENS)
     heavy_chain = nt_rearrangement("IGHV3-23*01", "GGCTAC", "IGHJ4*02", 2, "IGHG1")
 
     (airr,) = riot_nt.run_on_sequence("", heavy_chain, c_scheme=CScheme.EU)
@@ -531,8 +639,8 @@ def test_c_scheme_mappings(c_scheme: CScheme):
         assert set(mapping) <= {"M", "D", "I"}
         assert mapping.count("M") + mapping.count("D") <= len(get_c_scheme_positions(c_scheme, chain_type))
         assert mapping.count("M") + mapping.count("I") == len(germline)
-        # mouse sequences are aligned to human C germlines
-        assert facade.get_mapping(Organism.MUS_MUSCULUS, gene) == mapping
+        # mouse has no C germlines of its own
+        assert facade.get_mapping(Organism.MUS_MUSCULUS, gene) is None
 
     assert facade.get_mapping(Organism.HOMO_SAPIENS, "IGHM") is None
 
@@ -580,7 +688,16 @@ def test_c_numbering_csv_output(riot_aa: RiotNumberingAA, tmp_path: Path):
 @pytest.mark.parametrize("multiple_domains", [False, True])
 def test_cli_single_sequence_csv_output(tmp_path: Path, multiple_domains: bool):
     output_path = tmp_path / "output.csv"
-    args = ["-s", VH + secreted_ighg("IGHG1"), "--input-type", "aa", "--species", "human", "--c-scheme", "eu"]
+    args = [
+        "-s",
+        VH + secreted_ighg("IGHG1"),
+        "--input-type",
+        "aa",
+        "--species",
+        "human",
+        "--c-scheme",
+        "eu",
+    ]
     args += ["-o", str(output_path), "--multiple-domains", str(multiple_domains)]
 
     result = CliRunner().invoke(run_riot, args)
@@ -591,3 +708,89 @@ def test_cli_single_sequence_csv_output(tmp_path: Path, multiple_domains: bool):
     assert len(rows) == 1
     assert rows[0]["c_call"] == "IGHG1"
     assert rows[0]["c_numbering_scheme"] == "eu"
+
+
+def test_c_genes_organism_selects_c_aligners():
+    default = get_or_create_riot_aa().vjc_aligner_aa.c_aligners
+    assert default is not None
+    assert default[Organism.MUS_MUSCULUS] == {}
+    assert set(default[Organism.HOMO_SAPIENS]) == set(Locus)
+
+    human_c = get_or_create_riot_aa(c_genes_organism=Organism.HOMO_SAPIENS).vjc_aligner_aa.c_aligners
+    assert human_c is not None
+    assert human_c[Organism.MUS_MUSCULUS] is human_c[Organism.HOMO_SAPIENS]
+
+    with pytest.raises(ValueError):
+        create_riot_aa(c_genes_organism=Organism.MUS_MUSCULUS)
+
+
+# Default numbering (c_genes_organism not set) with a human variable domain: C is aligned to C germlines of the V species.
+@pytest.fixture(name="human_riot_aa")
+def fixture_human_riot_aa() -> RiotNumberingAA:
+    return get_or_create_riot_aa()
+
+
+def test_canonical_igkc_follows_imgt_table_human(human_riot_aa: RiotNumberingAA):
+    rows = imgt_table_rows("IGKC")
+    canonical_sequence = "".join(row["residue"] for row in rows)
+    query = VK_HUMAN + canonical_sequence
+    airr = human_riot_aa.run_on_sequence("", query, Scheme.KABAT, c_scheme=CScheme.EU)
+
+    assert airr.c_call == "IGKC"
+    expected = list(zip(imgt_table_positions(rows, CScheme.EU), canonical_sequence))
+    assert airr.c_scheme_residue_mapping
+    assert list(airr.c_scheme_residue_mapping.items()) == expected
+    assert_positional_mapping_consistent(query, airr)
+
+
+def test_c_numbering_of_vl_ch1_human(human_riot_aa: RiotNumberingAA):
+    query = VK_HUMAN + secreted_ighg("IGHG1")
+    airr = human_riot_aa.run_on_sequence("", query, c_scheme=CScheme.EU)
+
+    assert airr.c_call == "IGHG1"
+    assert airr.c_scheme_residue_mapping
+    assert (
+        list(airr.c_scheme_residue_mapping)[0],
+        list(airr.c_scheme_residue_mapping)[-1],
+    ) == ("118", "445")
+    assert_positional_mapping_consistent(query, airr)
+
+
+def test_c_numbering_multiple_domains_scfv_fc_human():
+    riot_aa = get_or_create_multidomain_riot_aa()
+    query = VH + "GGGGSGGGGSGGGGS" + VK_HUMAN + secreted_ighg("IGHG1")
+    heavy, light = riot_aa.run_on_sequence("", query, c_scheme=CScheme.EU)  # pylint: disable=unbalanced-tuple-unpacking
+
+    assert heavy.c_call is None
+    assert light.locus == "igk"
+    assert light.c_call == "IGHG1"
+    assert light.c_scheme_residue_mapping and light.c_scheme_residue_mapping["297"] == "N"
+
+
+def test_igkc_fragment_without_junction_residue_human(human_riot_aa: RiotNumberingAA):
+    # J-C junction residue mutated (R108G, G to A)
+    airr = human_riot_aa.run_on_sequence("", VK_HUMAN + "G" + C_GERMLINES_AA["IGKC"][1:20])
+
+    assert (airr.c_call, airr.c_germline_start_aa) == ("IGKC", 2)
+
+
+def test_c_fragments_without_junction_residue_follow_j_human(
+    human_riot_aa: RiotNumberingAA,
+):
+    airr = human_riot_aa.run_on_sequence("", VH + "GSTSGSGKPGSGEGSTKG" + VK_HUMAN)
+
+    assert airr.c_call is None
+
+
+def test_non_antibody_regions_are_not_c_regions_human(human_riot_aa: RiotNumberingAA):
+    # CAR: CD8a hinge and transmembrane, CD28 and CD3z signalling domains
+    car_t_tail = (
+        "TTTPAPRPPTPAPTIASQPLSLRPEACRPAAGGAVHTRGLDFACDIYIWAPLAGTCGVLLLSLVITLYCKRGRKKLLYIFKQPFMRPVQTTQEEDGCSCRFPEEEEGG"
+        "CELRVKFSRSADAPAYQQGQNQLYNELNLGRREEYDVLDKRRGRDPEMGGKPRRKNPQEGLYNELQKDKMAEAYSEIGMKGERRRGKGHDGLYQGLSTATKDTYDAL"
+        "HMQALPPR"
+    )
+    airr = human_riot_aa.run_on_sequence("", VK_HUMAN + car_t_tail, c_scheme=CScheme.EU)
+
+    assert airr.j_call
+    assert airr.c_call is None
+    assert airr.c_scheme_residue_mapping is None

@@ -143,6 +143,7 @@ class RiotNumberingAA:
 def create_riot_nt(
     allowed_species: Optional[tuple[Organism, ...]] = None,
     db_dir: Path = GENE_DB_DIR,
+    c_genes_organism: Optional[Organism] = None,
 ) -> RiotNumberingNT:
     """
     Factory function for creating RiotNumberingNT object.
@@ -151,13 +152,20 @@ def create_riot_nt(
     -----------
     - allowed_species : Limit gene database to specified Organism tuple (default use all species - mouse, human and alpaca).
     - db_dir : Path to gene and scheme mappings database directory (default use embeded database).
+    - c_genes_organism : Align constant regions to C germlines of this organism only, for V alignments of any
+    species. Default is to use C germlines of the species of the V alignment (mouse has none, so its constant regions
+    are not aligned). Useful e.g. for humanization analysis.
 
     Returns:
     -----------
     RiotNumberingNT object used for performing alignment and numbering.
     """
-    vdjc_aligner_nt = create_vdjc_aligner_nt(allowed_species=allowed_species, db_dir=db_dir)
-    vjc_alignment_translator_aa = create_vjc_alignment_translator_aa(allowed_species=allowed_species, db_dir=db_dir)
+    vdjc_aligner_nt = create_vdjc_aligner_nt(
+        allowed_species=allowed_species, db_dir=db_dir, c_genes_organism=c_genes_organism
+    )
+    vjc_alignment_translator_aa = create_vjc_alignment_translator_aa(
+        allowed_species=allowed_species, db_dir=db_dir, c_genes_organism=c_genes_organism
+    )
     scheme_aligner = SchemeAligner(allowed_species=allowed_species, db_dir=db_dir)
     return RiotNumberingNT(vdjc_aligner_nt, vjc_alignment_translator_aa, scheme_aligner)
 
@@ -165,6 +173,7 @@ def create_riot_nt(
 def create_riot_aa(
     allowed_species: Optional[tuple[Organism, ...]] = None,
     db_dir: Path = GENE_DB_DIR,
+    c_genes_organism: Optional[Organism] = None,
 ) -> RiotNumberingAA:
     """
     Factory function for creating RiotNumberingAA object.
@@ -173,12 +182,17 @@ def create_riot_aa(
     -----------
     - allowed_species : Limit gene database to specified Organism tuple (default use all species - mouse, human and alpaca).
     - db_dir : Path to gene and scheme mappings database directory (default use embeded database).
+    - c_genes_organism : Align constant regions to C germlines of this organism only, for V alignments of any
+    species. Default is to use C germlines of the species of the V alignment (mouse has none, so its constant regions
+    are not aligned). Useful e.g. for humanization analysis.
 
     Returns:
     -----------
     RiotNumberingAA object used for performing alignment and numbering.
     """
-    vjc_aligner_aa = create_vjc_aligner_aa(allowed_species=allowed_species, db_dir=db_dir)
+    vjc_aligner_aa = create_vjc_aligner_aa(
+        allowed_species=allowed_species, db_dir=db_dir, c_genes_organism=c_genes_organism
+    )
     scheme_aligner = SchemeAligner(allowed_species=allowed_species, db_dir=db_dir)
     return RiotNumberingAA(vjc_aligner_aa, scheme_aligner)
 
@@ -187,13 +201,15 @@ def create_riot_aa(
 def get_or_create_riot_nt(
     allowed_species: Optional[tuple[Organism, ...]] = None,
     db_dir: Path = GENE_DB_DIR,
+    c_genes_organism: Optional[Organism] = None,
 ) -> RiotNumberingNT:
-    return create_riot_nt(allowed_species=allowed_species, db_dir=db_dir)
+    return create_riot_nt(allowed_species=allowed_species, db_dir=db_dir, c_genes_organism=c_genes_organism)
 
 
 @cached({})
 def get_or_create_riot_aa(
     allowed_species: Optional[tuple[Organism, ...]] = None,
     db_dir: Path = GENE_DB_DIR,
+    c_genes_organism: Optional[Organism] = None,
 ) -> RiotNumberingAA:
-    return create_riot_aa(allowed_species=allowed_species, db_dir=db_dir)
+    return create_riot_aa(allowed_species=allowed_species, db_dir=db_dir, c_genes_organism=c_genes_organism)

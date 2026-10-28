@@ -62,6 +62,16 @@ def _write_or_print(
     help="Which species germline sequences should be used. Default is all species.",
 )
 @click.option(
+    "--c-genes-species",
+    type=click.Choice(Organism),  # type: ignore
+    default=None,
+    help=(
+        "Align constant regions only to C germlines of this species, whatever the species of the variable region. "
+        "Useful e.g. for humanization analysis. "
+        "Default is C germlines of the species of the variable region (none for mouse)."
+    ),
+)
+@click.option(
     "--input-type",
     type=click.Choice(InputType),  # type: ignore
     default=InputType.NT,
@@ -115,6 +125,7 @@ def run_riot(  # pylint: disable=too-many-arguments
     scheme: Scheme,
     c_scheme: Optional[CScheme],
     species: Optional[Organism],
+    c_genes_species: Optional[Organism],
     input_type: InputType,
     ncpu: int,
     extend_alignment: bool,
@@ -148,6 +159,7 @@ def run_riot(  # pylint: disable=too-many-arguments
             v_gene=v_gene,
             j_gene=j_gene,
             c_scheme=c_scheme,
+            c_genes_organism=c_genes_species,
         )
         end = time.perf_counter()
         elapsed_time = end - start
@@ -155,17 +167,19 @@ def run_riot(  # pylint: disable=too-many-arguments
     elif sequence:
         match input_type, multiple_domains:
             case InputType.NT, False:
-                result_nt = create_riot_nt(allowed_species=species_list, db_dir=GENE_DB_DIR).run_on_sequence(
-                    header="-", query_sequence=sequence, scheme=scheme, c_scheme=c_scheme
-                )
+                result_nt = create_riot_nt(
+                    allowed_species=species_list, db_dir=GENE_DB_DIR, c_genes_organism=c_genes_species
+                ).run_on_sequence(header="-", query_sequence=sequence, scheme=scheme, c_scheme=c_scheme)
                 _write_or_print(output_file, AirrRearrangementEntryNT, [result_nt])
             case InputType.NT, True:
                 results_nt = create_multidomain_riot_nt(
-                    allowed_species=species_list, db_dir=GENE_DB_DIR
+                    allowed_species=species_list, db_dir=GENE_DB_DIR, c_genes_organism=c_genes_species
                 ).run_on_sequence(header="-", query_sequence=sequence, scheme=scheme, c_scheme=c_scheme)
                 _write_or_print(output_file, SegmentedAirrRearrangementEntryNT, results_nt)
             case InputType.AA, False:
-                result_aa = create_riot_aa(allowed_species=species_list, db_dir=GENE_DB_DIR).run_on_sequence(
+                result_aa = create_riot_aa(
+                    allowed_species=species_list, db_dir=GENE_DB_DIR, c_genes_organism=c_genes_species
+                ).run_on_sequence(
                     header="-",
                     query_sequence=sequence,
                     scheme=scheme,
@@ -177,7 +191,7 @@ def run_riot(  # pylint: disable=too-many-arguments
                 _write_or_print(output_file, AirrRearrangementEntryAA, [result_aa])
             case InputType.AA, True:
                 results_aa = create_multidomain_riot_aa(
-                    allowed_species=species_list, db_dir=GENE_DB_DIR
+                    allowed_species=species_list, db_dir=GENE_DB_DIR, c_genes_organism=c_genes_species
                 ).run_on_sequence(
                     header="-",
                     query_sequence=sequence,
