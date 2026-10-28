@@ -26,7 +26,7 @@ def align_djc_nt(
     j_aligners: dict[Organism, dict[Locus, GeneAligner]],
     c_aligners: dict[Organism, dict[Locus, GeneAligner]],
 ) -> AlignmentsNT:
-    """Align J, C and D genes to the part of the query following the V alignment."""
+    """Align J, C and D genes to the part of the query following the V alignment. C and D are aligned only after J."""
     aligments_nt = AlignmentsNT(v=v_alignment)
 
     query_v = v_alignment.q_seq
@@ -41,15 +41,14 @@ def align_djc_nt(
     j_aligner = j_aligners[species][locus]
     j_alignment = j_aligner.align(query_j, both_strains=False)
 
-    # C follows J or V, if J was not found
-    c_query_start = v_alignment.q_end
-    if j_alignment is not None:
-        j_alignment = offset_alignments(v_alignment.q_end, j_alignment)
-        aligments_nt.j = j_alignment
-        c_query_start = j_alignment.q_end
+    if j_alignment is None:
+        return aligments_nt
+
+    j_alignment = offset_alignments(v_alignment.q_end, j_alignment)
+    aligments_nt.j = j_alignment
 
     # mask c input (query_db_clean -> valn_end + jaln_end)
-    query_c = query_v[c_query_start:]
+    query_c = query_v[j_alignment.q_end :]
 
     if query_c:
         # align c
@@ -61,9 +60,9 @@ def align_djc_nt(
         )
 
         if c_alignment is not None:
-            aligments_nt.c = offset_alignments(c_query_start, c_alignment)
+            aligments_nt.c = offset_alignments(j_alignment.q_end, c_alignment)
 
-    if locus == Locus.IGH and j_alignment is not None:
+    if locus == Locus.IGH:
         # mask d input (query_db_clean -> valn_end + jaln_end)
         query_d = query_v[v_alignment.q_end : j_alignment.q_start]
         if query_d:

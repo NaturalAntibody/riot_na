@@ -36,7 +36,7 @@ def align_jc_aa(
     j_aligners: dict[Organism, dict[Locus, GeneAlignerAA]],
     c_aligners: Optional[dict[Organism, dict[Locus, GeneAlignerAA]]],
 ) -> AlignmentsAA:
-    """Align J and C genes to the part of the query following the V alignment."""
+    """Align J and C genes to the part of the query following the V alignment. C is aligned only after J."""
     result = AlignmentsAA(v=v_aa_alignment)
 
     query_j = v_aa_alignment.q_seq[v_aa_alignment.q_end :]
@@ -48,14 +48,15 @@ def align_jc_aa(
         j_aligner = j_aligners[species][locus]
         j_aa_alignment = j_aligner.align(query_j)
 
-        # C follows J or V, if J was not found
-        query_c = query_j
-        if j_aa_alignment is not None:
-            result.j = j_aa_alignment
-            query_c = query_j[j_aa_alignment.q_end :]
+        if j_aa_alignment is None:
+            return result
 
-        if c_aligners and query_c:
-            result.c = align_c(c_aligners[species], locus, query_c, lambda c_aligner: c_aligner.align(query_c))
+        result.j = j_aa_alignment
+
+        if c_aligners:
+            query_c = query_j[j_aa_alignment.q_end :]
+            if query_c:
+                result.c = align_c(c_aligners[species], locus, query_c, lambda c_aligner: c_aligner.align(query_c))
 
     return result
 
@@ -339,10 +340,11 @@ class VJCAlignmentTranslatorAA:
         extended_j_aa_alignment: AlignmentEntryAA | None,
         j_offset: int,
     ) -> tuple[str, str | None, str | None, InternalAlignmentEntryAA | None]:
-        if alignments.c:
-            # C follows J or V, if J was not found
-            c_offset = j_offset + extended_j_aa_alignment.q_end if extended_j_aa_alignment else j_offset
-            masked_aa_for_c = aligned_sequence_aa[c_offset:]
+        # j_offset is the end of the V alignment, where the J alignment starts, so it is always set. The J alignment
+        # is relative to it. alignments.c implies a J alignment of the nucleotide sequence, but the amino acid J
+        # alignment (extended_j_aa_alignment) can be missing. C is not aligned then, as C follows J.
+        if alignments.c and extended_j_aa_alignment:
+            masked_aa_for_c = aligned_sequence_aa[extended_j_aa_alignment.q_end + j_offset :]
 
             c_gene_id = alignments.c.target_id
 

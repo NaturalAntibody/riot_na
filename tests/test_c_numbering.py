@@ -509,15 +509,14 @@ def test_c_numbering_multiple_domains_scfv_fc():
     assert light.c_scheme_residue_mapping and light.c_scheme_residue_mapping["297"] == "N"
 
 
-def test_c_numbering_without_j(riot_aa: RiotNumberingAA):
-    # FR4 is missing, so J is not found
+def test_c_is_not_aligned_without_j(riot_aa: RiotNumberingAA):
+    # FR4 is missing, so J is not found and C is not aligned
     query = VH[: VH.index("WGQG")] + secreted_ighg("IGHG1")
     airr = riot_aa.run_on_sequence("", query, c_scheme=CScheme.EU)
 
     assert airr.j_call is None
-    assert airr.c_call == "IGHG1"
-    assert airr.c_scheme_residue_mapping and list(airr.c_scheme_residue_mapping)[0] == "118"
-    assert_positional_mapping_consistent(query, airr)
+    assert airr.c_call is None
+    assert airr.c_scheme_residue_mapping is None
 
 
 @pytest.mark.parametrize(

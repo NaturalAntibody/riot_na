@@ -163,6 +163,10 @@ class AirrBuilder(Generic[RearrangementT]):  # pylint: disable=too-many-instance
     ):
         self.c_gene_sequence = c_aln.t_seq
         self.c_gene_name = c_aln.target_id
+
+        if self.j_gene_alignment is None:
+            return self
+
         self.c_gene_alignment = c_aln
 
         self.rearrangement.c_call = c_aln.target_id
