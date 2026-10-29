@@ -27,6 +27,8 @@ from riot_na.schemes.collapse_alignment import collapse_alignment_str, collapse_
 from riot_na.schemes.smooth_alignment import smooth_cdr_junctions
 
 IMGT_REVERSE_ORDER_INSERTIONS = [33, 61, 112]
+# EU positions of germline residues enclosing the lower hinge (EU 231-237)
+EU_LOWER_HINGE_ANCHORS = ("230", "238")
 
 
 def validate_sequence(sequence):
@@ -362,19 +364,128 @@ def clip_to_gene_scheme_alignment(
     return query_gene_alignment_str
 
 
+def get_germline_scheme_indices(
+    gene_scheme_alignment_str: AlignmentString, scheme_positions: Sequence[str]
+) -> dict[str, int]:
+    """Indices of germline residues on scheme positions."""
+    indices: dict[str, int] = {}
+    scheme_index = germline_index = 0
+
+    for op in gene_scheme_alignment_str:
+        if op == "M":
+            indices[scheme_positions[scheme_index]] = germline_index
+        if op in {"M", "D"}:
+            scheme_index = scheme_index + 1
+        if op in {"M", "I"}:
+            germline_index = germline_index + 1
+
+    return indices
+
+
+def get_lower_hinge_anchors(
+    eu_gene_scheme_alignment_str: Optional[AlignmentString], chain_type: ChainType
+) -> Optional[tuple[int, int]]:
+    """Indices of germline residues on EU 230 and 238, None if the germline has no lower hinge."""
+    if not eu_gene_scheme_alignment_str:
+        return None
+
+    indices = get_germline_scheme_indices(eu_gene_scheme_alignment_str, get_c_scheme_positions(CScheme.EU, chain_type))
+    first_anchor, last_anchor = EU_LOWER_HINGE_ANCHORS
+    if first_anchor not in indices or last_anchor not in indices:
+        return None
+    return indices[first_anchor], indices[last_anchor]
+
+
+def _count_identities(query_gene_alignment_str: str, query: str, germline: str) -> int:
+    identities = 0
+    query_position = germline_position = 0
+
+    for op in query_gene_alignment_str:
+        if op == "M" and query[query_position] == germline[germline_position]:
+            identities = identities + 1
+        if op in {"M", "I"}:
+            query_position = query_position + 1
+        if op in {"M", "D"}:
+            germline_position = germline_position + 1
+
+    return identities
+
+
+def place_lower_hinge_indels(
+    query_gene_alignment_str: AlignmentString,
+    query: str,
+    germline: str,
+    query_start: int,
+    anchors: tuple[int, int],
+) -> AlignmentString:
+    """
+    Smith-Waterman places gaps where substitution scores are the highest, so a residue of the lower hinge
+    (EU 231-237) missing in the query or an extra one is placed depending on the mutations next to it, e.g. IGHG1
+    with E233P/L234V/L235A/ΔG236 is aligned with L234 missing. It is placed right before G237 instead, where IGHG2
+    lacks G236 in EU and Kabat mappings (the Fc engineering convention, IMGT places the IGHG2 deletion at CH2 1.4),
+    unless the alignment pairs more identical residues. Lower hinges differing from the germline by more residues
+    are left as aligned.
+
+    anchors - indices of germline residues on EU 230 and 238, both have to be aligned.
+    """
+    first_anchor, last_anchor = anchors
+    # germline index of an anchor -> its index in the alignment string and the index of the query residue paired with it
+    aligned_anchors: dict[int, tuple[int, int]] = {}
+    query_position, germline_position = query_start, 0
+
+    for i, op in enumerate(query_gene_alignment_str):
+        if op == "M" and germline_position in anchors:
+            aligned_anchors[germline_position] = (i, query_position)
+        if op in {"M", "I"}:
+            query_position = query_position + 1
+        if op in {"M", "D", "N"}:
+            germline_position = germline_position + 1
+
+    if len(aligned_anchors) < 2:
+        return query_gene_alignment_str
+
+    (first_op_index, first_query_position), (last_op_index, last_query_position) = (
+        aligned_anchors[first_anchor],
+        aligned_anchors[last_anchor],
+    )
+    hinge_query = query[first_query_position + 1 : last_query_position]
+    hinge_germline = germline[first_anchor + 1 : last_anchor]
+    paired = min(len(hinge_query), len(hinge_germline))
+    if abs(len(hinge_query) - len(hinge_germline)) != 1 or not paired:
+        return query_gene_alignment_str
+
+    # residues are paired from EU 231 on, the last one with G237
+    indel = "I" if len(hinge_query) > len(hinge_germline) else "D"
+    placed = (paired - 1) * "M" + indel + "M"
+
+    aligned = query_gene_alignment_str[first_op_index + 1 : last_op_index]
+    if _count_identities(placed, hinge_query, hinge_germline) < _count_identities(aligned, hinge_query, hinge_germline):
+        return query_gene_alignment_str
+
+    return AlignmentString(
+        query_gene_alignment_str[: first_op_index + 1] + placed + query_gene_alignment_str[last_op_index:]
+    )
+
+
 def c_scheme_alignment(
     c_alignment: AlignmentEntryAA,
     c_gene_scheme_alignment_str: AlignmentString,
     c_scheme: CScheme,
     query_offset: int = 0,
+    lower_hinge_anchors: Optional[tuple[int, int]] = None,
 ) -> SchemeAlignment:
     """
     Align query C region to the C scheme. query_offset is the position of the C alignment query
-    (the query left after J alignment) in the whole query.
+    (the query left after J alignment) in the whole query. lower_hinge_anchors are indices of germline residues on
+    EU 230 and 238 of IGHG germlines.
     """
     c_query_gene_alignment_str = collapse_alignment_str(unfold_cigar(c_alignment.cigar))
     # unaligned query residues before the C alignment are not numbered, unlike V no S ops are added
     c_query_gene_alignment_str = AlignmentString(c_alignment.t_start * "N" + c_query_gene_alignment_str)
+    if lower_hinge_anchors:
+        c_query_gene_alignment_str = place_lower_hinge_indels(
+            c_query_gene_alignment_str, c_alignment.q_seq, c_alignment.t_seq, c_alignment.q_start, lower_hinge_anchors
+        )
     c_query_gene_alignment_str = clip_to_gene_scheme_alignment(c_query_gene_alignment_str, c_gene_scheme_alignment_str)
 
     # germline insertions next to germline deletions (e.g. Kabat 107A of lambda C after missing 107) are kept,
@@ -614,7 +725,15 @@ class SchemeAligner:
         # C is aligned to the query left after V and J alignments (or V alignment, if J was not found)
         c_query_offset = aa_alignments.v.q_end + (aa_alignments.j.q_end if aa_alignments.j else 0)
 
-        return c_scheme_alignment(aa_alignments.c, c_gene_scheme_alignment_str, c_scheme, c_query_offset)
+        # the lower hinge is found by EU positions in all C schemes
+        lower_hinge_anchors = get_lower_hinge_anchors(
+            self.c_scheme_mapping_facades[CScheme.EU].get_mapping(aa_alignments.c.species, aa_alignments.c.target_id),
+            ChainType.from_locus(aa_alignments.c.locus),
+        )
+
+        return c_scheme_alignment(
+            aa_alignments.c, c_gene_scheme_alignment_str, c_scheme, c_query_offset, lower_hinge_anchors
+        )
 
 
 if __name__ == "__main__":

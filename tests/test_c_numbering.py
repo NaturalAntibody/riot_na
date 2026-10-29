@@ -397,6 +397,81 @@ def test_c_numbering_insertion_after_imgt_85_splits_de_turn(riot_aa: RiotNumberi
     ]
 
 
+def with_lower_hinge(c_region: str, lower_hinge: str) -> str:
+    # lower hinge (EU 231-237) follows the hinge ending with CP (EU 229-230) and precedes PSVFLF (EU 238-243)
+    end = c_region.index("PSVFLF")
+    start = c_region.rindex("CP", 0, end) + 2
+    return c_region[:start] + lower_hinge + c_region[end:]
+
+
+@pytest.mark.parametrize(
+    "gene, lower_hinge, eu, kabat, imgt",
+    [
+        # IgG2 lower hinge (E233P/L234V/L235A/ΔG236) in IgG1 and IgG4 is numbered as in IGHG2, without G236
+        ("IGHG1", "APPVAG", "231 232 233 234 235 237", "244 245 246 247 248 250", "1.5 1.4 1.3 1.2 1.1 1"),
+        ("IGHG4", "APPVAG", "231 232 233 234 235 237", "244 245 246 247 248 250", "1.5 1.4 1.3 1.2 1.1 1"),
+        # IgG1 lower hinge in IgG2 takes G236 missing in IGHG2
+        (
+            "IGHG2",
+            "APELLGG",
+            "231 232 233 234 235 236 237",
+            "244 245 246 247 248 249 250",
+            "1.6 1.5 1.4 1.3 1.2 1.1 1",
+        ),
+        # L234A/L235A with one G missing
+        ("IGHG1", "APEAAG", "231 232 233 234 235 237", "244 245 246 247 248 250", "1.5 1.4 1.3 1.2 1.1 1"),
+        # residues missing where identical residues place them are not moved
+        ("IGHG1", "APLLGG", "231 232 234 235 236 237", "244 245 247 248 249 250", "1.5 1.4 1.3 1.2 1.1 1"),
+        ("IGHG1", "PELLGG", "232 233 234 235 236 237", "245 246 247 248 249 250", "1.5 1.4 1.3 1.2 1.1 1"),
+        # an extra G is inserted right before G237
+        (
+            "IGHG1",
+            "APELLGGG",
+            "231 232 233 234 235 236 236.1 237",
+            "244 245 246 247 248 249 249.1 250",
+            "1.7 1.6 1.5 1.4 1.3 1.2 1.1 1",
+        ),
+    ],
+    ids=["IGHG1-PVA", "IGHG4-PVA", "IGHG2-ELLGG", "IGHG1-LALA-dG", "IGHG1-dE233", "IGHG1-dA231", "IGHG1-GGG"],
+)
+def test_lower_hinge_indels(riot_aa: RiotNumberingAA, gene: str, lower_hinge: str, eu: str, kabat: str, imgt: str):
+    c_region = with_lower_hinge(secreted_ighg(gene), lower_hinge)
+    query = VH + c_region
+    start = len(VH) + c_region.index(lower_hinge + "PSVFLF")
+
+    for c_scheme, expected in (
+        (CScheme.EU, eu.split()),
+        (CScheme.KABAT, kabat.split()),
+        (CScheme.IMGT, [f"CH2_{position}" for position in imgt.split()]),
+    ):
+        airr = riot_aa.run_on_sequence("", query, c_scheme=c_scheme)
+        assert airr.c_call == gene
+        assert airr.c_positional_scheme_mapping
+        assert [airr.c_positional_scheme_mapping[i] for i in range(start, start + len(lower_hinge))] == expected
+        assert_positional_mapping_consistent(query, airr)
+
+
+def test_lower_hinge_indels_nucleotides(riot_nt: RiotNumberingNT, riot_aa: RiotNumberingAA):
+    heavy_chain = nt_rearrangement("IGHV3-23*01", "GATCGGGGGTAC", "IGHJ4*02", 2, "IGHG1")
+    # IgG2 lower hinge (E233P/L234V/L235A/ΔG236): APELLGG -> APPVAG
+    lower_hinge = 3 * translate(heavy_chain, 0).index("APELLGGPSVFLF")
+    query = heavy_chain[:lower_hinge] + "GCACCTCCGGTCGCGGGA" + heavy_chain[lower_hinge + 21 :]
+
+    airr_nt = riot_nt.run_on_sequence("", query, c_scheme=CScheme.EU)
+    airr_aa = riot_aa.run_on_sequence("", translate(query, 0), c_scheme=CScheme.EU)
+
+    assert airr_nt.c_scheme_residue_mapping == airr_aa.c_scheme_residue_mapping
+    assert airr_nt.c_positional_scheme_mapping == airr_aa.c_positional_scheme_mapping
+    assert airr_nt.c_scheme_residue_mapping
+    assert [airr_nt.c_scheme_residue_mapping.get(position) for position in ("233", "234", "235", "236", "237")] == [
+        "P",
+        "V",
+        "A",
+        None,
+        "G",
+    ]
+
+
 def test_c_numbering_partial_constant_region(riot_aa: RiotNumberingAA):
     # CH1 without first 3 residues
     query = VH + secreted_ighg("IGHG1")[3:120]

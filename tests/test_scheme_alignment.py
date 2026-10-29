@@ -13,6 +13,7 @@ from riot_na.schemes.scheme_alignment import (
     force_n_terminus_matches,
     infer_last_scheme_position_aligned,
     merge_v_j,
+    place_lower_hinge_indels,
 )
 from riot_na.schemes.smooth_alignment import (
     reorder_buffer_imgt,
@@ -376,6 +377,32 @@ def test_fix_imgt_cdrs_numbering():
     # Even insertion number
     numbering = {111: [("A", 0), ("B", 1), ("C", 2)], 112: [("D", 0)]}
     assert fix_imgt_cdrs_numbering(numbering) == {111: [("A", 0), ("B", 1)], 112: [("D", 0), ("C", 1)]}
+
+
+def test_place_lower_hinge_indels():
+    # IGHG1 C229-S239, anchors are P230 and P238
+    germline = "CPAPELLGGPS"
+    anchors = (1, 9)
+
+    # E233P/L234V/L235A/ΔG236 aligned with L234 missing, G236 is missing instead
+    pva = "CPAPPVAGPS"
+    assert place_lower_hinge_indels(AlignmentString("MMMMMDMMMMM"), pva, germline, 0, anchors) == "MMMMMMMDMMM"
+    # alignment starting after the first germline residue, query residues before it
+    assert (
+        place_lower_hinge_indels(AlignmentString("NMMMMDMMMMM"), "QQ" + pva[1:], germline, 2, anchors) == "NMMMMMMDMMM"
+    )
+
+    # alignment pairing more identical residues is kept (E233 missing)
+    assert place_lower_hinge_indels(AlignmentString("MMMMDMMMMMM"), "CPAPLLGGPS", germline, 0, anchors) == (
+        "MMMMDMMMMMM"
+    )
+    # lower hinges differing by more residues are left as aligned
+    assert place_lower_hinge_indels(AlignmentString("MMMMMDDMMMM"), "CPAPPVAPS", germline, 0, anchors) == (
+        "MMMMMDDMMMM"
+    )
+    # nothing to place without residues between the anchors
+    assert place_lower_hinge_indels(AlignmentString("MMIMM"), "CPWPS", "CPPS", 0, (1, 2)) == "MMIMM"
+    assert place_lower_hinge_indels(AlignmentString("MMDMM"), "CPPS", "CPGPS", 0, (1, 3)) == "MMDMM"
 
 
 if __name__ == "__main__":

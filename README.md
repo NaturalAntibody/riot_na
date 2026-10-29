@@ -225,7 +225,10 @@ residues of IGHG2 before CH2 position 1 are numbered 1.5-1.1 (IMGT protein displ
 A query residue inserted relative to the germline takes an unused scheme position next to it if there is one,
 otherwise it is numbered as an insertion, e.g. `297.1`. In IMGT, a residue inserted right after position 1 or 85
 takes the position and the residues before it become insertions before it (1.x, or 84.x and 85.x split as above).
-C germlines in the database are membrane-bound forms, so
+A lower hinge residue (EU 231-237) missing in the query or an extra one is placed right before G237, where IGHG2
+lacks G236, unless the alignment pairs more identical residues, so IgG1 or IgG4 with the IgG2 lower hinge
+(E233P/L234V/L235A/ΔG236) is numbered P233, V234, A235, G237. Only the numbering places it there, the reported C
+alignment keeps the gap where the aligner placed it. C germlines in the database are membrane-bound forms, so
 C-terminal G446 and K447 of secreted chains are not numbered. Scheme mappings are generated with
 `python -m notebooks.data_processing.c_scheme_mappings`.
 
