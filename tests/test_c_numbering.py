@@ -349,6 +349,54 @@ def test_c_numbering_insertion_and_deletion(riot_aa: RiotNumberingAA):
     assert_positional_mapping_consistent(with_deletion, airr)
 
 
+@pytest.mark.parametrize("c_scheme", list(CScheme))
+@pytest.mark.parametrize("position", ["1", "85"])
+@pytest.mark.parametrize(
+    "gene, domain",
+    [("IGHG1", "CH1"), ("IGHG1", "CH2"), ("IGHG1", "CH3"), ("IGKC", "CL"), ("IGLC2", "CL")],
+)
+def test_c_numbering_insertion_after_imgt_positions_with_preceding_insertions(
+    riot_aa: RiotNumberingAA, gene: str, domain: str, position: str, c_scheme: CScheme
+):
+    # IMGT insertions on positions 1 and 85 precede them, a residue inserted after such position takes it
+    if gene.startswith("IGHG"):
+        sequence = VH + secreted_ighg(gene)
+    else:
+        sequence = (VK_MOUSE if gene == "IGKC" else VL) + C_GERMLINES_AA[gene]
+    imgt = riot_aa.run_on_sequence("", sequence, c_scheme=CScheme.IMGT).c_positional_scheme_mapping
+    assert imgt
+    insertion = next(index for index, scheme_position in imgt.items() if scheme_position == f"{domain}_{position}") + 1
+    query = sequence[:insertion] + "W" + sequence[insertion:]
+
+    airr = riot_aa.run_on_sequence("", query, c_scheme=c_scheme)
+    if c_scheme == CScheme.EU and gene.startswith("IGLC"):
+        assert airr.c_scheme_residue_mapping is None
+        return
+
+    assert_positional_mapping_consistent(query, airr)
+    assert airr.c_positional_scheme_mapping and insertion in airr.c_positional_scheme_mapping
+    if c_scheme == CScheme.IMGT:
+        assert (airr.c_positional_scheme_mapping[insertion - 1], airr.c_positional_scheme_mapping[insertion]) == (
+            f"{domain}_{position}.1",
+            f"{domain}_{position}",
+        )
+
+
+def test_c_numbering_insertion_after_imgt_85_splits_de_turn(riot_aa: RiotNumberingAA):
+    # W inserted after V302 (CH2_85) takes 85, the DE turn N297-V302 is split again with the odd one on 84
+    c_region = secreted_ighg("IGHG1")
+    query = VH + c_region.replace("NSTYRVV", "NSTYRVWV")
+    start = len(VH) + c_region.index("NSTYRVV")
+
+    airr = riot_aa.run_on_sequence("", query, c_scheme=CScheme.IMGT)
+
+    assert_positional_mapping_consistent(query, airr)
+    assert airr.c_positional_scheme_mapping
+    assert [airr.c_positional_scheme_mapping[i] for i in range(start, start + 8)] == [
+        f"CH2_{position}" for position in "84.4 84.5 85.4 85.3 85.2 85.1 85 86".split()
+    ]
+
+
 def test_c_numbering_partial_constant_region(riot_aa: RiotNumberingAA):
     # CH1 without first 3 residues
     query = VH + secreted_ighg("IGHG1")[3:120]

@@ -392,6 +392,22 @@ def c_scheme_alignment(
     )
 
 
+def _move_position_to_last_insertion(numbering: IntermediateNumbering, scheme_id: int) -> IntermediateNumbering:
+    # residues following a position whose insertions precede it can't be its insertions, the position goes to the
+    # last of them and the residues before it become insertions of the previous position
+    residues = numbering.get(scheme_id, [])
+    if not any(insertion for _, insertion in residues):
+        return numbering
+
+    previous_residues = numbering.get(scheme_id - 1, [])
+    previous_insertions = len([residue for residue in previous_residues if residue[1]])
+    numbering[scheme_id - 1] = previous_residues + [
+        (residue, previous_insertions + i + 1) for i, (residue, _) in enumerate(residues[:-1])
+    ]
+    numbering[scheme_id] = [(residues[-1][0], 0)]
+    return numbering
+
+
 def _move_insertions_to_next_position(
     numbering: IntermediateNumbering, scheme_id: int, keep: int = 0
 ) -> IntermediateNumbering:
@@ -417,7 +433,9 @@ def fix_imgt_c_numbering(numbering: IntermediateNumbering, scheme_positions: Seq
     """
     produce_numbering attaches insertions to the preceding scheme position. In IMGT C-DOMAIN numbering insertions
     before position 1 (1.x) belong to it, and insertions between 84 and 85 are split: 84.x follow 84, 85.x
-    precede 85, the odd one goes to 84 (IGKC 84.1-84.5, 85.4-85.1).
+    precede 85, the odd one goes to 84 (IGKC 84.1-84.5, 85.4-85.1). Residues inserted after position 1 or 85 can't
+    be numbered as their insertions, so the position goes to the last inserted residue and the residues before it
+    become insertions before it (1.x, or 84.x and 85.x split as above).
     """
     scheme_ids = {position: i + 1 for i, position in enumerate(scheme_positions)}
 
@@ -425,8 +443,11 @@ def fix_imgt_c_numbering(numbering: IntermediateNumbering, scheme_positions: Seq
         if f"{domain}_1" not in scheme_ids:
             continue
 
-        numbering = _move_insertions_to_next_position(numbering, scheme_ids[f"{domain}_1"] - 1)
+        position_1 = scheme_ids[f"{domain}_1"]
+        numbering = _move_position_to_last_insertion(numbering, position_1)
+        numbering = _move_insertions_to_next_position(numbering, position_1 - 1)
 
+        numbering = _move_position_to_last_insertion(numbering, scheme_ids[f"{domain}_85"])
         position_84 = scheme_ids[f"{domain}_84"]
         de_turn_insertions = len([residue for residue in numbering.get(position_84, []) if residue[1]])
         numbering = _move_insertions_to_next_position(

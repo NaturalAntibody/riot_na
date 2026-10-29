@@ -223,7 +223,9 @@ are insertions too and are written like other insertions (107.1, 241.1-241.45). 
 (EU), and IGHG3 hinge residues without EU positions are insertions (218.1-218.2 and 228.1-228.45). In IMGT, the
 residues of IGHG2 before CH2 position 1 are numbered 1.5-1.1 (IMGT protein display places the missing one at 1.4).
 A query residue inserted relative to the germline takes an unused scheme position next to it if there is one,
-otherwise it is numbered as an insertion, e.g. `297.1`. C germlines in the database are membrane-bound forms, so
+otherwise it is numbered as an insertion, e.g. `297.1`. In IMGT, a residue inserted right after position 1 or 85
+takes the position and the residues before it become insertions before it (1.x, or 84.x and 85.x split as above).
+C germlines in the database are membrane-bound forms, so
 C-terminal G446 and K447 of secreted chains are not numbered. Scheme mappings are generated with
 `python -m notebooks.data_processing.c_scheme_mappings`.
 
