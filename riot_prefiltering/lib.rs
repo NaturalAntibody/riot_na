@@ -9,7 +9,7 @@ use prefiltering::Prefiltering;
 use pyo3::prelude::*;
 
 #[pymodule]
-fn riot_na(_py: Python, m: &PyModule) -> PyResult<()> {
+fn riot_na(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Prefiltering>()?;
     m.add_class::<PrefilteringResult>()?;
     m.add_class::<PrefilteringSegmentResult>()?;

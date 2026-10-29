@@ -11,7 +11,7 @@ bio = "1.1.0"
 csv = "1.2.1"
 indicatif = "0.17.3"
 itertools = "0.10.5"
-pyo3 = { version = "0.19.2", features = ["extension-module"] }
+pyo3 = { version = "0.30", features = ["extension-module"] }
 rand = "0.8.5"
 rayon = "1.7.0"
 serde = "1.0.164"
