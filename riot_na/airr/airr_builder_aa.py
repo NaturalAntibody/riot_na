@@ -2,6 +2,7 @@ from typing import Generic, Optional, TypeVar
 
 from riot_na.airr.airr_builder import is_complete_vdj
 from riot_na.airr.airr_validator import validate_airr_entry_aa
+from riot_na.airr.float_formatting import format_evalue_string_scientific
 from riot_na.alignment.alignment_utils import (
     align_sequences,
     fold_cigar,
@@ -78,7 +79,7 @@ class AirrBuilderAA(Generic[RearrangementT]):  # pylint: disable=too-many-instan
 
         self.rearrangement.v_score_aa = v_aln.alignment_score
         self.rearrangement.v_cigar_aa = v_aln.cigar
-        self.rearrangement.v_support_aa = v_aln.e_value
+        self.rearrangement.v_support_aa = format_evalue_string_scientific(v_aln.log10_e_value)
         self.rearrangement.v_identity_aa = v_aln.seq_identity
 
         return self
@@ -120,7 +121,7 @@ class AirrBuilderAA(Generic[RearrangementT]):  # pylint: disable=too-many-instan
 
             self.rearrangement.j_score_aa = j_aln.alignment_score
             self.rearrangement.j_cigar_aa = j_aln.cigar
-            self.rearrangement.j_support_aa = j_aln.e_value
+            self.rearrangement.j_support_aa = format_evalue_string_scientific(j_aln.log10_e_value)
             self.rearrangement.j_identity_aa = j_aln.seq_identity
 
         return self
@@ -137,7 +138,7 @@ class AirrBuilderAA(Generic[RearrangementT]):  # pylint: disable=too-many-instan
             assert self.v_gene_alignment_aa.t_end is not None
             assert self.v_gene_alignment_aa.target_id is not None
             assert self.v_gene_alignment_aa.cigar is not None
-            assert self.v_gene_alignment_aa.e_value is not None
+            assert self.v_gene_alignment_aa.log10_e_value is not None
             assert self.v_gene_alignment_aa.seq_identity is not None
             assert self.v_gene_alignment_aa.alignment_score is not None
             assert self.j_gene_alignment_aa is not None
@@ -147,7 +148,7 @@ class AirrBuilderAA(Generic[RearrangementT]):  # pylint: disable=too-many-instan
             assert self.j_gene_alignment_aa.t_end is not None
             assert self.j_gene_alignment_aa.target_id is not None
             assert self.j_gene_alignment_aa.cigar is not None
-            assert self.j_gene_alignment_aa.e_value is not None
+            assert self.j_gene_alignment_aa.log10_e_value is not None
             assert self.j_gene_alignment_aa.seq_identity is not None
             assert self.j_gene_alignment_aa.alignment_score is not None
             # offset c_aln by the end of j_gene_alignment_aa
@@ -174,7 +175,7 @@ class AirrBuilderAA(Generic[RearrangementT]):  # pylint: disable=too-many-instan
 
             self.rearrangement.c_score_aa = c_gene_alignment_aa.alignment_score
             self.rearrangement.c_cigar_aa = c_gene_alignment_aa.cigar
-            self.rearrangement.c_support_aa = c_gene_alignment_aa.e_value
+            self.rearrangement.c_support_aa = format_evalue_string_scientific(c_gene_alignment_aa.log10_e_value)
             self.rearrangement.c_identity_aa = c_gene_alignment_aa.seq_identity
 
         return self

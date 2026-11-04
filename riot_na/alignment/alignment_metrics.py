@@ -1,5 +1,6 @@
 import math
 from enum import Enum
+from typing import Optional
 
 from riot_na.alignment.alignment_utils import get_cigar_op_groups, unfold_cigar
 from riot_na.data.constants import BLOSUM_62
@@ -64,8 +65,16 @@ def compute_raw_score_from_bit_score(bit_score: float, gumbell_params: GumbellPa
     return (math.log(gumbell_params.value["K"]) + bit_score * math.log(2)) / gumbell_params.value["L"]
 
 
-def compute_evalue(query_length: int, db_length: int, bit_score: float) -> float:
-    return query_length * db_length * 2 ** (-bit_score)
+def log10_evalue_threshold(e_value_threshold: Optional[float]) -> Optional[float]:
+    if e_value_threshold is None:
+        return None
+    assert e_value_threshold > 0, "E-value threshold must be greater than 0"
+    return math.log10(e_value_threshold)
+
+
+def compute_log10_evalue(query_length: int, db_length: int, bit_score: float) -> float:
+    # log10(E) = log10(query) + log10(db) - bit_score * log10(2)
+    return math.log10(query_length) + math.log10(db_length) - (bit_score * math.log10(2))
 
 
 def calculate_seq_identity(cigar: Cigar, query: str, target: str, query_start: int = 0, target_start: int = 0) -> float:

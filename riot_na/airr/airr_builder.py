@@ -1,6 +1,7 @@
 from typing import Generic, Optional, TypeVar
 
 from riot_na.airr.airr_validator import validate_airr_entry
+from riot_na.airr.float_formatting import format_evalue_string_scientific
 from riot_na.alignment.alignment_utils import (
     align_sequences,
     fold_cigar,
@@ -103,7 +104,7 @@ class AirrBuilder(Generic[RearrangementT]):  # pylint: disable=too-many-instance
 
         self.rearrangement.v_score = v_aln.alignment_score
         self.rearrangement.v_cigar = v_aln.cigar
-        self.rearrangement.v_support = v_aln.e_value
+        self.rearrangement.v_support = format_evalue_string_scientific(v_aln.log10_e_value)
         self.rearrangement.v_identity = v_aln.seq_identity
 
         return self
@@ -149,7 +150,7 @@ class AirrBuilder(Generic[RearrangementT]):  # pylint: disable=too-many-instance
 
             self.rearrangement.j_score = j_aln.alignment_score
             self.rearrangement.j_cigar = j_aln.cigar
-            self.rearrangement.j_support = j_aln.e_value
+            self.rearrangement.j_support = format_evalue_string_scientific(j_aln.log10_e_value)
             self.rearrangement.j_identity = j_aln.seq_identity
 
             assert j_aln.reading_frame is not None
@@ -189,7 +190,7 @@ class AirrBuilder(Generic[RearrangementT]):  # pylint: disable=too-many-instance
 
         self.rearrangement.c_score = c_aln.alignment_score
         self.rearrangement.c_cigar = c_aln.cigar
-        self.rearrangement.c_support = c_aln.e_value
+        self.rearrangement.c_support = format_evalue_string_scientific(c_aln.log10_e_value)
         self.rearrangement.c_identity = c_aln.seq_identity
 
         return self
@@ -232,7 +233,7 @@ class AirrBuilder(Generic[RearrangementT]):  # pylint: disable=too-many-instance
 
         self.rearrangement.d_score = d_aln.alignment_score
         self.rearrangement.d_cigar = d_aln.cigar
-        self.rearrangement.d_support = d_aln.e_value
+        self.rearrangement.d_support = format_evalue_string_scientific(d_aln.log10_e_value)
         self.rearrangement.d_identity = d_aln.seq_identity
 
         return self

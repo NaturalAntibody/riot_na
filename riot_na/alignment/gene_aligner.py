@@ -6,7 +6,11 @@ from typing import Callable, Optional, Sequence
 
 from ssw_aligner import StripedSmithWaterman
 
-from riot_na.alignment.alignment_metrics import GumbellParams, compute_bit_score
+from riot_na.alignment.alignment_metrics import (
+    GumbellParams,
+    compute_bit_score,
+    log10_evalue_threshold,
+)
 from riot_na.alignment.skbio_alignment import (
     align_aa,  # type: ignore  # pylint: disable=import-error
 )
@@ -55,6 +59,7 @@ class GeneAligner:
         self.db_length = sum(len(gene.sequence) for gene in genes)
 
         self.e_value_threshold = e_value_threshold
+        self.log10_e_value_threshold = log10_evalue_threshold(e_value_threshold)
         self.alignment_length_threshold = alignment_length_threshold
 
     def _prefilter(self, query: str, both_strains: bool) -> SpeciesPrefilteringResult:
@@ -95,9 +100,9 @@ class GeneAligner:
 
             alignment_length = alignment.t_end - alignment.t_start
 
-            if self.e_value_threshold is not None:
-                assert alignment.e_value is not None
-                if alignment.e_value > self.e_value_threshold:
+            if self.log10_e_value_threshold is not None:
+                assert alignment.log10_e_value is not None
+                if alignment.log10_e_value > self.log10_e_value_threshold:
                     continue
             if self.alignment_length_threshold is not None:
                 if alignment_length < self.alignment_length_threshold:
@@ -108,7 +113,7 @@ class GeneAligner:
                     target_id=alignment.target_id,
                     alignment_score=alignment.alignment_score,
                     seq_identity=alignment.seq_identity,
-                    e_value=alignment.e_value,
+                    log10_e_value=alignment.log10_e_value,
                     q_start=alignment.q_start,
                     q_end=alignment.q_end,
                     q_len=alignment.q_len,
@@ -180,7 +185,6 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
         max_cdr3_length: Optional[int] = None,
         min_seq_identity: Optional[float] = None,
         min_internal_alignment_length: Optional[int] = None,
-        max_fragment_germline_start: int = 0,
     ) -> None:
         # Initialize the base prefiltering directly with species-aware keys
         self.prefiltering = MultiSpeciesPrefiltering(genes, kmer_size, distance_threshold, top_n, modulo_n)
@@ -189,11 +193,11 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
         self.db_length = sum(len(gene.sequence) for gene in genes)
 
         self.e_value_threshold = e_value_threshold
+        self.log10_e_value_threshold = log10_evalue_threshold(e_value_threshold)
         self.alignment_length_threshold = alignment_length_threshold
         self.max_cdr3_length = max_cdr3_length
         self.min_seq_identity = min_seq_identity
         self.min_internal_alignment_length = min_internal_alignment_length
-        self.max_fragment_germline_start = max_fragment_germline_start
 
     def find_gene(self, gene_id: str) -> Optional[Gene | GeneAA]:
         """
@@ -236,9 +240,9 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
 
             alignment_length = alignment.t_end - alignment.t_start
 
-            if self.e_value_threshold is not None:
-                assert alignment.e_value is not None
-                if alignment.e_value > self.e_value_threshold:
+            if self.log10_e_value_threshold is not None:
+                assert alignment.log10_e_value is not None
+                if alignment.log10_e_value > self.log10_e_value_threshold:
                     continue
             if self.alignment_length_threshold is not None:
                 if alignment_length < self.alignment_length_threshold:
@@ -251,12 +255,7 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
                 if alignment.seq_identity < self.min_seq_identity:
                     continue
             if self.min_internal_alignment_length is not None:
-                # alignments shorter than that have to start at the beginning of the germline, or at most
-                # max_fragment_germline_start residues after it if they start at the beginning of the query too
-                if alignment_length < self.min_internal_alignment_length and (
-                    alignment.t_start > self.max_fragment_germline_start
-                    or (alignment.t_start > 0 and alignment.q_start > self.max_fragment_germline_start)
-                ):
+                if alignment_length < self.min_internal_alignment_length:
                     continue
 
             result.append(
@@ -264,7 +263,7 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
                     target_id=alignment.target_id,
                     alignment_score=alignment.alignment_score,
                     seq_identity=alignment.seq_identity,
-                    e_value=alignment.e_value,
+                    log10_e_value=alignment.log10_e_value,
                     q_start=alignment.q_start,
                     q_end=alignment.q_end,
                     t_start=alignment.t_start,
@@ -331,7 +330,7 @@ def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> d
                 "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_V_NT", 13)),
                 "top_n": int(os.environ.get("TOP_N_V_NT", 12)),
                 "modulo_n": int(os.environ.get("MODULO_N_V_NT", 2)),
-                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_NT", 0.05)),
+                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_NT", 5.9e-08)),
                 "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_NT", 100)),
             }
         case GermlineGene.D:
@@ -374,7 +373,7 @@ def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> d
                         "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_CH_NT", 5)),
                         "top_n": int(os.environ.get("TOP_N_CH_NT", 5)),
                         "modulo_n": int(os.environ.get("MODULO_N_CH_NT", 2)),
-                        "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_CH_NT", 0.05)),
+                        "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_CH_NT", 1.908e-06)),
                     }
                 case Locus.IGK:
                     return {
@@ -382,7 +381,7 @@ def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> d
                         "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_CK_NT", 5)),
                         "top_n": int(os.environ.get("TOP_N_CK_NT", 3)),
                         "modulo_n": int(os.environ.get("MODULO_N_CK_NT", 1)),
-                        "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_CK_NT", 0.05)),
+                        "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_CK_NT", 1.2e-05)),
                     }
                 case Locus.IGL:
                     return {
@@ -390,7 +389,7 @@ def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> d
                         "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_CL_NT", 5)),
                         "top_n": int(os.environ.get("TOP_N_CL_NT", 3)),
                         "modulo_n": int(os.environ.get("MODULO_N_CL_NT", 1)),
-                        "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_CL_NT", 0.05)),
+                        "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_CL_NT", 2.82e-06)),
                     }
 
 
@@ -404,7 +403,7 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_V_AA", 3)),
                 "top_n": int(os.environ.get("TOP_N_V_AA", 20)),
                 "modulo_n": int(os.environ.get("MODULO_N_V_AA", 1)),
-                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_AA", 1e-45)),
+                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_AA", 6.79e-15)),
                 "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_AA", 50)),
             }
         case GermlineGene.J:
@@ -414,7 +413,7 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 "top_n": int(os.environ.get("TOP_N_J_AA", 5)),
                 "modulo_n": int(os.environ.get("MODULO_N_J_AA", 1)),
                 "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_J_AA", 5)),
-                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_J_AA", 0.001)),
+                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_J_AA", 0.05)),
                 "max_cdr3_length": int(os.environ.get("MAX_CDR3_LENGTH_J_AA", 60)),
             }
         case GermlineGene.C:
@@ -424,15 +423,14 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 "top_n": int(os.environ.get("TOP_N_C_AA", 5)),
                 "modulo_n": int(os.environ.get("MODULO_N_C_AA", 2)),
                 "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_C_AA", 4)),
-                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_C_AA", 0.05)),
+                # C alignments of at least min_internal_alignment_length residues have E-values of at most about 1e-17
+                # (therapeutics), with no candidates between that and 1. The threshold lies in that gap, with margin
+                # for C regions more mutated than in therapeutics.
+                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_C_AA", 1e-10)),
                 # filter out matches of non antibody regions following V region, e.g. proline rich CAR hinges
-                # to IgG and IgA hinges. Short C regions (e.g. CH1 fragments in Fabs) start at the C germline start.
+                # to IgG and IgA hinges.
                 "min_seq_identity": float(os.environ.get("MIN_SEQ_IDENTITY_C_AA", 0.4)),
                 "min_internal_alignment_length": int(os.environ.get("MIN_INTERNAL_ALIGNMENT_LENGTH_C_AA", 50)),
-                # the first C residue is encoded by the J-C junction codon (its first nucleotide comes from J), so it is
-                # missing or different when J ends differently, e.g. absorbed by J alignment or mutated. C fragments
-                # without it start right after J (or at the start of the query of the constant region aligner)
-                "max_fragment_germline_start": int(os.environ.get("MAX_FRAGMENT_GERMLINE_START_C_AA", 1)),
             }
         case _:
             raise ValueError("AA aligner not supported for gene type")

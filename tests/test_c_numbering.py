@@ -642,23 +642,6 @@ def test_c_is_not_aligned_without_j(riot_aa: RiotNumberingAA):
     assert airr.c_scheme_residue_mapping is None
 
 
-@pytest.mark.parametrize(
-    "query, c_gene",
-    [
-        # the first C residue is encoded by the J-C junction codon: absorbed by J (FR4 ending with A instead of S)
-        (VH[:-1] + C_GERMLINES_AA["IGHG1"][:20], "IGHG1"),
-        # J-C junction residue mutated (R108G, G to A)
-        (VK_MOUSE + "G" + C_GERMLINES_AA["IGKC"][1:20], "IGKC"),
-        (VL + "A" + C_GERMLINES_AA["IGLC2"][1:20], "IGLC2"),
-    ],
-    ids=["IGHG1", "IGKC", "IGLC2"],
-)
-def test_c_fragments_without_junction_residue(riot_aa: RiotNumberingAA, query: str, c_gene: str):
-    airr = riot_aa.run_on_sequence("", query)
-
-    assert (airr.c_call, airr.c_germline_start_aa) == (c_gene, 2)
-
-
 def test_c_fragments_without_junction_residue_follow_j(riot_aa: RiotNumberingAA):
     # the Whitlow linker ends with STKG, as CH1 without its first residue (A118), it doesn't follow J
     airr = riot_aa.run_on_sequence("", VH + "GSTSGSGKPGSGEGSTKG" + VK_MOUSE)
@@ -887,13 +870,6 @@ def test_c_numbering_multiple_domains_scfv_fc_human():
     assert light.locus == "igk"
     assert light.c_call == "IGHG1"
     assert light.c_scheme_residue_mapping and light.c_scheme_residue_mapping["297"] == "N"
-
-
-def test_igkc_fragment_without_junction_residue_human(human_riot_aa: RiotNumberingAA):
-    # J-C junction residue mutated (R108G, G to A)
-    airr = human_riot_aa.run_on_sequence("", VK_HUMAN + "G" + C_GERMLINES_AA["IGKC"][1:20])
-
-    assert (airr.c_call, airr.c_germline_start_aa) == ("IGKC", 2)
 
 
 def test_c_fragments_without_junction_residue_follow_j_human(

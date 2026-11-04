@@ -5,6 +5,7 @@ from typing import Callable, Optional, Sequence
 
 from ssw_aligner import StripedSmithWaterman
 
+from riot_na.alignment.alignment_metrics import log10_evalue_threshold
 from riot_na.alignment.gene_aligner import AA_ALIGNER_PARAMS, ALIGNER_PARAMS
 from riot_na.alignment.gene_aligner import (
     get_aa_aligner_params as gene_aa_aligner_params,
@@ -76,6 +77,7 @@ class SegmentGeneAligner:
 
         # Alignment parameters
         self.e_value_threshold = e_value_threshold
+        self.log10_e_value_threshold = log10_evalue_threshold(e_value_threshold)
         self.alignment_length_threshold = alignment_length_threshold
 
     # Compatibility method to match GeneAligner interface
@@ -114,8 +116,8 @@ class SegmentGeneAligner:
             # Apply filtering criteria
             alignment_length = alignment.t_end - alignment.t_start
 
-            if self.e_value_threshold is not None:
-                if alignment.e_value > self.e_value_threshold:
+            if self.log10_e_value_threshold is not None:
+                if alignment.log10_e_value > self.log10_e_value_threshold:
                     continue
 
             if self.alignment_length_threshold is not None:
@@ -127,7 +129,7 @@ class SegmentGeneAligner:
                 target_id=alignment.target_id,
                 alignment_score=alignment.alignment_score,
                 seq_identity=alignment.seq_identity,
-                e_value=alignment.e_value,
+                log10_e_value=alignment.log10_e_value,
                 q_start=alignment.q_start,
                 q_end=alignment.q_end,
                 q_len=alignment.q_len,
@@ -220,6 +222,7 @@ class SegmentGeneAlignerAA:
 
         # Alignment parameters
         self.e_value_threshold = e_value_threshold
+        self.log10_e_value_threshold = log10_evalue_threshold(e_value_threshold)
         self.alignment_length_threshold = alignment_length_threshold
         self.max_cdr3_length = max_cdr3_length  # Added for compatibility
 
@@ -255,8 +258,8 @@ class SegmentGeneAlignerAA:
             # Apply filtering criteria
             alignment_length = alignment.t_end - alignment.t_start
 
-            if self.e_value_threshold is not None:
-                if alignment.e_value and alignment.e_value > self.e_value_threshold:
+            if self.log10_e_value_threshold is not None:
+                if alignment.log10_e_value is not None and alignment.log10_e_value > self.log10_e_value_threshold:
                     continue
 
             if self.alignment_length_threshold is not None:
@@ -273,7 +276,7 @@ class SegmentGeneAlignerAA:
                 target_id=alignment.target_id,
                 alignment_score=alignment.alignment_score,
                 seq_identity=alignment.seq_identity,
-                e_value=alignment.e_value,
+                log10_e_value=alignment.log10_e_value,
                 q_start=alignment.q_start,
                 q_end=alignment.q_end,
                 t_start=alignment.t_start,
@@ -362,7 +365,7 @@ def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> d
                 "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_V_NT", 13)),
                 "top_n": int(os.environ.get("TOP_N_V_NT", 12)),
                 "modulo_n": int(os.environ.get("MODULO_N_V_NT", 2)),
-                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_NT", 0.05)),
+                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_NT", 5.8e-08)),
                 "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_NT", 100)),
                 "min_prefiltering_coverage": int(os.environ.get("MIN_PREFILTERING_COVERAGE_V_NT", 75)),
                 "min_segment_length": int(os.environ.get("MIN_SEGMENT_LENGTH_V_NT", 100)),
@@ -382,7 +385,7 @@ def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
                 "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_V_AA", 4)),
                 "top_n": int(os.environ.get("TOP_N_V_AA", 12)),
                 "modulo_n": int(os.environ.get("MODULO_N_V_AA", 1)),
-                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_AA", 1e-55)),
+                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_AA", 1.0313e-18)),
                 "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_AA", 50)),
                 "min_prefiltering_coverage": int(os.environ.get("MIN_PREFILTERING_COVERAGE_V_AA", 32)),
                 "min_segment_length": int(os.environ.get("MIN_SEGMENT_LENGTH_V_AA", 35)),

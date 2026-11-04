@@ -23,7 +23,7 @@ class InternalAlignmentEntry:  # pylint: disable=too-many-instance-attributes
     target_id: str
     alignment_score: float
     seq_identity: float
-    e_value: float
+    log10_e_value: float
     q_start: int
     q_end: int
     q_len: int
@@ -35,14 +35,14 @@ class InternalAlignmentEntry:  # pylint: disable=too-many-instance-attributes
     rev_comp: bool
 
     def __lt__(self, other):
-        if self.e_value == other.e_value:
+        if self.log10_e_value == other.log10_e_value:
             return (self.t_end - self.t_start) < (other.t_end - other.t_start)
-        return self.e_value < other.e_value
+        return self.log10_e_value < other.log10_e_value
 
     def __gt__(self, other):
-        if self.e_value == other.e_value:
+        if self.log10_e_value == other.log10_e_value:
             return (self.t_end - self.t_start) > (other.t_end - other.t_start)
-        return self.e_value > other.e_value
+        return self.log10_e_value > other.log10_e_value
 
 
 @dataclass(frozen=True)
@@ -50,7 +50,7 @@ class InternalAlignmentEntryAA:  # pylint: disable=too-many-instance-attributes
     target_id: str
     alignment_score: Optional[float]
     seq_identity: Optional[float]
-    e_value: Optional[float]
+    log10_e_value: Optional[float]
     q_start: int
     q_end: int
     t_start: int
@@ -58,14 +58,14 @@ class InternalAlignmentEntryAA:  # pylint: disable=too-many-instance-attributes
     cigar: Cigar
 
     def __lt__(self, other):
-        if self.e_value == other.e_value:
+        if self.log10_e_value == other.log10_e_value:
             return (self.t_end - self.t_start) < (other.t_end - other.t_start)
-        return self.e_value < other.e_value
+        return self.log10_e_value < other.log10_e_value
 
     def __gt__(self, other):
-        if self.e_value == other.e_value:
+        if self.log10_e_value == other.log10_e_value:
             return (self.t_end - self.t_start) > (other.t_end - other.t_start)
-        return self.e_value > other.e_value
+        return self.log10_e_value > other.log10_e_value
 
 
 @dataclass(frozen=True)
@@ -210,10 +210,10 @@ class AirrRearrangementEntryNT:  # pylint: disable=too-many-instance-attributes
     j_cigar: Optional[str] = None
     c_cigar: Optional[str] = None
 
-    v_support: Optional[float] = None
-    d_support: Optional[float] = None
-    j_support: Optional[float] = None
-    c_support: Optional[float] = None
+    v_support: Optional[str] = None
+    d_support: Optional[str] = None
+    j_support: Optional[str] = None
+    c_support: Optional[str] = None
     v_identity: Optional[float] = None
     d_identity: Optional[float] = None
     j_identity: Optional[float] = None
@@ -324,9 +324,9 @@ class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
     j_cigar_aa: Optional[str] = None
     c_cigar_aa: Optional[str] = None
 
-    v_support_aa: Optional[float] = None
-    j_support_aa: Optional[float] = None
-    c_support_aa: Optional[float] = None
+    v_support_aa: Optional[str] = None
+    j_support_aa: Optional[str] = None
+    c_support_aa: Optional[str] = None
     v_identity_aa: Optional[float] = None
     j_identity_aa: Optional[float] = None
     c_identity_aa: Optional[float] = None
@@ -526,7 +526,7 @@ class AlignmentEntryNT:  # pylint: disable=too-many-instance-attributes
     target_id: str
     alignment_score: float
     seq_identity: float
-    e_value: float
+    log10_e_value: float
     q_start: int
     q_end: int
     q_len: int
@@ -543,22 +543,14 @@ class AlignmentEntryNT:  # pylint: disable=too-many-instance-attributes
     reading_frame: Optional[int]
 
     def __lt__(self, other):
-        if self.e_value == other.e_value:
-            if self.e_value == 0:
-                if self.seq_identity == other.seq_identity:
-                    return self.target_id < other.target_id
-                return self.seq_identity > other.seq_identity
+        if self.log10_e_value == other.log10_e_value:
             return self.target_id < other.target_id
-        return self.e_value < other.e_value
+        return self.log10_e_value < other.log10_e_value
 
     def __gt__(self, other):
-        if self.e_value == other.e_value:
-            if self.e_value == 0:
-                if self.seq_identity == other.seq_identity:
-                    return self.target_id > other.target_id
-                return self.seq_identity < other.seq_identity
+        if self.log10_e_value == other.log10_e_value:
             return self.target_id > other.target_id
-        return self.e_value > other.e_value
+        return self.log10_e_value > other.log10_e_value
 
     def lookup_gene_id(self) -> str:
         return f"{self.species.value}|{self.locus.value}|{self.target_id}"
@@ -569,7 +561,7 @@ class AlignmentEntryAA:  # pylint: disable=too-many-instance-attributes
     target_id: str
     alignment_score: Optional[float]
     seq_identity: Optional[float]
-    e_value: Optional[float]
+    log10_e_value: Optional[float]
     q_start: int
     q_end: int
     t_start: int
@@ -582,22 +574,14 @@ class AlignmentEntryAA:  # pylint: disable=too-many-instance-attributes
     t_seq: GeneSequence
 
     def __lt__(self, other):
-        if self.e_value == other.e_value:
-            if self.e_value == 0:
-                if self.seq_identity == other.seq_identity:
-                    return self.target_id < other.target_id
-                return self.seq_identity > other.seq_identity
+        if self.log10_e_value == other.log10_e_value:
             return self.target_id < other.target_id
-        return self.e_value < other.e_value
+        return self.log10_e_value < other.log10_e_value
 
     def __gt__(self, other):
-        if self.e_value == other.e_value:
-            if self.e_value == 0:
-                if self.seq_identity == other.seq_identity:
-                    return self.target_id > other.target_id
-                return self.seq_identity < other.seq_identity
+        if self.log10_e_value == other.log10_e_value:
             return self.target_id > other.target_id
-        return self.e_value > other.e_value
+        return self.log10_e_value > other.log10_e_value
 
     def lookup_gene_id(self) -> str:
         return f"{self.species.value}|{self.locus.value}|{self.target_id}"
