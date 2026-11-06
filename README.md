@@ -191,6 +191,33 @@ riot_aa: RiotNumberingAA = create_riot_aa(c_genes_organism = Organism.HOMO_SAPIE
 
 It is available in all `create_*` and `get_or_create_*` functions and in `run_on_file_mp`.
 
+RIOT prints a warning then: constant regions of another organism are less similar to the germlines, so the minimum
+sequence identity of C alignments (85% by default) should probably be lowered, see below.
+
+### Alignment thresholds
+
+Thresholds (E-value, minimum sequence identity, alignment length, prefiltering) and Striped Smith-Waterman parameters
+(gap penalties) of all gene aligners are kept in the immutable `AlignerParams` dataclass. `DEFAULT_ALIGNER_PARAMS` holds
+the established settings. To change any of them, create a modified copy and pass it as the last argument of the
+`create_*` and `get_or_create_*` functions and of `run_on_file_mp`:
+
+```python
+from dataclasses import replace
+from riot_na import DEFAULT_ALIGNER_PARAMS, Organism, create_riot_aa
+
+# minimum sequence identity of all C alignments (nucleotide and amino acid)
+params = DEFAULT_ALIGNER_PARAMS.with_c_min_seq_identity(0.4)
+riot_aa = create_riot_aa(c_genes_organism=Organism.HOMO_SAPIENS, params=params)
+
+# any other setting
+params = replace(DEFAULT_ALIGNER_PARAMS, c_aa=replace(DEFAULT_ALIGNER_PARAMS.c_aa, e_value_threshold=1e-8))
+```
+
+Fields: `v_nt`, `d_nt`, `jh_nt`, `jk_nt`, `jl_nt`, `ch_nt`, `ck_nt`, `cl_nt` (nucleotide), `v_aa`, `j_aa`, `c_aa`
+(amino acid), `segment_v_nt`, `segment_v_aa` (V aligners finding domains of multiple domain sequences) and `nt_ssw`,
+`aa_ssw`, `c_aa_ssw` (Smith-Waterman parameters; constant regions use a higher gap extension penalty, so that linkers
+between domains are not bridged). The thresholds used to be read from environment variables, these are not used anymore.
+
 ### Constant region numbering
 
 Constant regions of human IgG heavy chains (IGHG1-4: CH1, hinge, CH2 and CH3) and of kappa (IGKC) and lambda

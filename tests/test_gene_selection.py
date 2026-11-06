@@ -7,12 +7,12 @@ from riot_na.alignment.gene_aligner import (
     GeneAlignerAA,
     create_aa_j_gene_aligner,
     create_aa_v_gene_aligner,
-    get_aa_aligner_params,
 )
+from riot_na.alignment.params import DEFAULT_ALIGNER_PARAMS
 from riot_na.api import api_mp
 from riot_na.api.riot_numbering import create_riot_aa
 from riot_na.config import GENE_DB_DIR
-from riot_na.data.model import GeneAA, GermlineGene, InputType, Locus, Organism, Scheme
+from riot_na.data.model import GeneAA, InputType, Locus, Organism, Scheme
 
 AA_GENES_DIR = GENE_DB_DIR / "gene_db" / "aa_genes_deduplicated"
 
@@ -194,7 +194,7 @@ def test_human_gene_is_selected_if_more_species_have_a_gene_of_the_name():
     # given
     human_gene = GeneAA(name="IGHV3-23*01", species=Organism.HOMO_SAPIENS, locus=Locus.IGH, sequence=HEAVY_QUERY[:98])
     mouse_gene = GeneAA(name="IGHV3-23*01", species=Organism.MUS_MUSCULUS, locus=Locus.IGH, sequence=HEAVY_QUERY[:97])
-    v_aligner = GeneAlignerAA([mouse_gene, human_gene], **get_aa_aligner_params(GermlineGene.V))
+    v_aligner = GeneAlignerAA([mouse_gene, human_gene], **DEFAULT_ALIGNER_PARAMS.v_aa.kwargs())
 
     # then
     assert v_aligner.get_gene("IGHV3-23*01") is human_gene

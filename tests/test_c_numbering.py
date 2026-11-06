@@ -9,7 +9,6 @@ from ssw_aligner import StripedSmithWaterman
 
 from riot_na import ChainType, CScheme, Locus, Organism, Scheme
 from riot_na.alignment.alignment_utils import align_c, select_c_alignment
-from riot_na.alignment.gene_aligner import AA_ALIGNER_PARAMS, ALIGNER_PARAMS
 from riot_na.alignment.skbio_alignment import align, align_aa
 from riot_na.alignment.translate import translate
 from riot_na.api.multidomain_riot_numbering import (
@@ -566,7 +565,7 @@ def test_c_alignment_score_bounds(query: str):
     c_aligners = get_or_create_riot_aa().vjc_aligner_aa.c_aligners
     assert c_aligners is not None
     for c_aligner in c_aligners[Organism.HOMO_SAPIENS].values():
-        aligner = StripedSmithWaterman(query, **AA_ALIGNER_PARAMS)
+        aligner = StripedSmithWaterman(query, **c_aligner.ssw_params.kwargs())
         max_score = c_aligner.max_alignment_score(query)
         for gene in c_aligner.gene_lookup.values():
             alignment = align_aa(aligner, query, gene.name, gene.sequence, db_length=c_aligner.db_length)
@@ -584,7 +583,7 @@ def test_c_alignment_score_bounds(query: str):
 )
 def test_nucleotide_c_alignment_score_bounds(query: str):
     for c_aligner in get_or_create_riot_nt().vdjc_aligner.c_aligners[Organism.HOMO_SAPIENS].values():
-        aligner = StripedSmithWaterman(query, **ALIGNER_PARAMS)
+        aligner = StripedSmithWaterman(query, **c_aligner.ssw_params.kwargs())
         max_score = c_aligner.max_alignment_score(query)
         for gene in c_aligner.gene_lookup.values():
             alignment = align(
