@@ -22,9 +22,9 @@ def test_produce_nt_alignments():
     # then
     assert alignments.v is not None
     assert alignments.v.target_id == "IGHV-2ZSK"
-    assert alignments.v.alignment_score == 445.8980348533401
+    assert alignments.v.alignment_score == 439.39323084579206
     assert alignments.v.seq_identity == 0.9896907216494846
-    assert alignments.v.log10_e_value == pytest.approx(-125.73198814216012)
+    assert alignments.v.log10_e_value == pytest.approx(-123.77384701997289)
     assert domain.segment_start == 99
     assert alignments.v.q_start == 111 - domain.segment_start
     assert alignments.v.q_end == 402 - domain.segment_start
@@ -50,9 +50,9 @@ def test_produce_nt_alignments():
 
     assert alignments.d is not None
     assert alignments.d.target_id == "IGHD-4RNO"
-    assert alignments.d.alignment_score == 14.301386420997765
+    assert alignments.d.alignment_score == 14.201929939022387
     assert alignments.d.seq_identity == 0.9
-    assert alignments.d.log10_e_value == pytest.approx(-0.5133153446270406)
+    assert alignments.d.log10_e_value == pytest.approx(-0.48337596028923757)
     assert alignments.d.q_start == 408 - domain.segment_start
     assert alignments.d.q_end == 418 - domain.segment_start
     assert alignments.d.q_len == 10
@@ -68,9 +68,9 @@ def test_produce_nt_alignments():
 
     assert alignments.j is not None
     assert alignments.j.target_id == "IGHJ-32C2"
-    assert alignments.j.alignment_score == 75.06770154324091
+    assert alignments.j.alignment_score == 74.06640912806216
     assert alignments.j.seq_identity == 0.9795918367346939
-    assert alignments.j.log10_e_value == pytest.approx(-17.505161877232872)
+    assert alignments.j.log10_e_value == pytest.approx(-17.203742825833235)
     assert alignments.j.q_start == 420 - domain.segment_start
     assert alignments.j.q_end == 469 - domain.segment_start
     assert alignments.j.q_len == 49
@@ -91,9 +91,9 @@ def test_produce_nt_alignments():
     # AlignmentEntryNT(target_id='IGHG1', alignment_score=209.06521694100786, seq_identity=0.7833333333333333, e_value=3.1801713964550777e-34, q_start=538, q_end=775, q_len=237, t_start=70, t_end=310, t_len=240, cigar='104M3D133M', rev_comp=False, species=<Organism.HOMO_SAPIENS: 'human'>, locus=<Locus.IGH: 'igh'>, q_seq='CCAAAACGACACCCCCATCTGTCTATCCACTGGCCCCTGGATCTGCTGCCCAAACTAACTCCATGGTGACCCTGGGATGCCTGGTCAAGGGCTATTTCCCTGAGCCAGTGACAGTGACCTGGAACTCTGGATCCCTGTCCAGCGGTGTGCACACCTTCCCAGCTGTCCTGCAGTCTGACCTCTACACTCTGAGCAGCTCAGTGACTGTCCCCTCCAGCACCTGGCCCAGCCAGACCGTCACCTGCAACGTTGCCCACCCGGCCAGCAGCACCAAGGTGGACAAGAAAATTGTGCCCAGGGATTGTGGTTGTAAGCCTTGCATATGTACAGTCCCAGAAGT', t_seq='GCCTCCACCAAGGGCCCATCGGTCTTCCCCCTGGCACCCTCCTCCAAGAGCACCTCTGGGGGCACAGCAGCCCTGGGCTGCCTGGTCAAGGACTACTTCCCCGAACCGGTGACGGTGTCGTGGAACTCAGGCGCCCTGACCAGCGGCGTGCACACCTTCCCGGCTGTCCTACAGTCCTCAGGACTCTACTCCCTCAGCAGCGTGGTGACCGTGCCCTCCAGCAGCTTGGGCACCCAGACCTACATCTGCAACGTGAATCACAAGCCCAGCAACACCAAGGTGGACAAGAAAGTTGAGCCCAAATCTTGTGACAAAACTCACACATGCCCACCGTGCCCAGCACCTGAACTCCTGGGGGGACCGTCAGTCTTCCTCTTCCCCCCAAAACCCAAGGACACCCTCATGATCTCCCGGACCCCTGAGGTCACATGCGTGGTGGTGGACGTGAGCCACGAAGACCCTGAGGTCAAGTTCAACTGGTACGTGGACGGCGTGGAGGTGCATAATGCCAAGACAAAGCCGCGGGAGGAGCAGTACAACAGCACGTACCGTGTGGTCAGCGTCCTCACCGTCCTGCACCAGGACTGGCTGAATGGCAAGGAGTACAAGTGCAAGGTCTCCAACAAAGCCCTCCCAGCCCCCATCGAGAAAACCATCTCCAAAGCCAAAGGGCAGCCCCGAGAACCACAGGTGTACACCCTGCCCCCATCCCGGGATGAGCTGACCAAGAACCAGGTCAGCCTGACCTGCCTGGTCAAAGGCTTCTATCCCAGCGACATCGCCGTGGAGTGGGAGAGCAATGGGCAGCCGGAGAACAACTACAAGACCACGCCTCCCGTGCTGGACTCCGACGGCTCCTTCTTCCTCTACAGCAAGCTCACCGTGGACAAGAGCAGGTGGCAGCAGGGGAACGTCTTCTCATGCTCCGTGATGCATGAGGCTCTGCACAACCACTACACACAGAAGAGCCTCTCCCTGTCTCCGGGTAAATGA', reading_frame=None))
     assert alignments.c is not None
     assert alignments.c.target_id == "IGHG1"
-    assert alignments.c.alignment_score == 209.06521694100786
+    assert alignments.c.alignment_score == 206.0752606731242
     assert alignments.c.seq_identity == 0.7833333333333333
-    assert alignments.c.log10_e_value == pytest.approx(-56.395461398862444)
+    assert alignments.c.log10_e_value == pytest.approx(-55.495394876505934)
     assert alignments.c.q_start == 538 - domain.segment_start
     assert alignments.c.q_end == 775 - domain.segment_start
     assert alignments.c.q_len == 237

@@ -9,6 +9,7 @@ from ssw_aligner import StripedSmithWaterman
 
 from riot_na import ChainType, CScheme, Locus, Organism, Scheme
 from riot_na.alignment.alignment_utils import align_c, select_c_alignment
+from riot_na.alignment.params import DEFAULT_ALIGNER_PARAMS
 from riot_na.alignment.skbio_alignment import align, align_aa
 from riot_na.alignment.translate import translate
 from riot_na.api.multidomain_riot_numbering import (
@@ -86,12 +87,27 @@ def secreted_ighg(gene: str) -> str:
 
 @pytest.fixture(name="riot_aa")
 def fixture_riot_aa() -> RiotNumberingAA:
-    return get_or_create_riot_aa(c_genes_organism=Organism.HOMO_SAPIENS)
+    return get_or_create_riot_aa()
 
 
 @pytest.fixture(name="riot_nt")
 def fixture_riot_nt() -> RiotNumberingNT:
-    return get_or_create_riot_nt(c_genes_organism=Organism.HOMO_SAPIENS)
+    return get_or_create_riot_nt()
+
+
+# Mouse has no C germlines of its own, so human C genes are forced for sequences with a mouse variable domain. The C
+# regions of other organisms are less similar to the germlines, so the sequence identity limit is lowered.
+FORCED_C_PARAMS = DEFAULT_ALIGNER_PARAMS.with_c_min_seq_identity(0.4)
+
+
+def riot_aa_for(query: str) -> RiotNumberingAA:
+    if query.startswith(VK_MOUSE):
+        return get_or_create_riot_aa(c_genes_organism=Organism.HOMO_SAPIENS, params=FORCED_C_PARAMS)
+    return get_or_create_riot_aa()
+
+
+def multidomain_riot_aa_forced_c():
+    return get_or_create_multidomain_riot_aa(c_genes_organism=Organism.HOMO_SAPIENS, params=FORCED_C_PARAMS)
 
 
 def assert_positional_mapping_consistent(query: str, airr: AirrRearrangementEntryAA):
@@ -139,13 +155,12 @@ def imgt_table_positions(rows: list[dict[str, str]], c_scheme: CScheme) -> list[
 
 @pytest.mark.parametrize("c_scheme", list(CScheme))
 @pytest.mark.parametrize("gene, v_domain", [("IGHG1", VH), ("IGKC", VK_MOUSE), ("IGLC1", VL)])
-def test_canonical_c_sequences_follow_imgt_tables(
-    riot_aa: RiotNumberingAA, gene: str, v_domain: str, c_scheme: CScheme
-):
+def test_canonical_c_sequences_follow_imgt_tables(gene: str, v_domain: str, c_scheme: CScheme):
     """
     Number sequences of IMGT tables of correspondence between C numberings (Hu_IGHGnber, Hu_IGKCnber,
     Hu_IGLCnber), every residue has to get its table position.
     """
+    riot_aa = riot_aa_for(v_domain)
     rows = imgt_table_rows(gene)
     canonical_sequence = "".join(row["residue"] for row in rows)
     query = v_domain + canonical_sequence
@@ -355,13 +370,14 @@ def test_c_numbering_insertion_and_deletion(riot_aa: RiotNumberingAA):
     [("IGHG1", "CH1"), ("IGHG1", "CH2"), ("IGHG1", "CH3"), ("IGKC", "CL"), ("IGLC2", "CL")],
 )
 def test_c_numbering_insertion_after_imgt_positions_with_preceding_insertions(
-    riot_aa: RiotNumberingAA, gene: str, domain: str, position: str, c_scheme: CScheme
+    gene: str, domain: str, position: str, c_scheme: CScheme
 ):
     # IMGT insertions on positions 1 and 85 precede them, a residue inserted after such position takes it
     if gene.startswith("IGHG"):
         sequence = VH + secreted_ighg(gene)
     else:
         sequence = (VK_MOUSE if gene == "IGKC" else VL) + C_GERMLINES_AA[gene]
+    riot_aa = riot_aa_for(sequence)
     imgt = riot_aa.run_on_sequence("", sequence, c_scheme=CScheme.IMGT).c_positional_scheme_mapping
     assert imgt
     insertion = next(index for index, scheme_position in imgt.items() if scheme_position == f"{domain}_{position}") + 1
@@ -502,7 +518,7 @@ def test_no_c_numbering(riot_aa: RiotNumberingAA):
 
 
 def test_c_numbering_multiple_domains():
-    riot_aa = get_or_create_multidomain_riot_aa(c_genes_organism=Organism.HOMO_SAPIENS)
+    riot_aa = multidomain_riot_aa_forced_c()
     query = VH + secreted_ighg("IGHG1") + "GGGGSGGGGS" + SEQUENCES_AA["L"]
     heavy, light = riot_aa.run_on_sequence("", query, c_scheme=CScheme.EU)  # pylint: disable=unbalanced-tuple-unpacking
 
@@ -527,13 +543,12 @@ def test_c_numbering_multiple_domains():
     ids=["VL-CH1", "VH-CL", "VH-hinge-Fc"],
 )
 def test_c_numbering_of_engineered_chains(
-    riot_aa: RiotNumberingAA,
     query: str,
     c_gene: str,
     first_position: str,
     last_position: str,
 ):
-    airr = riot_aa.run_on_sequence("", query, c_scheme=CScheme.EU)
+    airr = riot_aa_for(query).run_on_sequence("", query, c_scheme=CScheme.EU)
 
     assert airr.c_call == c_gene
     assert airr.c_scheme_residue_mapping
@@ -568,7 +583,14 @@ def test_c_alignment_score_bounds(query: str):
         aligner = StripedSmithWaterman(query, **c_aligner.ssw_params.kwargs())
         max_score = c_aligner.max_alignment_score(query)
         for gene in c_aligner.gene_lookup.values():
-            alignment = align_aa(aligner, query, gene.name, gene.sequence, db_length=c_aligner.db_length)
+            alignment = align_aa(
+                aligner,
+                query,
+                gene.name,
+                gene.sequence,
+                db_length=c_aligner.db_length,
+                gumbel_params=c_aligner.gumbel_params,
+            )
             assert alignment.alignment_score is not None and alignment.alignment_score <= max_score
 
 
@@ -592,6 +614,7 @@ def test_nucleotide_c_alignment_score_bounds(query: str):
                 gene.sequence,
                 db_length=c_aligner.db_length,
                 query=query,
+                gumbel_params=c_aligner.gumbel_params,
             )
             assert alignment.alignment_score <= max_score
 
@@ -620,7 +643,7 @@ def test_c_alignment_of_all_loci(query: str, v_locus: Locus):
 
 
 def test_c_numbering_multiple_domains_scfv_fc():
-    riot_aa = get_or_create_multidomain_riot_aa(c_genes_organism=Organism.HOMO_SAPIENS)
+    riot_aa = multidomain_riot_aa_forced_c()
     # scFv fused to CH1, hinge and Fc, C follows VL
     query = VH + "GGGGSGGGGSGGGGS" + VK_MOUSE + secreted_ighg("IGHG1")
     heavy, light = riot_aa.run_on_sequence("", query, c_scheme=CScheme.EU)  # pylint: disable=unbalanced-tuple-unpacking
@@ -641,22 +664,22 @@ def test_c_is_not_aligned_without_j(riot_aa: RiotNumberingAA):
     assert airr.c_scheme_residue_mapping is None
 
 
-def test_c_fragments_without_junction_residue_follow_j(riot_aa: RiotNumberingAA):
+def test_c_fragments_without_junction_residue_follow_j():
     # the Whitlow linker ends with STKG, as CH1 without its first residue (A118), it doesn't follow J
-    airr = riot_aa.run_on_sequence("", VH + "GSTSGSGKPGSGEGSTKG" + VK_MOUSE)
+    airr = riot_aa_for(VK_MOUSE).run_on_sequence("", VH + "GSTSGSGKPGSGEGSTKG" + VK_MOUSE)
 
     assert airr.c_call is None
 
 
 @pytest.mark.parametrize("v_domain", [VH, VK_MOUSE], ids=["VH", "VK"])
-def test_non_antibody_regions_are_not_c_regions(riot_aa: RiotNumberingAA, v_domain: str):
+def test_non_antibody_regions_are_not_c_regions(v_domain: str):
     # CAR: CD8a hinge and transmembrane, CD28 and CD3z signalling domains
     car_t_tail = (
         "TTTPAPRPPTPAPTIASQPLSLRPEACRPAAGGAVHTRGLDFACDIYIWAPLAGTCGVLLLSLVITLYCKRGRKKLLYIFKQPFMRPVQTTQEEDGCSCRFPEEEEGG"
         "CELRVKFSRSADAPAYQQGQNQLYNELNLGRREEYDVLDKRRGRDPEMGGKPRRKNPQEGLYNELQKDKMAEAYSEIGMKGERRRGKGHDGLYQGLSTATKDTYDAL"
         "HMQALPPR"
     )
-    airr = riot_aa.run_on_sequence("", v_domain + car_t_tail, c_scheme=CScheme.EU)
+    airr = riot_aa_for(v_domain).run_on_sequence("", v_domain + car_t_tail, c_scheme=CScheme.EU)
 
     assert airr.j_call
     assert airr.c_call is None
@@ -664,7 +687,7 @@ def test_non_antibody_regions_are_not_c_regions(riot_aa: RiotNumberingAA, v_doma
 
 
 def test_c_numbering_multiple_domains_nucleotides():
-    riot_nt = get_or_create_multidomain_riot_nt(c_genes_organism=Organism.HOMO_SAPIENS)
+    riot_nt = get_or_create_multidomain_riot_nt()
     heavy_chain = nt_rearrangement("IGHV3-23*01", "GGCTAC", "IGHJ4*02", 2, "IGHG1")
 
     (airr,) = riot_nt.run_on_sequence("", heavy_chain, c_scheme=CScheme.EU)
@@ -820,12 +843,14 @@ def test_c_genes_organism_selects_c_aligners():
     assert default[Organism.MUS_MUSCULUS] == {}
     assert set(default[Organism.HOMO_SAPIENS]) == set(Locus)
 
-    human_c = get_or_create_riot_aa(c_genes_organism=Organism.HOMO_SAPIENS).vjc_aligner_aa.c_aligners
+    human_c = get_or_create_riot_aa(
+        c_genes_organism=Organism.HOMO_SAPIENS, params=FORCED_C_PARAMS
+    ).vjc_aligner_aa.c_aligners
     assert human_c is not None
     assert human_c[Organism.MUS_MUSCULUS] is human_c[Organism.HOMO_SAPIENS]
 
     with pytest.raises(ValueError):
-        create_riot_aa(c_genes_organism=Organism.MUS_MUSCULUS)
+        create_riot_aa(c_genes_organism=Organism.MUS_MUSCULUS, params=FORCED_C_PARAMS)
 
 
 # Default numbering (c_genes_organism not set) with a human variable domain: C is aligned to C germlines of the V species.

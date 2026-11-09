@@ -1,6 +1,7 @@
 import time
+from enum import Enum
 from pathlib import Path
-from typing import Optional, Type
+from typing import Any, Optional, Type
 
 import click
 import psutil
@@ -26,6 +27,30 @@ from riot_na.data.model import (
 )
 
 
+class EnumChoice(click.ParamType):
+    """Choice of an enum member, given by its name or value in any case (e.g. ``HOMO_SAPIENS``, ``human``, ``Human``)."""
+
+    name = "choice"
+
+    def __init__(self, enum: Type[Enum]) -> None:
+        self.enum = enum
+
+    def get_metavar(
+        self, param: click.Parameter, ctx: Optional[click.Context] = None
+    ) -> str:  # pylint: disable=arguments-differ
+        return "[" + "|".join(member.name for member in self.enum) + "]"
+
+    def convert(self, value: Any, param: Optional[click.Parameter], ctx: Optional[click.Context]) -> Enum:
+        if isinstance(value, self.enum):
+            return value
+        key = str(value).lower()
+        for member in self.enum:
+            if key in (member.name.lower(), str(member.value).lower()):
+                return member
+        choices = ", ".join(f"{member.name} ({member.value})" for member in self.enum)
+        return self.fail(f"{value!r} is not one of {choices}.", param, ctx)
+
+
 def _write_or_print(
     output_file: Optional[Path], record_type: Type[AirrRearrangementEntry_co], results: list[AirrRearrangementEntry_co]
 ) -> None:
@@ -42,13 +67,13 @@ def _write_or_print(
 @click.option("-o", "--output-file", type=Path, help="Path to output CSV file. If not specified, stdout is used.")
 @click.option(
     "--scheme",
-    type=click.Choice(Scheme),  # type: ignore
+    type=EnumChoice(Scheme),
     default=Scheme.IMGT,
     help="Which numbering scheme should be used: imgt, kabat, chothia, martin. Default IMGT",
 )
 @click.option(
     "--c-scheme",
-    type=click.Choice(CScheme),  # type: ignore
+    type=EnumChoice(CScheme),
     default=None,
     help=(
         "Numbering scheme of the constant region: eu, kabat, imgt. Only human IGHG1-4, IGKC and IGLC constant regions "
@@ -57,13 +82,13 @@ def _write_or_print(
 )
 @click.option(
     "--species",
-    type=click.Choice(Organism),  # type: ignore
+    type=EnumChoice(Organism),
     default=None,
     help="Which species germline sequences should be used. Default is all species.",
 )
 @click.option(
     "--c-genes-species",
-    type=click.Choice(Organism),  # type: ignore
+    type=EnumChoice(Organism),
     default=None,
     help=(
         "Align constant regions only to C germlines of this species, whatever the species of the variable region. "
@@ -73,7 +98,7 @@ def _write_or_print(
 )
 @click.option(
     "--input-type",
-    type=click.Choice(InputType),  # type: ignore
+    type=EnumChoice(InputType),
     default=InputType.NT,
     help="What kind of sequences are provided on input. Default is nucleotide sequences.",
 )

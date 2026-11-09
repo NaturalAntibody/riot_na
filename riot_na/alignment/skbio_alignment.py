@@ -3,7 +3,7 @@ from typing import Optional
 from ssw_aligner import StripedSmithWaterman
 
 from riot_na.alignment.alignment_metrics import (
-    GumbellParams,
+    GumbelParams,
     calculate_seq_identity,
     compute_bit_score,
     compute_log10_evalue,
@@ -23,10 +23,11 @@ def align(
     target: str,
     db_length: int,
     query: str,
+    gumbel_params: GumbelParams,
     rev_comp: bool = False,
 ) -> InternalAlignmentEntry:
     res = _align(aligner, target)
-    bit_score = compute_bit_score(raw_score=res["optimal_alignment_score"])
+    bit_score = compute_bit_score(raw_score=res["optimal_alignment_score"], gumbel_params=gumbel_params)
     log10_e_value = compute_log10_evalue(query_length=len(query), db_length=db_length, bit_score=bit_score)
     # Need to add 1 because of: https://github.com/biocore/scikit-bio/issues/1340
 
@@ -59,6 +60,7 @@ def align_aa(
     target_id: str,
     target: str,
     db_length: Optional[int] = None,
+    gumbel_params: Optional[GumbelParams] = None,
     calculate_score: bool = True,
     extend_c_terminus: bool = False,
     extend_n_terminus: bool = False,
@@ -71,10 +73,10 @@ def align_aa(
     t_end = res["target_end_optimal"] + 1
 
     if calculate_score:
-        assert db_length is not None
+        assert db_length is not None and gumbel_params is not None
         assert extend_c_terminus is False, "Score calculation not supported for extended C-terminus"
         assert extend_n_terminus is False, "Score calculation not supported for extended N-terminus"
-        bit_score = compute_bit_score(raw_score=res["optimal_alignment_score"], gumbell_params=GumbellParams.AA)
+        bit_score = compute_bit_score(raw_score=res["optimal_alignment_score"], gumbel_params=gumbel_params)
         log10_e_value = compute_log10_evalue(query_length=len(query), db_length=db_length, bit_score=bit_score)
         seq_identity = calculate_seq_identity(res["cigar"], query, target, q_start, t_start) if query else 0
     else:

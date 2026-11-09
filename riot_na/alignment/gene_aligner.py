@@ -6,10 +6,10 @@ from typing import Callable, Optional, Sequence
 from ssw_aligner import StripedSmithWaterman
 
 from riot_na.alignment.alignment_metrics import (
-    GumbellParams,
     compute_bit_score,
     log10_evalue_threshold,
 )
+from riot_na.alignment.gumbel import get_gumbel_params
 from riot_na.alignment.params import (
     DEFAULT_ALIGNER_PARAMS,
     AASSWParams,
@@ -55,10 +55,11 @@ class GeneAligner:  # pylint: disable=too-many-instance-attributes
         e_value_threshold: Optional[float] = None,
         alignment_length_threshold: Optional[int] = None,
         min_seq_identity: Optional[float] = None,
-        ssw_params: NTSSWParams = DEFAULT_ALIGNER_PARAMS.nt_ssw,
+        ssw_params: NTSSWParams = DEFAULT_ALIGNER_PARAMS.v_nt.aligner,
     ) -> None:
 
         self.ssw_params = ssw_params
+        self.gumbel_params = get_gumbel_params(ssw_params)
         self.prefiltering = MultiSpeciesPrefiltering(genes, kmer_size, distance_threshold, top_n, modulo_n)
 
         self.gene_lookup = create_gene_lookup(genes)
@@ -102,6 +103,7 @@ class GeneAligner:  # pylint: disable=too-many-instance-attributes
                 target=target_gene.sequence,
                 query=current_query,
                 db_length=self.db_length,
+                gumbel_params=self.gumbel_params,
                 rev_comp=gene_match.rev_comp,
             )
 
@@ -154,7 +156,9 @@ class GeneAligner:  # pylint: disable=too-many-instance-attributes
         Upper bound of alignment scores (bit scores) of the query to the genes: aligned nucleotides score at most
         match_score, mismatches and gaps lower the score.
         """
-        return compute_bit_score(self.ssw_params.match_score * min(len(query), self._max_gene_length))
+        return compute_bit_score(
+            self.ssw_params.match_score * min(len(query), self._max_gene_length), gumbel_params=self.gumbel_params
+        )
 
     @cached_property
     def _max_gene_length(self) -> int:
@@ -189,9 +193,10 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
         max_cdr3_length: Optional[int] = None,
         min_seq_identity: Optional[float] = None,
         min_internal_alignment_length: Optional[int] = None,
-        ssw_params: AASSWParams = DEFAULT_ALIGNER_PARAMS.aa_ssw,
+        ssw_params: AASSWParams = DEFAULT_ALIGNER_PARAMS.v_aa.aligner,
     ) -> None:
         self.ssw_params = ssw_params
+        self.gumbel_params = get_gumbel_params(ssw_params)
         # Initialize the base prefiltering directly with species-aware keys
         self.prefiltering = MultiSpeciesPrefiltering(genes, kmer_size, distance_threshold, top_n, modulo_n)
 
@@ -242,6 +247,7 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
                 target=target_gene.sequence,
                 query=query,
                 db_length=self.db_length,
+                gumbel_params=self.gumbel_params,
             )
 
             alignment_length = alignment.t_end - alignment.t_start
@@ -293,7 +299,7 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
     def max_alignment_score(self, query: str) -> float:
         """Upper bound of alignment scores (bit scores) of the query to the genes (see max_raw_alignment_score_aa)."""
         return compute_bit_score(
-            min(self._max_gene_raw_score, max_raw_alignment_score_aa(query)), gumbell_params=GumbellParams.AA
+            min(self._max_gene_raw_score, max_raw_alignment_score_aa(query)), gumbel_params=self.gumbel_params
         )
 
     @cached_property
@@ -396,7 +402,7 @@ def create_v_gene_aligner(
 
         genes.extend(species_genes)
 
-    genes_aligner = GeneAligner(genes, **params.v_nt.kwargs(), ssw_params=params.nt_ssw)
+    genes_aligner = GeneAligner(genes, **params.v_nt.kwargs(), ssw_params=params.v_nt.aligner)
 
     return genes_aligner
 
@@ -417,7 +423,8 @@ def create_aligner(
     )
     genes = read_genes(gene_path, gene_parsing_function)
 
-    genes_aligner = GeneAligner(genes, **params.nt_gene(germline_gene, locus).kwargs(), ssw_params=params.nt_ssw)
+    gene_params = params.nt_gene(germline_gene, locus)
+    genes_aligner = GeneAligner(genes, **gene_params.kwargs(), ssw_params=gene_params.aligner)
 
     return genes_aligner
 
@@ -439,7 +446,7 @@ def create_aa_v_gene_aligner(
 
         genes.extend(species_genes)
 
-    genes_aligner = GeneAlignerAA(genes, **params.v_aa.kwargs(), ssw_params=params.aa_ssw)
+    genes_aligner = GeneAlignerAA(genes, **params.v_aa.kwargs(), ssw_params=params.v_aa.aligner)
 
     return genes_aligner
 
@@ -452,7 +459,7 @@ def create_aa_j_gene_aligner(
 
     genes = read_genes(input_path, partial(parse_gene_aa, species=organism))
 
-    genes_aligner = GeneAlignerAA(genes, **params.j_aa.kwargs(), ssw_params=params.aa_ssw)
+    genes_aligner = GeneAlignerAA(genes, **params.j_aa.kwargs(), ssw_params=params.j_aa.aligner)
 
     return genes_aligner
 
@@ -465,6 +472,6 @@ def create_aa_c_gene_aligner(
 
     genes = read_genes(input_path, partial(parse_gene_aa, species=organism))
 
-    genes_aligner = GeneAlignerAA(genes, **params.c_aa.kwargs(), ssw_params=params.c_aa_ssw)
+    genes_aligner = GeneAlignerAA(genes, **params.c_aa.kwargs(), ssw_params=params.c_aa.aligner)
 
     return genes_aligner

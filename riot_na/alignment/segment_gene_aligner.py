@@ -10,6 +10,7 @@ from riot_na.alignment.gene_aligner import (
     parse_gene_aa,
     read_genes,
 )
+from riot_na.alignment.gumbel import get_gumbel_params
 from riot_na.alignment.params import (
     DEFAULT_ALIGNER_PARAMS,
     AASSWParams,
@@ -59,9 +60,10 @@ class SegmentGeneAligner:  # pylint: disable=too-many-instance-attributes
         min_prefiltering_coverage: int = 30,
         min_segment_length: int = 30,
         min_seq_identity: Optional[float] = None,
-        ssw_params: NTSSWParams = DEFAULT_ALIGNER_PARAMS.nt_ssw,
+        ssw_params: NTSSWParams = DEFAULT_ALIGNER_PARAMS.segment_v_nt.aligner,
     ) -> None:
         self.ssw_params = ssw_params
+        self.gumbel_params = get_gumbel_params(ssw_params)
         self.min_seq_identity = min_seq_identity
         # Initialize the Rust-based prefiltering
         self.prefiltering = MultiSpeciesSegmentPrefiltering(
@@ -113,6 +115,7 @@ class SegmentGeneAligner:  # pylint: disable=too-many-instance-attributes
                 target=target_gene.sequence,
                 query=current_query,
                 db_length=self.db_length,
+                gumbel_params=self.gumbel_params,
                 rev_comp=gene_info.rev_comp,
             )
 
@@ -212,9 +215,10 @@ class SegmentGeneAlignerAA:  # pylint: disable=too-many-instance-attributes
         min_prefiltering_coverage: int = 20,
         min_segment_length: int = 60,
         min_seq_identity: Optional[float] = None,
-        ssw_params: AASSWParams = DEFAULT_ALIGNER_PARAMS.aa_ssw,
+        ssw_params: AASSWParams = DEFAULT_ALIGNER_PARAMS.segment_v_aa.aligner,
     ) -> None:
         self.ssw_params = ssw_params
+        self.gumbel_params = get_gumbel_params(ssw_params)
         self.min_seq_identity = min_seq_identity
         self.prefiltering = MultiSpeciesSegmentPrefiltering(
             genes,
@@ -263,6 +267,7 @@ class SegmentGeneAlignerAA:  # pylint: disable=too-many-instance-attributes
                 target=target_sequence,
                 query=query,
                 db_length=self.db_length,
+                gumbel_params=self.gumbel_params,
             )
 
             # Apply filtering criteria
@@ -389,7 +394,7 @@ def create_v_gene_aligner(
         species_genes = read_genes(input_path, gene_parsing_function)
         genes.extend(species_genes)
 
-    genes_aligner = SegmentGeneAligner(genes, **params.segment_v_nt.kwargs(), ssw_params=params.nt_ssw)
+    genes_aligner = SegmentGeneAligner(genes, **params.segment_v_nt.kwargs(), ssw_params=params.segment_v_nt.aligner)
     return genes_aligner
 
 
@@ -410,5 +415,5 @@ def create_aa_v_gene_aligner(
         species_genes = read_genes(input_path, partial(parse_gene_aa, species=species))
         genes.extend(species_genes)
 
-    genes_aligner = SegmentGeneAlignerAA(genes, **params.segment_v_aa.kwargs(), ssw_params=params.aa_ssw)
+    genes_aligner = SegmentGeneAlignerAA(genes, **params.segment_v_aa.kwargs(), ssw_params=params.segment_v_aa.aligner)
     return genes_aligner

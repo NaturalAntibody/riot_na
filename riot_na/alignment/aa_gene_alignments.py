@@ -134,8 +134,9 @@ class VJCAlignmentTranslatorAA:
         self.v_aligner = v_aligner
         self.j_aligners = j_aligners
         self.c_aligners = c_aligners
-        self.aa_ssw_kwargs = params.aa_ssw.kwargs()
-        self.c_aa_ssw_kwargs = params.c_aa_ssw.kwargs()
+        self.v_aa_ssw_kwargs = params.v_aa.aligner.kwargs()
+        self.j_aa_ssw_kwargs = params.j_aa.aligner.kwargs()
+        self.c_aa_ssw_kwargs = params.c_aa.aligner.kwargs()
 
     def translate_nt_alignments(  # pylint: disable=too-many-statements
         self, alignments: AlignmentsNT, extend_alignment: bool = True
@@ -180,7 +181,7 @@ class VJCAlignmentTranslatorAA:
                 j_gene = oragnism_locus_j_aligner.gene_lookup.get(alignments.j.lookup_gene_id())
                 j_gene_aa = j_gene.sequence if j_gene else ""
 
-            v_aligner = StripedSmithWaterman(aligned_sequence_aa, **self.aa_ssw_kwargs)
+            v_aligner = StripedSmithWaterman(aligned_sequence_aa, **self.v_aa_ssw_kwargs)
             v_aa_alignment = align_aa(
                 v_aligner,
                 aligned_sequence_aa,
@@ -199,7 +200,7 @@ class VJCAlignmentTranslatorAA:
             ), "Query translation failed: could not align sequence_aa to germline_aa"
 
             masked_aa = alignes_sequence_no_c_aa[v_aa_alignment.q_end :]
-            j_aligner = StripedSmithWaterman(masked_aa, **self.aa_ssw_kwargs)
+            j_aligner = StripedSmithWaterman(masked_aa, **self.j_aa_ssw_kwargs)
             j_aa_alignment = (
                 align_aa(
                     j_aligner,
@@ -319,7 +320,7 @@ class VJCAlignmentTranslatorAA:
         v_aa_alignment: InternalAlignmentEntryAA,
     ) -> tuple[str, InternalAlignmentEntryAA | None]:
         masked_aa = aligned_sequence_aa[v_aa_alignment.q_end :]
-        j_aligner = StripedSmithWaterman(masked_aa, **self.aa_ssw_kwargs)
+        j_aligner = StripedSmithWaterman(masked_aa, **self.j_aa_ssw_kwargs)
         j_aa_alignment = (
             align_aa(j_aligner, masked_aa, j_gene_id, j_gene_aa, calculate_score=False)
             if j_gene_id and j_gene_aa

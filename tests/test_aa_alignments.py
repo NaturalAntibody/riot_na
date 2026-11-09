@@ -16,9 +16,9 @@ def test_produce_aa_alignments():
     # then
     assert alignments.v is not None
     assert alignments.v.target_id == "IGHV4-34*01"
-    assert alignments.v.alignment_score == 192.68417758360758
+    assert alignments.v.alignment_score == 179.2958115697181
     assert alignments.v.seq_identity == 0.9484536082474226
-    assert alignments.v.log10_e_value == pytest.approx(-50.24119093110523)
+    assert alignments.v.log10_e_value == pytest.approx(-46.21089116799629)
     assert alignments.v.q_start == 0
     assert alignments.v.q_end == 97
     assert alignments.v.t_start == 0
@@ -37,9 +37,9 @@ def test_produce_aa_alignments():
 
     assert alignments.j is not None
     assert alignments.j.target_id == "IGHJ1*01"
-    assert alignments.j.alignment_score == 32.01169295201648
+    assert alignments.j.alignment_score == 30.676683655152846
     assert alignments.j.seq_identity == 0.9285714285714286
-    assert alignments.j.log10_e_value == pytest.approx(-5.007151756747639)
+    assert alignments.j.log10_e_value == pytest.approx(-4.605273913901405)
     assert alignments.j.q_start == 8
     assert alignments.j.q_end == 22
     assert alignments.j.t_start == 3
@@ -55,9 +55,9 @@ def test_produce_aa_alignments():
 
     assert alignments.c is not None
     assert alignments.c.target_id == "IGHG1"
-    assert alignments.c.alignment_score == 674.7016314783808
+    assert alignments.c.alignment_score == 754.3023548216721
     assert alignments.c.seq_identity == 1.0
-    assert alignments.c.log10_e_value == pytest.approx(-196.9986435516978)
+    assert alignments.c.log10_e_value == pytest.approx(-220.96084895457855)
     assert alignments.c.q_start == 0
     assert alignments.c.q_end == 328
     assert alignments.c.t_start == 0

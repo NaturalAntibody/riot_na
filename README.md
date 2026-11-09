@@ -18,7 +18,8 @@ Antibodies are a cornerstone of the immune system, playing a pivotal role in ide
 
 ## Requirements
  - Python ^3.10
- - C compiler (reason: `ssw-aligner`)
+ - C compiler (reason: `ssw-aligner`); C++17 compiler and CMake to build `alp` (computes the Gumbel parameters of
+   non default alignment settings)
 
 ## Quickstart
 ```
@@ -192,31 +193,48 @@ riot_aa: RiotNumberingAA = create_riot_aa(c_genes_organism = Organism.HOMO_SAPIE
 It is available in all `create_*` and `get_or_create_*` functions and in `run_on_file_mp`.
 
 RIOT prints a warning then: constant regions of another organism are less similar to the germlines, so the minimum
-sequence identity of C alignments (85% by default) should probably be lowered, see below.
+sequence identity of C alignments (80% by default) should probably be lowered, see below. The warning is not printed
+once the identity limit is lowered (or removed) for all C aligners.
 
 ### Alignment thresholds
 
-Thresholds (E-value, minimum sequence identity, alignment length, prefiltering) and Striped Smith-Waterman parameters
-(gap penalties) of all gene aligners are kept in the immutable `AlignerParams` dataclass. `DEFAULT_ALIGNER_PARAMS` holds
-the established settings. To change any of them, create a modified copy and pass it as the last argument of the
-`create_*` and `get_or_create_*` functions and of `run_on_file_mp`:
+Prefiltering settings, Striped Smith-Waterman parameters (gap penalties) and thresholds (E-value, minimum sequence
+identity, alignment length) of all gene aligners are kept in the immutable `AlignerParams` dataclass.
+`DEFAULT_ALIGNER_PARAMS` holds the established settings. To change any of them, create a modified copy with
+`with_param(path, value)` and pass it as the last argument of the `create_*` and `get_or_create_*` functions and of
+`run_on_file_mp`:
 
 ```python
-from dataclasses import replace
 from riot_na import DEFAULT_ALIGNER_PARAMS, Organism, create_riot_aa
 
-# minimum sequence identity of all C alignments (nucleotide and amino acid)
+# any setting, addressed by its dotted path; returns a new AlignerParams (calls can be chained)
+params = DEFAULT_ALIGNER_PARAMS.with_param("v_aa.prefiltering.kmer_size", 4).with_param(
+    "c_aa.thresholds.e_value_threshold", 1e-8
+)
+riot_aa = create_riot_aa(params=params)
+
+# shortcut: minimum sequence identity of all C alignments (nucleotide and amino acid)
 params = DEFAULT_ALIGNER_PARAMS.with_c_min_seq_identity(0.4)
 riot_aa = create_riot_aa(c_genes_organism=Organism.HOMO_SAPIENS, params=params)
-
-# any other setting
-params = replace(DEFAULT_ALIGNER_PARAMS, c_aa=replace(DEFAULT_ALIGNER_PARAMS.c_aa, e_value_threshold=1e-8))
 ```
 
-Fields: `v_nt`, `d_nt`, `jh_nt`, `jk_nt`, `jl_nt`, `ch_nt`, `ck_nt`, `cl_nt` (nucleotide), `v_aa`, `j_aa`, `c_aa`
-(amino acid), `segment_v_nt`, `segment_v_aa` (V aligners finding domains of multiple domain sequences) and `nt_ssw`,
-`aa_ssw`, `c_aa_ssw` (Smith-Waterman parameters; constant regions use a higher gap extension penalty, so that linkers
-between domains are not bridged). The thresholds used to be read from environment variables, these are not used anymore.
+An unknown path raises an `AttributeError` listing the valid fields.
+
+Each gene aligner field (`v_nt`, `d_nt`, `jh_nt`, `jk_nt`, `jl_nt`, `ch_nt`, `ck_nt`, `cl_nt` (nucleotide), `v_aa`,
+`j_aa`, `c_aa` (amino acid), `segment_v_nt`, `segment_v_aa` (V aligners finding domains of multiple domain sequences))
+has three parts:
+
+- `prefiltering`: k-mer prefiltering that selects the germlines to align to (`kmer_size`, `distance_threshold`, `top_n`,
+  `modulo_n`).
+- `aligner`: Smith-Waterman parameters (nucleotides: `match_score`, `mismatch_score`, `gap_open_penalty`,
+  `gap_extend_penalty`; amino acids: `matrix`, `gap_open_penalty`, `gap_extend_penalty`). Constant regions (`c_aa`) use a
+  higher gap extension penalty, so that linkers between domains are not bridged. The Gumbel parameters used for bit
+  scores and E-values are computed for each scoring system (precomputed for the defaults, computed and cached for the
+  others, which needs the `alp` package).
+- `thresholds`: what an alignment must pass: `e_value_threshold`, `alignment_length_threshold`, `min_seq_identity`, and
+  for amino acids `max_cdr3_length`, `min_internal_alignment_length`.
+
+The thresholds used to be read from environment variables, these are not used anymore.
 
 ### Constant region numbering
 

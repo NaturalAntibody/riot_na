@@ -9,6 +9,7 @@ from psutil import cpu_count
 from tqdm import tqdm
 
 from riot_na.alignment.aa_gene_alignments import create_vjc_aligner_aa
+from riot_na.alignment.gumbel import get_gumbel_params
 from riot_na.alignment.params import (
     DEFAULT_ALIGNER_PARAMS,
     AlignerParams,
@@ -221,6 +222,9 @@ def run_on_file_mp(  # pylint: disable=too-many-arguments
         raise ValueError(f"Unsupported input format: {input_format!r}; only 'fasta' is supported")
 
     warn_c_genes_organism(c_genes_organism, params)
+    # compute Gumbel parameters of overridden scoring systems once, not in every worker
+    for ssw_params in params.ssw_params():
+        get_gumbel_params(ssw_params)
 
     if v_gene and j_gene:
         # Validate germline names here, in the parent process. An exception raised in a pool
