@@ -51,7 +51,7 @@ class MultiSpeciesPrefiltering:
     def _map_raw_result_to_matches(self, raw_result: PrefilteringResult) -> SpeciesPrefilteringResult:
         mapped_matches = []
         for match in raw_result.top_matches:
-            (species, locus, name) = match.gene_id.split("|")
+            species, locus, name = match.gene_id.split("|")
             mapped_matches.append(
                 SpeciesGeneMatch(
                     species_gene_id=match.gene_id,
