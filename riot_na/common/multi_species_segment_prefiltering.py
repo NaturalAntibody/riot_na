@@ -10,7 +10,7 @@ from riot_na.data.model import (
     SpeciesGeneMatch,
     SpeciesPrefilteringSegmentResult,
 )
-from riot_na.riot_na import (  # pylint: disable=no-name-in-module
+from riot_na.riot_prefiltering import (  # pylint: disable=no-name-in-module
     PrefilteringSegmentResult,
 )
 
