@@ -62,7 +62,10 @@ class MultidomainRiotNumberingNT:
         - header : Fasta sequence header, usually this is simply sequence ID.
         - query_sequence : Nucleotide sequence to number.
         - scheme : Which numbering scheme to use (default IMGT).
-        - extend_alignment: Extend alignments to cover full sequence.
+        - extend_alignment: Include the unaligned beginning (V gene) and end (J gene) of the query in the numbering.
+        The nucleotide alignments are not changed: the extension is done after translation, on the amino acid
+        alignments, and covers only the part of the query aligned on the nucleotide level. Beware that those query
+        fragments are not truly a part of alignment and are shown only for convenience!
         - c_scheme : Numbering scheme of the constant region (eu, kabat or imgt). Only human IGHG1-4, IGKC and IGLC
         constant regions are numbered, EU numbering is not defined for IGLC. By default constant region is not numbered.
 
@@ -133,6 +136,7 @@ class MultidomainRiotNumberingAA:
         to the germline sequence at 5' or / and 3' ends the result may not show that part of the gene.
         This option appends missing amino acids, so the result covers full gene sequence. Beware that
         those query fragments are not truly a part of alignemnt and are shown only for convenience!
+        For alpaca ighJ-5, which lacks the last S of other J genes, a following S in the query is added as well.
         - c_scheme : Numbering scheme of the constant region (eu, kabat or imgt). Only human IGHG1-4, IGKC and IGLC
         constant regions are numbered, EU numbering is not defined for IGLC. By default constant region is not numbered.
 

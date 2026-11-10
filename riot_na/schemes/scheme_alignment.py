@@ -74,6 +74,11 @@ def force_n_terminus_matches(alignment: AlignmentEntryAA) -> AlignmentEntryAA:
     )
 
 
+# J genes whose germline lacks the last residue that other J genes of the locus have. The residue is missing in the
+# germline and has a deletion at the end of the scheme mapping, so a query having it can be numbered on that position.
+J_GENES_MISSING_LAST_RESIDUE: dict[tuple[Organism, str], str] = {(Organism.VICUGNA_PACOS, "ighJ-5"): "S"}
+
+
 def force_c_terminus_matches(
     query_sequence: str, target_sequence: str, alignment: AlignmentEntryAA
 ) -> AlignmentEntryAA:
@@ -84,6 +89,12 @@ def force_c_terminus_matches(
 
     q_end = alignment.q_end + c_term_number_of_matches
     t_end = alignment.t_end + c_term_number_of_matches
+
+    # the residue missing in the germline is added as an insertion after the end of the gene, not as a match
+    missing_residue = J_GENES_MISSING_LAST_RESIDUE.get((alignment.species, alignment.target_id))
+    if missing_residue and t_end == len(target_sequence) and query_sequence[q_end : q_end + 1] == missing_residue:
+        fixed_cigar = Cigar(fixed_cigar + "1I")
+        q_end += 1
 
     return AlignmentEntryAA(
         target_id=alignment.target_id,

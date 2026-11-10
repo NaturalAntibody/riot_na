@@ -115,8 +115,9 @@ def _write_or_print(
     type=bool,
     default=False,
     help=(
-        "Include unaligned beginning of the query sequence in numbering."
-        "This option impacts only amino acid sequences."
+        "Include unaligned beginning and end of the query sequence in numbering. "
+        "Works for amino acid and nucleotide sequences. For nucleotides the extension is done after translation, "
+        "on the amino acid alignment."
     ),
 )
 @click.option(

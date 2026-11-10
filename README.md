@@ -89,9 +89,11 @@ Options:
                                   input. Default is nucleotide sequences.
   -p, --ncpu INTEGER              Number of parallel processes to use. Default
                                   is number of physical cores.
-  -e, --extend_alignment BOOLEAN  Include unaligned beginning of the query
-                                  sequence in numbering.This option impacts
-                                  only amino acid sequences passed with -s option.
+  -e, --extend_alignment BOOLEAN  Include unaligned beginning and end of the query
+                                  sequence in numbering. Works for amino acid
+                                  and nucleotide sequences. For nucleotides the
+                                  extension is done after translation, on the
+                                  amino acid alignment.
   --multiple-domains BOOLEAN      Return all domains of multiple domain
                                   proteins.
   --v-gene TEXT                   Align to this exact V germline, e.g.
@@ -139,6 +141,17 @@ airr_result: AirrRearrangementEntryNT = riot_nt.run_on_sequence(
                     scheme = Scheme.KABAT
                 )
 ```
+
+`extend_alignment` includes the unaligned beginning of the query (the N-terminus of the V alignment) and its unaligned
+end (the C-terminus of the J alignment) in the numbering. It works for nucleotide sequences too. The nucleotide
+alignments are not changed: the extension is done after translation, on the amino acid alignments of the V and J
+genes, and it only covers the part of the query that was aligned on the nucleotide level (the query is cut at the end
+of the nucleotide J or C alignment before translation). Beware that the extended residues are not truly part of the
+alignment.
+
+The alpaca J gene `ighJ-5` has no last `S` in its germline (`...TVS` instead of `...TVSS` of the other J genes). With
+`extend_alignment`, an `S` following the J alignment in the query is added as one more residue, so it is numbered as
+the last FR4 position (128). This is done for amino acid sequences only, for this gene only and for a single residue.
 
 ### API Amino Acids
 
