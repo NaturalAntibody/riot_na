@@ -25,7 +25,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 try:
-    import tomllib
+    import tomllib  # type: ignore[import-not-found]  # mypy runs under Python 3.10 in CI
 except ModuleNotFoundError:  # Python < 3.11
     import tomli as tomllib  # type: ignore[no-redef,import-not-found]
 
