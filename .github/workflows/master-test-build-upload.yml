@@ -9,7 +9,33 @@ env:
   python-version: "3.10"
   min-test-coverage-percent: 0
 jobs:
+  # GitHub parses poetry.lock statically and marks every package as "runtime", so dev-only packages
+  # fail dependency-review. A submitted snapshot takes priority over static parsing of the same
+  # manifest, so we submit poetry.lock ourselves with runtime/development scopes.
+  dependency-snapshot:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # required by the dependency submission API
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12" # tomllib is needed by the script
+      - name: Submit poetry.lock dependency snapshot
+        # Pull requests from forks get a read-only token; skip there instead of failing the whole workflow.
+        if: ${{ github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SNAPSHOT_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          SNAPSHOT_REF: ${{ github.event.pull_request && format('refs/heads/{0}', github.head_ref) || github.ref }}
+        run: |
+          python .github/tools/poetry_dependency_snapshot.py \
+            --sha "$SNAPSHOT_SHA" --ref "$SNAPSHOT_REF" --job-id "$GITHUB_RUN_ID" \
+            | gh api -X POST "repos/$GITHUB_REPOSITORY/dependency-graph/snapshots" --input -
   test:
+    needs: dependency-snapshot
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
