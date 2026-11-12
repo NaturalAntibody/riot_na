@@ -1,23 +1,22 @@
 import math
-from enum import Enum
+from dataclasses import dataclass
+from typing import Optional
 
 from riot_na.alignment.alignment_utils import get_cigar_op_groups, unfold_cigar
 from riot_na.data.constants import BLOSUM_62
 from riot_na.data.model import Cigar
 
-# L (Lambda) and K constants are depended on scoring matrix and gap penalties
-# and are calculated by ALP (Ascending Ladder Program) - https://doi.org/10.1093%2Fbioinformatics%2Fbtv575
-# The present values were calculated for the following parameters (default SSW):
-# Match score: 2
-# Mismatch score:  -3
-# Gap open penalty: 5
-# Gap extend penalty: 2
-# Background probabilities:  A, T, G, C 0.2499975, N 0.00001
 
+@dataclass(frozen=True)
+class GumbelParams:
+    """
+    Lambda and K of the Gumbel distribution of local alignment scores. They depend on the scoring system (matrix or
+    match / mismatch scores and gap penalties), see riot_na.alignment.gumbel for how they are obtained (ALP,
+    Ascending Ladder Program - https://doi.org/10.1093%2Fbioinformatics%2Fbtv575).
+    """
 
-class GumbellParams(Enum):
-    IGBLAST = {"L": 1.08, "K": 0.28}
-    AA = {"L": 0.26453605633241922, "K": 0.043186874595437463}
+    lambda_: float
+    K: float  # pylint: disable=invalid-name
 
 
 def compute_raw_score_aa(
@@ -56,16 +55,24 @@ def compute_raw_score_aa(
     return raw_score
 
 
-def compute_bit_score(raw_score: int, gumbell_params: GumbellParams = GumbellParams.IGBLAST) -> float:
-    return (gumbell_params.value["L"] * raw_score - math.log(gumbell_params.value["K"])) / math.log(2)
+def compute_bit_score(raw_score: int, gumbel_params: GumbelParams) -> float:
+    return (gumbel_params.lambda_ * raw_score - math.log(gumbel_params.K)) / math.log(2)
 
 
-def compute_raw_score_from_bit_score(bit_score: float, gumbell_params: GumbellParams = GumbellParams.IGBLAST) -> float:
-    return (math.log(gumbell_params.value["K"]) + bit_score * math.log(2)) / gumbell_params.value["L"]
+def compute_raw_score_from_bit_score(bit_score: float, gumbel_params: GumbelParams) -> float:
+    return (math.log(gumbel_params.K) + bit_score * math.log(2)) / gumbel_params.lambda_
 
 
-def compute_evalue(query_length: int, db_length: int, bit_score: float) -> float:
-    return query_length * db_length * 2 ** (-bit_score)
+def log10_evalue_threshold(e_value_threshold: Optional[float]) -> Optional[float]:
+    if e_value_threshold is None:
+        return None
+    assert e_value_threshold > 0, "E-value threshold must be greater than 0"
+    return math.log10(e_value_threshold)
+
+
+def compute_log10_evalue(query_length: int, db_length: int, bit_score: float) -> float:
+    # log10(E) = log10(query) + log10(db) - bit_score * log10(2)
+    return math.log10(query_length) + math.log10(db_length) - (bit_score * math.log10(2))
 
 
 def calculate_seq_identity(cigar: Cigar, query: str, target: str, query_start: int = 0, target_start: int = 0) -> float:

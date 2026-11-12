@@ -43,3 +43,9 @@ dist
 .github/**/*.md
 
 results/
+docs
+scripts
+# Gumbel parameters computed for user overridden alignment settings
+riot_na/data/gumbel_params_cache.json
+CLAUDE.md
+notebooks/local

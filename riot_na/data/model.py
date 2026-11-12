@@ -1,5 +1,5 @@
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum, unique
 from typing import Generic, Optional, Sequence, TypeVar
 
@@ -23,7 +23,7 @@ class InternalAlignmentEntry:  # pylint: disable=too-many-instance-attributes
     target_id: str
     alignment_score: float
     seq_identity: float
-    e_value: float
+    log10_e_value: float
     q_start: int
     q_end: int
     q_len: int
@@ -35,14 +35,14 @@ class InternalAlignmentEntry:  # pylint: disable=too-many-instance-attributes
     rev_comp: bool
 
     def __lt__(self, other):
-        if self.e_value == other.e_value:
+        if self.log10_e_value == other.log10_e_value:
             return (self.t_end - self.t_start) < (other.t_end - other.t_start)
-        return self.e_value < other.e_value
+        return self.log10_e_value < other.log10_e_value
 
     def __gt__(self, other):
-        if self.e_value == other.e_value:
+        if self.log10_e_value == other.log10_e_value:
             return (self.t_end - self.t_start) > (other.t_end - other.t_start)
-        return self.e_value > other.e_value
+        return self.log10_e_value > other.log10_e_value
 
 
 @dataclass(frozen=True)
@@ -50,7 +50,7 @@ class InternalAlignmentEntryAA:  # pylint: disable=too-many-instance-attributes
     target_id: str
     alignment_score: Optional[float]
     seq_identity: Optional[float]
-    e_value: Optional[float]
+    log10_e_value: Optional[float]
     q_start: int
     q_end: int
     t_start: int
@@ -58,14 +58,14 @@ class InternalAlignmentEntryAA:  # pylint: disable=too-many-instance-attributes
     cigar: Cigar
 
     def __lt__(self, other):
-        if self.e_value == other.e_value:
+        if self.log10_e_value == other.log10_e_value:
             return (self.t_end - self.t_start) < (other.t_end - other.t_start)
-        return self.e_value < other.e_value
+        return self.log10_e_value < other.log10_e_value
 
     def __gt__(self, other):
-        if self.e_value == other.e_value:
+        if self.log10_e_value == other.log10_e_value:
             return (self.t_end - self.t_start) > (other.t_end - other.t_start)
-        return self.e_value > other.e_value
+        return self.log10_e_value > other.log10_e_value
 
 
 @dataclass(frozen=True)
@@ -102,6 +102,15 @@ class Scheme(str, Enum):
     CHOTHIA = "chothia"
     IMGT = "imgt"
     MARTIN = "martin"
+
+
+@unique
+class CScheme(str, Enum):
+    """Numbering schemes of the constant region (human IGHG1-4, IGKC and IGLC)."""
+
+    EU = "eu"
+    KABAT = "kabat"
+    IMGT = "imgt"
 
 
 @unique
@@ -201,10 +210,10 @@ class AirrRearrangementEntryNT:  # pylint: disable=too-many-instance-attributes
     j_cigar: Optional[str] = None
     c_cigar: Optional[str] = None
 
-    v_support: Optional[float] = None
-    d_support: Optional[float] = None
-    j_support: Optional[float] = None
-    c_support: Optional[float] = None
+    v_support: Optional[str] = None
+    d_support: Optional[str] = None
+    j_support: Optional[str] = None
+    c_support: Optional[str] = None
     v_identity: Optional[float] = None
     d_identity: Optional[float] = None
     j_identity: Optional[float] = None
@@ -245,6 +254,9 @@ class AirrRearrangementEntryNT:  # pylint: disable=too-many-instance-attributes
     sequence_aa_scheme_cigar: Optional[Cigar] = None
     scheme_residue_mapping: Optional[dict[str, str]] = None
     positional_scheme_mapping: Optional[dict[int, str]] = None
+    c_numbering_scheme: Optional[str] = None
+    c_scheme_residue_mapping: Optional[dict[str, str]] = None
+    c_positional_scheme_mapping: Optional[dict[int, str]] = None
     exc: Optional[str] = None
     additional_validation_flags: Optional[EntryValidationResults] = None
 
@@ -312,9 +324,9 @@ class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
     j_cigar_aa: Optional[str] = None
     c_cigar_aa: Optional[str] = None
 
-    v_support_aa: Optional[float] = None
-    j_support_aa: Optional[float] = None
-    c_support_aa: Optional[float] = None
+    v_support_aa: Optional[str] = None
+    j_support_aa: Optional[str] = None
+    c_support_aa: Optional[str] = None
     v_identity_aa: Optional[float] = None
     j_identity_aa: Optional[float] = None
     c_identity_aa: Optional[float] = None
@@ -351,6 +363,9 @@ class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
     sequence_aa_scheme_cigar: Optional[Cigar] = None
     scheme_residue_mapping: Optional[dict[str, str]] = None
     positional_scheme_mapping: Optional[dict[int, str]] = None
+    c_numbering_scheme: Optional[str] = None
+    c_scheme_residue_mapping: Optional[dict[str, str]] = None
+    c_positional_scheme_mapping: Optional[dict[int, str]] = None
     exc: Optional[str] = None
     additional_validation_flags: Optional[EntryValidationResults] = None
 
@@ -399,6 +414,12 @@ def serialize_airr_entry(entry: AirrRearrangementEntry_co) -> dict[str, str]:
     )
     entry_dict["positional_scheme_mapping"] = entry_dict["positional_scheme_mapping"] and base64_encode(
         json.dumps(entry_dict["positional_scheme_mapping"], separators=(",", ":"))
+    )
+    entry_dict["c_scheme_residue_mapping"] = entry_dict["c_scheme_residue_mapping"] and base64_encode(
+        json.dumps(entry_dict["c_scheme_residue_mapping"], separators=(",", ":"))
+    )
+    entry_dict["c_positional_scheme_mapping"] = entry_dict["c_positional_scheme_mapping"] and base64_encode(
+        json.dumps(entry_dict["c_positional_scheme_mapping"], separators=(",", ":"))
     )
     entry_dict["exc"] = entry_dict["exc"] and base64_encode(entry_dict["exc"])
     entry_dict["additional_validation_flags"] = entry_dict["additional_validation_flags"] and base64_encode(
@@ -505,7 +526,7 @@ class AlignmentEntryNT:  # pylint: disable=too-many-instance-attributes
     target_id: str
     alignment_score: float
     seq_identity: float
-    e_value: float
+    log10_e_value: float
     q_start: int
     q_end: int
     q_len: int
@@ -522,22 +543,14 @@ class AlignmentEntryNT:  # pylint: disable=too-many-instance-attributes
     reading_frame: Optional[int]
 
     def __lt__(self, other):
-        if self.e_value == other.e_value:
-            if self.e_value == 0:
-                if self.seq_identity == other.seq_identity:
-                    return self.target_id < other.target_id
-                return self.seq_identity > other.seq_identity
+        if self.log10_e_value == other.log10_e_value:
             return self.target_id < other.target_id
-        return self.e_value < other.e_value
+        return self.log10_e_value < other.log10_e_value
 
     def __gt__(self, other):
-        if self.e_value == other.e_value:
-            if self.e_value == 0:
-                if self.seq_identity == other.seq_identity:
-                    return self.target_id > other.target_id
-                return self.seq_identity < other.seq_identity
+        if self.log10_e_value == other.log10_e_value:
             return self.target_id > other.target_id
-        return self.e_value > other.e_value
+        return self.log10_e_value > other.log10_e_value
 
     def lookup_gene_id(self) -> str:
         return f"{self.species.value}|{self.locus.value}|{self.target_id}"
@@ -548,7 +561,7 @@ class AlignmentEntryAA:  # pylint: disable=too-many-instance-attributes
     target_id: str
     alignment_score: Optional[float]
     seq_identity: Optional[float]
-    e_value: Optional[float]
+    log10_e_value: Optional[float]
     q_start: int
     q_end: int
     t_start: int
@@ -561,22 +574,14 @@ class AlignmentEntryAA:  # pylint: disable=too-many-instance-attributes
     t_seq: GeneSequence
 
     def __lt__(self, other):
-        if self.e_value == other.e_value:
-            if self.e_value == 0:
-                if self.seq_identity == other.seq_identity:
-                    return self.target_id < other.target_id
-                return self.seq_identity > other.seq_identity
+        if self.log10_e_value == other.log10_e_value:
             return self.target_id < other.target_id
-        return self.e_value < other.e_value
+        return self.log10_e_value < other.log10_e_value
 
     def __gt__(self, other):
-        if self.e_value == other.e_value:
-            if self.e_value == 0:
-                if self.seq_identity == other.seq_identity:
-                    return self.target_id > other.target_id
-                return self.seq_identity < other.seq_identity
+        if self.log10_e_value == other.log10_e_value:
             return self.target_id > other.target_id
-        return self.e_value > other.e_value
+        return self.log10_e_value > other.log10_e_value
 
     def lookup_gene_id(self) -> str:
         return f"{self.species.value}|{self.locus.value}|{self.target_id}"
@@ -587,15 +592,15 @@ AlignmentEntry = TypeVar("AlignmentEntry", AlignmentEntryNT, AlignmentEntryAA)
 
 @dataclass
 class AlignmentSegment(Generic[AlignmentEntry]):
+    """V gene alignments of a domain found in the query by the segment aligner."""
+
+    segment_start: int
+    segment_end: int
     alignments: Sequence[AlignmentEntry]
-    best_alignment: Optional[AlignmentEntry] = None  # Best alignment for this segment
-    segment_start: Optional[int] = None
-    segment_end: Optional[int] = None
+    best_alignment: AlignmentEntry = field(init=False)
 
     def __post_init__(self):
-        """Set the best alignment after initialization"""
-        if self.alignments:
-            self.best_alignment = min(self.alignments)  # Lowest e-value first
+        self.best_alignment = min(self.alignments)  # Lowest e-value first
 
 
 @dataclass
@@ -604,8 +609,6 @@ class AlignmentsNT:
     d: Optional[AlignmentEntryNT] = None
     j: Optional[AlignmentEntryNT] = None
     c: Optional[AlignmentEntryNT] = None
-    segment_start: Optional[int] = None
-    segment_end: Optional[int] = None
 
 
 @dataclass
@@ -613,8 +616,24 @@ class AlignmentsAA:
     v: Optional[AlignmentEntryAA] = None
     j: Optional[AlignmentEntryAA] = None
     c: Optional[AlignmentEntryAA] = None
-    segment_start: Optional[int] = None
-    segment_end: Optional[int] = None
+
+
+@dataclass
+class SegmentAlignmentsNT:
+    """Alignments of a domain found in query[segment_start:segment_end]."""
+
+    alignments: AlignmentsNT
+    segment_start: int
+    segment_end: int
+
+
+@dataclass
+class SegmentAlignmentsAA:
+    """Alignments of a domain found in query[segment_start:segment_end]."""
+
+    alignments: AlignmentsAA
+    segment_start: int
+    segment_end: int
 
 
 @dataclass

@@ -18,7 +18,8 @@ Antibodies are a cornerstone of the immune system, playing a pivotal role in ide
 
 ## Requirements
  - Python ^3.10
- - C compiler (reason: `ssw-aligner`)
+ - C compiler (reason: `ssw-aligner`); C++17 compiler and CMake to build `alp` (computes the Gumbel parameters of
+   non default alignment settings)
 
 ## Quickstart
 ```
@@ -69,18 +70,40 @@ Options:
   --scheme [KABAT|CHOTHIA|IMGT|MARTIN]
                                   Which numbering scheme should be used: IMGT,
                                   KABAT, CHOTHIA, MARTIN. Default IMGT
+  --c-scheme [eu|kabat|imgt]      Numbering scheme of the constant region: eu,
+                                  kabat, imgt. Only human IGHG1-4, IGKC and
+                                  IGLC constant regions are numbered, EU
+                                  numbering is not defined for IGLC. Default no
+                                  constant region numbering.
   --species [HOMO_SAPIENS|MUS_MUSCULUS|CUSTOM]
                                   Which species germline sequences should be
                                   used. Default is all species.
+  --c-genes-species [human|mouse|alpaca|custom]
+                                  Align constant regions only to C germlines
+                                  of this species, whatever the species of
+                                  the variable region. Useful e.g. for
+                                  humanization analysis. Default is C
+                                  germlines of the species of the variable
+                                  region (none for mouse).
   --input-type [NT|AA]            What kind of sequences are provided on
                                   input. Default is nucleotide sequences.
   -p, --ncpu INTEGER              Number of parallel processes to use. Default
                                   is number of physical cores.
-  -e, --extend_alignment BOOLEAN  Include unaligned beginning of the query
-                                  sequence in numbering.This option impacts
-                                  only amino acid sequences passed with -s option.
+  -e, --extend_alignment BOOLEAN  Include unaligned beginning and end of the query
+                                  sequence in numbering. Works for amino acid
+                                  and nucleotide sequences. For nucleotides the
+                                  extension is done after translation, on the
+                                  amino acid alignment.
   --multiple-domains BOOLEAN      Return all domains of multiple domain
                                   proteins.
+  --v-gene TEXT                   Align to this exact V germline, e.g.
+                                  IGHV3-7*01, instead of searching the
+                                  germline database. Has to be used together
+                                  with --j-gene. Amino acid input only.
+  --j-gene TEXT                   Align to this exact J germline, e.g.
+                                  IGHJ4*02, instead of searching the germline
+                                  database. Has to be used together with
+                                  --v-gene. Amino acid input only.
   --help                          Show this message and exit.
 
 ```
@@ -98,6 +121,14 @@ Run on fasta file:
 ```
 riot_na -f input.fasta -o results.csv
 ```
+Align amino acid sequences to chosen germlines instead of searching the database:
+```
+riot_na -f input.fasta -o results.csv --input-type AA --v-gene "IGHV3-23*01" --j-gene "IGHJ4*02"
+```
+Number variable domains in Kabat and IgG constant regions in EU:
+```
+riot_na -f input.fasta -o results.csv --scheme kabat --c-scheme eu
+```
 ### API Nucleotides
 
 ```python
@@ -110,6 +141,17 @@ airr_result: AirrRearrangementEntryNT = riot_nt.run_on_sequence(
                     scheme = Scheme.KABAT
                 )
 ```
+
+`extend_alignment` includes the unaligned beginning of the query (the N-terminus of the V alignment) and its unaligned
+end (the C-terminus of the J alignment) in the numbering. It works for nucleotide sequences too. The nucleotide
+alignments are not changed: the extension is done after translation, on the amino acid alignments of the V and J
+genes, and it only covers the part of the query that was aligned on the nucleotide level (the query is cut at the end
+of the nucleotide J or C alignment before translation). Beware that the extended residues are not truly part of the
+alignment.
+
+The alpaca J gene `ighJ-5` has no last `S` in its germline (`...TVS` instead of `...TVSS` of the other J genes). With
+`extend_alignment`, an `S` following the J alignment in the query is added as one more residue, so it is numbered as
+the last FR4 position (128). This is done for amino acid sequences only, for this gene only and for a single residue.
 
 ### API Amino Acids
 
@@ -125,8 +167,131 @@ airr_result: AirrRearrangementEntryAA = riot_aa.run_on_sequence(
                 )
 ```
 
+### Selecting germlines by name
+
+Instead of searching the germline database, amino acid sequences can be aligned and numbered
+against chosen V and J germlines, given by their exact names. Prefiltering is skipped then,
+but the regular alignment thresholds still apply, so a germline that is a very poor match for
+the query may end up with no alignment at all. Both germlines have to be given together, C genes
+are not assigned, and this is not supported in multidomain numbering.
+
+```python
+from riot_na import create_riot_aa, Organism, Scheme, RiotNumberingAA, AirrRearrangementEntryAA
+
+riot_aa: RiotNumberingAA = create_riot_aa(allowed_species = (Organism.HOMO_SAPIENS,))
+airr_result: AirrRearrangementEntryAA = riot_aa.run_on_sequence(
+                    header = "my_sequence",
+                    query_sequence = "EVQLVESGGGLVQPGGSLRLSCAASGFTFSSYAMSWVRQAPGKGLEWVSAISGSGGSTYYADSVKGRFTISRDNSKNTLYLQMNSLRAEDTAVYYCAKDRGYTYGNFDHWGQGTLVTVSS",
+                    scheme = Scheme.IMGT,
+                    v_gene = "IGHV3-7*01",
+                    j_gene = "IGHJ4*02"
+                )
+```
+
+Germline names are matched exactly, against the germlines of `allowed_species` the numbering was
+created with, and unknown names are rejected. If more species have a germline of the same name,
+the human one is used.
+
+### Constant region germlines
+
+By default the constant region is aligned to C germlines of the species detected for the variable region.
+Only human and alpaca have C germlines, so for mouse variable regions the constant region is not aligned.
+`c_genes_organism` (`--c-genes-species` in CLI) makes RIOT align constant regions to C germlines of the given organism
+only, whatever the species of the variable region. It is useful e.g. for humanization analysis:
+
+```python
+riot_aa: RiotNumberingAA = create_riot_aa(c_genes_organism = Organism.HOMO_SAPIENS)
+```
+
+It is available in all `create_*` and `get_or_create_*` functions and in `run_on_file_mp`.
+
+RIOT prints a warning then: constant regions of another organism are less similar to the germlines, so the minimum
+sequence identity of C alignments (80% by default) should probably be lowered, see below. The warning is not printed
+once the identity limit is lowered (or removed) for all C aligners.
+
+### Alignment thresholds
+
+Prefiltering settings, Striped Smith-Waterman parameters (gap penalties) and thresholds (E-value, minimum sequence
+identity, alignment length) of all gene aligners are kept in the immutable `AlignerParams` dataclass.
+`DEFAULT_ALIGNER_PARAMS` holds the established settings. To change any of them, create a modified copy with
+`with_param(path, value)` and pass it as the last argument of the `create_*` and `get_or_create_*` functions and of
+`run_on_file_mp`:
+
+```python
+from riot_na import DEFAULT_ALIGNER_PARAMS, Organism, create_riot_aa
+
+# any setting, addressed by its dotted path; returns a new AlignerParams (calls can be chained)
+params = DEFAULT_ALIGNER_PARAMS.with_param("v_aa.prefiltering.kmer_size", 4).with_param(
+    "c_aa.thresholds.e_value_threshold", 1e-8
+)
+riot_aa = create_riot_aa(params=params)
+
+# shortcut: minimum sequence identity of all C alignments (nucleotide and amino acid)
+params = DEFAULT_ALIGNER_PARAMS.with_c_min_seq_identity(0.4)
+riot_aa = create_riot_aa(c_genes_organism=Organism.HOMO_SAPIENS, params=params)
+```
+
+An unknown path raises an `AttributeError` listing the valid fields.
+
+Each gene aligner field (`v_nt`, `d_nt`, `jh_nt`, `jk_nt`, `jl_nt`, `ch_nt`, `ck_nt`, `cl_nt` (nucleotide), `v_aa`,
+`j_aa`, `c_aa` (amino acid), `segment_v_nt`, `segment_v_aa` (V aligners finding domains of multiple domain sequences))
+has three parts:
+
+- `prefiltering`: k-mer prefiltering that selects the germlines to align to (`kmer_size`, `distance_threshold`, `top_n`,
+  `modulo_n`).
+- `aligner`: Smith-Waterman parameters (nucleotides: `match_score`, `mismatch_score`, `gap_open_penalty`,
+  `gap_extend_penalty`; amino acids: `matrix`, `gap_open_penalty`, `gap_extend_penalty`). Constant regions (`c_aa`) use a
+  higher gap extension penalty, so that linkers between domains are not bridged. The Gumbel parameters used for bit
+  scores and E-values are computed for each scoring system (precomputed for the defaults, computed and cached for the
+  others, which needs the `alp` package).
+- `thresholds`: what an alignment must pass: `e_value_threshold`, `alignment_length_threshold`, `min_seq_identity`, and
+  for amino acids `max_cdr3_length`, `min_internal_alignment_length`.
+
+The thresholds used to be read from environment variables, these are not used anymore.
+
+### Constant region numbering
+
+Constant regions of human IgG heavy chains (IGHG1-4: CH1, hinge, CH2 and CH3) and of kappa (IGKC) and lambda
+(IGLC1, IGLC2, IGLC3, IGLC6, IGLC7) light chains can be numbered with `c_scheme`, independently of the variable
+domain `scheme`, both for nucleotide and amino acid sequences:
+
+- `CScheme.EU` - EU index (heavy CH1 starts at 118, N297 is the CH2 glycosylation site, kappa CL is 108-214).
+  EU numbering is not defined for lambda chains, so they are not numbered,
+- `CScheme.KABAT` - Kabat numbering of the constant region (heavy CH1 starts at 114, kappa CL is 108-214, lambda CL
+  is 107A-215 with 107A written as `107.1`),
+- `CScheme.IMGT` - IMGT unique numbering for C-DOMAIN, positions are prefixed with the domain: `CH1_1.4`, `H_1`
+  (hinge exon numbering, IGHG3 hinge exons are `H1_` - `H4_`), `CH2_84.4`, `CH3_125`, `CL_1.4` (kappa and lambda).
+
+```python
+from riot_na import create_riot_aa, CScheme, Scheme
+
+riot_aa = create_riot_aa()
+airr_result = riot_aa.run_on_sequence(header="my_sequence", query_sequence=igg1_heavy_chain, scheme=Scheme.KABAT, c_scheme=CScheme.EU)
+airr_result.c_scheme_residue_mapping  # {"118": "A", "119": "S", ..., "297": "N", ..., "445": "P"}
+```
+
+Numbering follows the IMGT correspondence between C numberings
+(https://www.imgt.org/IMGTScientificChart/Numbering/Hu_IGHGnber.html,
+https://www.imgt.org/IMGTScientificChart/Numbering/Hu_IGKCnber.html and
+https://www.imgt.org/IMGTScientificChart/Numbering/Hu_IGLCnber.html). The tables number one gene of each isotype, so
+CH domains of IGHG2-4 take IGHG1 positions and IGLC2-7 take IGLC1 positions. IMGT positions with a dot are
+insertions: 1.x precede position 1 and are numbered towards it, insertions between 84 and 85 are split into 84.x
+and 85.x (the odd one goes to 84), the others follow their position. Lettered Kabat positions (107A, 241A-241SS)
+are insertions too and are written like other insertions (107.1, 241.1-241.45). In EU and Kabat, IGHG2 lacks G236
+(EU), and IGHG3 hinge residues without EU positions are insertions (218.1-218.2 and 228.1-228.45). In IMGT, the
+residues of IGHG2 before CH2 position 1 are numbered 1.5-1.1 (IMGT protein display places the missing one at 1.4).
+A query residue inserted relative to the germline takes an unused scheme position next to it if there is one,
+otherwise it is numbered as an insertion, e.g. `297.1`. In IMGT, a residue inserted right after position 1 or 85
+takes the position and the residues before it become insertions before it (1.x, or 84.x and 85.x split as above).
+A lower hinge residue (EU 231-237) missing in the query or an extra one is placed right before G237, where IGHG2
+lacks G236, unless the alignment pairs more identical residues, so IgG1 or IgG4 with the IgG2 lower hinge
+(E233P/L234V/L235A/ΔG236) is numbered P233, V234, A235, G237. Only the numbering places it there, the reported C
+alignment keeps the gap where the aligner placed it. C germlines in the database are membrane-bound forms, so
+C-terminal G446 and K447 of secreted chains are not numbered. Scheme mappings are generated with
+`python -m notebooks.data_processing.c_scheme_mappings`.
+
 ### Caching
-We provide two cached wrappers for `create_riot_nt()` and `crate_riot_aa()` functions - `get_or_create_riot_nt()` | `get_or_create_riot_aa()`. They can be used exactly the same way as base functions:
+We provide cached wrappers for `create_riot_nt()` and `create_riot_aa()` functions - `get_or_create_riot_nt()` | `get_or_create_riot_aa()` (and `get_or_create_multidomain_riot_nt()` | `get_or_create_multidomain_riot_aa()` for multidomain numbering). They can be used exactly the same way as base functions:
 
 ```python
 from riot_na import get_or_create_riot_aa, Organism, Scheme, RiotNumberingAA, AirrRearrangementEntryAA
@@ -211,7 +376,41 @@ For a pure Python solution (without the use of `cachetools` package) you can che
 
 
 ## Multidomains support
-RIOT's multidomains support allows detection and numbering of multiple immunoglobulin domains within a single protein sequence, such as therapeutic antibodies containing both heavy chain (VH) and light chain (VL) domains. When enabled with the --multiple-domains flag (or return_all_domains=True in the API), RIOT returns separate numbering results for each detected domain rather than just the best single match. The system automatically identifies domain boundaries, truncates sequences at the beginning of each V gene segment, and provides additional metadata including the original query sequence and segment start/end positions for each domain. This is particularly useful for analyzing therapeutic constructs like bispecific antibodies, CAR-T constructs, or other multi-domain fusion proteins where each immunoglobulin domain needs independent numbering and analysis.
+RIOT's multidomains support allows detection and numbering of multiple immunoglobulin domains within a single protein sequence, such as therapeutic antibodies containing both heavy chain (VH) and light chain (VL) domains. When enabled with the --multiple-domains flag (or with multidomain numbering in the API), RIOT returns separate numbering results for each detected domain rather than just the best single match. The system automatically identifies domain boundaries, truncates sequences at the beginning of each V gene segment, and provides additional metadata including the original query sequence and segment start/end positions for each domain. This is particularly useful for analyzing therapeutic constructs like bispecific antibodies, CAR-T constructs, or other multi-domain fusion proteins where each immunoglobulin domain needs independent numbering and analysis.
+
+Each domain is reported with the constant region following it (up to the next domain). Constant regions are searched among C genes of all loci, so they are also assigned (and numbered with `c_scheme`) when they follow a variable domain of another locus, e.g. in VL-CH1 and VH-CL chains of CrossMabs or in scFv-Fc fusions. The constant region is aligned only after the J gene: it is not assigned if the J gene is not found. This applies to single domain mode as well.
+
+Multidomain numbering is created with `create_multidomain_riot_aa` / `create_multidomain_riot_nt` (or the cached
+`get_or_create_multidomain_riot_aa` / `get_or_create_multidomain_riot_nt`). Its `run_on_sequence` returns a list of
+`SegmentedAirrRearrangementEntryAA` / `SegmentedAirrRearrangementEntryNT`, one per domain (a single entry without
+alignments if no domain is found). Multidomain numbering uses a different, segment based V gene search, so a single
+domain sequence may get different results than in single domain numbering.
+
+```python
+from riot_na import create_multidomain_riot_aa, Organism, Scheme, MultidomainRiotNumberingAA, SegmentedAirrRearrangementEntryAA
+
+riot_aa: MultidomainRiotNumberingAA = create_multidomain_riot_aa(allowed_species = (Organism.HOMO_SAPIENS,))
+domains: list[SegmentedAirrRearrangementEntryAA] = riot_aa.run_on_sequence(
+                    header = "scFv",
+                    query_sequence = scfv_sequence,
+                    scheme = Scheme.IMGT
+                )
+[(domain.segment_start, domain.segment_end, domain.v_call) for domain in domains]
+```
+
+### Migrating from 5.x
+
+Single domain and multidomain numbering are separate since 6.0, `return_all_domains` is removed:
+
+| 5.x                                                                                  | 6.x                                                                    |
+|--------------------------------------------------------------------------------------|------------------------------------------------------------------------|
+| `create_riot_aa(return_all_domains=True)` + `run_on_sequence(..., return_all_domains=True)` | `create_multidomain_riot_aa()` + `run_on_sequence(...)`           |
+| `create_riot_nt(return_all_domains=True)` + `run_on_sequence(..., return_all_domains=True)` | `create_multidomain_riot_nt()` + `run_on_sequence(...)`           |
+| `get_or_create_riot_aa(return_all_domains=True)` / `get_or_create_riot_nt(return_all_domains=True)` | `get_or_create_multidomain_riot_aa()` / `get_or_create_multidomain_riot_nt()` |
+| `create_riot_aa(return_all_domains=True)` + `run_on_sequence(...)` (best domain only)  | `max(create_multidomain_riot_aa().run_on_sequence(...))` (highest V score) |
+| `create_vjc_aligner_aa(use_segment_aligner=True)` / `create_vdjc_aligner_nt(use_segment_aligner=True)` | `create_segment_vjc_aligner_aa()` / `create_segment_vdjc_aligner_nt()` |
+
+`run_on_sequence` arguments after `extend_alignment` (`v_gene`, `j_gene`, `c_scheme`) are keyword-only.
 
 ## Germline database
 RIOT uses OGRDB as a primary source of germline alleles. Database version as of 22.01.2024 was used.
@@ -256,12 +455,12 @@ Attributes:
 | germline_alignment              | string                                      | Gapped aligned germline sequence spanning the same region as the sequence_alignment field (V(D)J region). Segments between matched germlines are gapped to match query sequence length.                                                                                                                                                                                                          |
 | sequence_alignment_aa           | string                                      | Amino acid translation of the sequence_alignment.                                                                                                                                                                                                                                                                                                                                                |
 | germline_alignment_aa           | string                                      | Amino acid translation of the germline_alignment.                                                                                                                                                                                                                                                                                                                                                |
-| v_alignment_start               | integer                                     | Start position of the V gene alignment in sequence_alignment (1-based closed interval).                                                                                                                                                                                                                                                                                                          |
+| v_alignment_start               | integer                                     | Start position of the V gene alignment in sequence_alignment, the gapped alignment string, so gaps are counted (1-based closed interval).                                                                                                                                                                                                                                                                                                          |
 | v_alignment_end                 | integer                                     | End position of the V gene alignment in sequence_alignment (1-based closed interval).                                                                                                                                                                                                                                                                                                            |
 | d_alignment_start               | integer                                     | Start position of the D gene alignment in sequence_alignment (1-based closed interval).                                                                                                                                                                                                                                                                                                          |
 | d_alignment_end                 | integer                                     | End position of the D gene alignment in sequence_alignment (1-based closed interval).                                                                                                                                                                                                                                                                                                            |
 | j_alignment_start               | integer                                     | Start position of the J gene alignment in sequence_alignment (1-based closed interval).                                                                                                                                                                                                                                                                                                          |
-| j_alignment_end                 | integer                                     | End position of the J gene alignment in sequence_alignment (1-based closed interval).                                                                                                                                                                                                                                                                                                            |                                                                                                                                                                                                                                                                                                          |
+| j_alignment_end                 | integer                                     | End position of the J gene alignment in sequence_alignment (1-based closed interval).                                                                                                                                                                                                                                                                                                            |
 | v_sequence_alignment            | string                                      | Aligned portion of query sequence assigned to the V gene.                                                                                                                                                                                                                                                                                                                                        |
 | v_sequence_alignment_aa         | string                                      | Amino acid translation of the v_sequence_alignment field.                                                                                                                                                                                                                                                                                                                                        |
 | v_germline_alignment            | string                                      | Aligned V gene germline sequence.                                                                                                                                                                                                                                                                                                                                                                |
@@ -272,6 +471,8 @@ Attributes:
 | j_sequence_alignment_aa         | string                                      | Amino acid translation of the j_sequence_alignment field.                                                                                                                                                                                                                                                                                                                                        |
 | j_germline_alignment            | string                                      | Aligned J gene germline sequence.                                                                                                                                                                                                                                                                                                                                                                |
 | j_germline_alignment_aa         | string                                      | Aligned amino acid J gene germline sequence.                                                                                                                                                                                                                                                                                                                                                     |
+| c_sequence_alignment_aa         | string                                      | Amino acid translation of the c_sequence_alignment field.                                                                                                                                                                                                                                                                                                                                        |
+| c_germline_alignment_aa         | string                                      | Aligned amino acid constant region germline sequence.                                                                                                                                                                                                                                                                                                                                            |
 | c_sequence_alignment            | string                                      | Aligned portion of query sequence assigned to the constant region.                                                                                                                                                                                                                                                                                                                               |
 | c_germline_alignment            | string                                      | Aligned constant region germline sequence.                                                                                                                                                                                                                                                                                                                                                       |
 | fwr1                            | string                                      | Nucleotide sequence of the aligned FWR1 region.                                                                                                                                                                                                                                                                                                                                                  |
@@ -300,15 +501,15 @@ Attributes:
 | d_cigar                         | string                                      | CIGAR string for the D gene alignment.                                                                                                                                                                                                                                                                                                                                                           |
 | j_cigar                         | string                                      | CIGAR string for the J gene alignment.                                                                                                                                                                                                                                                                                                                                                           |
 | c_cigar                         | string                                      | CIGAR string for the C gene alignment.                                                                                                                                                                                                                                                                                                                                                           |
-| v_support                       | number                                      | V gene alignment E-value. Note: Every value less than 1.4e-45 will appear as 0.0 (due to single-precision floating point standard limitation)                                                                                                                                                                                                                                                    |
-| d_support                       | number                                      | D gene alignment E-value. Note: Every value less than 1.4e-45 will appear as 0.0 (due to single-precision floating point standard limitation)                                                                                                                                                                                                                                                    |
-| j_support                       | number                                      | J gene alignment E-value. Note: Every value less than 1.4e-45 will appear as 0.0 (due to single-precision floating point standard limitation)                                                                                                                                                                                                                                                    |
-| c_support                       | number                                      | C gene alignment E-value. Note: Every value less than 1.4e-45 will appear as 0.0 (due to single-precision floating point standard limitation)                                                                                                                                                                                                                                                    |
+| v_support                       | string                                      | V gene alignment E-value as a string in scientific notation with two decimal places (e.g. `2.26e-141`).                                                                                                                                                                                                                                                                                          |
+| d_support                       | string                                      | D gene alignment E-value as a string in scientific notation with two decimal places (e.g. `2.26e-141`).                                                                                                                                                                                                                                                                                          |
+| j_support                       | string                                      | J gene alignment E-value as a string in scientific notation with two decimal places (e.g. `2.26e-141`).                                                                                                                                                                                                                                                                                          |
+| c_support                       | string                                      | C gene alignment E-value as a string in scientific notation with two decimal places (e.g. `2.26e-141`).                                                                                                                                                                                                                                                                                          |
 | v_identity                      | number                                      | Fractional identity for the V gene alignment.                                                                                                                                                                                                                                                                                                                                                    |
 | d_identity                      | number                                      | Fractional identity for the D gene alignment.                                                                                                                                                                                                                                                                                                                                                    |
 | j_identity                      | number                                      | Fractional identity for the J gene alignment.                                                                                                                                                                                                                                                                                                                                                    |
 | c_identity                      | number                                      | Fractional identity for the C gene alignment.                                                                                                                                                                                                                                                                                                                                                    |
-| v_sequence_start                | integer                                     | Start position of the V gene in the query sequence (1-based closed interval).                                                                                                                                                                                                                                                                                                                    |
+| v_sequence_start                | integer                                     | Start position of the V gene in the query sequence, i.e. in `sequence` (1-based closed interval).                                                                                                                                                                                                                                                                                                                    |
 | v_sequence_end                  | integer                                     | End position of the V gene in the query sequence (1-based closed interval).                                                                                                                                                                                                                                                                                                                      |
 | d_sequence_start                | integer                                     | Start position of the D gene in the query sequence (1-based closed interval).                                                                                                                                                                                                                                                                                                                    |
 | d_sequence_end                  | integer                                     | End position of the D gene in the query sequence (1-based closed interval).                                                                                                                                                                                                                                                                                                                      |
@@ -339,13 +540,13 @@ Attributes:
 | fwr4_start                      | integer                                     | FWR4 start position in the query sequence (1-based closed interval).                                                                                                                                                                                                                                                                                                                             |
 | fwr4_end                        | integer                                     | FWR4 end position in the query sequence (1-based closed interval).                                                                                                                                                                                                                                                                                                                               |
 | **sequence_aa_scheme_cigar**    | string                                      | CIGAR string defining sequence_aa to scheme alignment.                                                                                                                                                                                                                                                                                                                                           |
-| **scheme_residue_mapping**      | json string                                 | Scheme numbering of sequence_alignment_aa - positions not present in this sequence are not included.                                                                                                                                                                                                                                                                                             |
-| **positional_scheme_mapping**   | json string                                 | Mapping from absolute residue position in sequence_alignment_aa (0-based) to corresponding scheme position.                                                                                                                                                                                                                                                                                      |
-| **sequence_start_aa_extended**  | integer                                     | Start position (1-based) of the extend_alignment-adjusted span in sequence_aa. Present only when extend_alignment=True; includes residues prepended by force_n_terminus_matches that are absent from sequence_alignment_aa.                                                                                                                                                                      |
-| **sequence_end_aa_extended**    | integer                                     | End position of the extend_alignment-adjusted span in sequence_aa. Present only when extend_alignment=True; may extend beyond sequence_alignment_aa when force_c_terminus_matches adds residues at the J end.                                                                                                                                                                                    |
-| **sequence_alignment_aa_extended** | string                                   | Slice of sequence_aa from sequence_start_aa_extended to sequence_end_aa_extended. Consistent with scheme_residue_mapping and positional_scheme_mapping key space. Present only when extend_alignment=True.                                                                                                                                                                                       |
-| **exc**                         | string                                      | Exception (if any) thrown during ANARCI numbering.                                                                                                                                                                                                                                                                                                                                               |
-| **additional_validation_flags** | json string                                 | JSON string containing additional validation flags.                                                                                                                                                                                                                                                                                                                                              |
+| **scheme_residue_mapping**      | dict[string, string]                        | Scheme numbering of sequence_alignment_aa - positions not present in this sequence are not included. In the CSV output it is saved as a base64-encoded JSON string.                                                                                                                                                                                                                                                     |
+| **positional_scheme_mapping**   | dict[integer, string]                       | Mapping from absolute residue position in sequence_alignment_aa (0-based) to corresponding scheme position. In the CSV output it is saved as a base64-encoded JSON string.                                                                                                                                                                                                                                              |
+| **c_numbering_scheme**          | enum ["eu", "kabat", "imgt"]                | Numbering scheme of the constant region. Present only when c_scheme is set and the constant region is numbered (human IGHG1-4, IGKC, IGLC).                                                                                                                                                                                                                                                                   |
+| **c_scheme_residue_mapping**    | dict[string, string]                        | Scheme numbering of the constant region - positions not present in this sequence are not included. In the CSV output it is saved as a base64-encoded JSON string.                                                                                                                                                                                                                                                      |
+| **c_positional_scheme_mapping** | dict[integer, string]                       | Mapping from absolute residue position (0-based, same key space as positional_scheme_mapping) to corresponding constant region scheme position. In the CSV output it is saved as a base64-encoded JSON string.                                                                                                                                                                                                          |
+| **exc**                         | string                                      | Exception (if any) thrown during ANARCI numbering. In the CSV output it is saved as a base64-encoded string.                                                                                                                                                                                                                                                                                                       |
+| **additional_validation_flags** | dict[string, boolean]                       | JSON string containing additional validation flags. In the CSV output it is saved as a base64-encoded JSON string.                                                                                                                                                                                                                                                                                                      |
 | query_sequence                  | string                                      | The query sequence. (Optional: only available with --multiple-domains flag enabled)                                                                                                                                                                                                                                                                                                              |
 | segment_start                   | integer                                     | Start position of the segment in query_sequence (1-based closed interval). (Optional: only available with --multiple-domains flag enabled)                                                                                                                                                                                                                                                       |
 | segment_end                     | integer                                     | End position of the segment in query_sequence (1-based closed interval).  (Optional: only available with --multiple-domains flag enabled)                                                                                                                                                                                                                                                        |
@@ -411,12 +612,13 @@ Airr data format was developed for nucleotide sequences. For the amino acid pipe
 | complete_vdj                | boolean                                     | True if the sequence alignment spans the entire V(D)J region. Meaning, sequence alignment includes both the first V amino acid and the last of the J gene (i.e., before the J-C splice site). This does not require an absence of deletions within the internal FWR and CDR regions of the alignment. |
 | v_call                      | string                                      | V gene with allele.                                                                                                                                                                                                                                                                                   |
 | j_call                      | string                                      | J gene with allele.                                                                                                                                                                                                                                                                                   |
+| c_call                      | string                                      | Constant region gene with allele.                                                                                                                                                                                                                                                                     |
 | germline_alignment_aa       | string                                      | Assembled, aligned, full-length inferred germline sequence spanning the same region as the sequence_alignment_aa field (V-J region).                                                                                                                                                                  |
 | sequence_alignment_aa       | string                                      | Segment of query sequence spanning V-J aligned to germline.                                                                                                                                                                                                                                           |
 | sequence_alignment_aa_extended | string                                   | Slice of sequence_aa from sequence_start_aa_extended to sequence_end_aa_extended. Consistent with scheme_residue_mapping and positional_scheme_mapping key space. Present only when extend_alignment=True.                                                                                            |
 | sequence_start_aa_extended  | integer                                     | Start position (1-based) of the extend_alignment-adjusted span in sequence_aa. Present only when extend_alignment=True; includes residues prepended by force_n_terminus_matches that are absent from sequence_alignment_aa.                                                                           |
 | sequence_end_aa_extended    | integer                                     | End position of the extend_alignment-adjusted span in sequence_aa. Present only when extend_alignment=True; may extend beyond sequence_alignment_aa when force_c_terminus_matches adds residues at the J end.                                                                                         |
-| v_alignment_start_aa        | integer                                     | Start position of the V gene alignment in sequence_alignment_aa (1-based closed interval).                                                                                                                                                                                                            |
+| v_alignment_start_aa        | integer                                     | Start position of the V gene alignment in sequence_alignment_aa, the gapped alignment string, so gaps are counted (1-based closed interval).                                                                                                                                                                                                            |
 | v_alignment_end_aa          | integer                                     | End position of the V gene alignment in sequence_alignment_aa (1-based closed interval).                                                                                                                                                                                                              |
 | j_alignment_start_aa        | integer                                     | Start position of the J gene alignment in sequence_alignment_aa (1-based closed interval).                                                                                                                                                                                                            |
 | j_alignment_end_aa          | integer                                     | End position of the J gene alignment in sequence_alignment_aa (1-based closed interval).                                                                                                                                                                                                              |
@@ -424,6 +626,8 @@ Airr data format was developed for nucleotide sequences. For the amino acid pipe
 | v_germline_alignment_aa     | string                                      | Aligned V gene germline sequence.                                                                                                                                                                                                                                                                     |
 | j_sequence_alignment_aa     | string                                      | Aligned portion of query sequence assigned to the J gene.                                                                                                                                                                                                                                             |
 | j_germline_alignment_aa     | string                                      | Aligned J gene germline sequence.                                                                                                                                                                                                                                                                     |
+| c_sequence_alignment_aa     | string                                      | Aligned portion of query sequence assigned to the constant region.                                                                                                                                                                                                                                    |
+| c_germline_alignment_aa     | string                                      | Aligned constant region germline sequence.                                                                                                                                                                                                                                                            |
 | fwr1_aa                     | string                                      | Amino acid sequence of the aligned FWR1 region.                                                                                                                                                                                                                                                       |
 | cdr1_aa                     | string                                      | Amino acid sequence of the aligned CDR1 region.                                                                                                                                                                                                                                                       |
 | fwr2_aa                     | string                                      | Amino acid sequence of the aligned FWR2 region.                                                                                                                                                                                                                                                       |
@@ -435,20 +639,28 @@ Airr data format was developed for nucleotide sequences. For the amino acid pipe
 | junction_aa_length          | integer                                     | Number of amino acids in the junction sequence.                                                                                                                                                                                                                                                       |
 | v_score_aa                  | number                                      | Alignment score (Smith-Waterman) for the V gene.                                                                                                                                                                                                                                                      |
 | j_score_aa                  | number                                      | Alignment score (Smith-Waterman) for the J gene alignment.                                                                                                                                                                                                                                            |
+| c_score_aa                  | number                                      | Alignment score (Smith-Waterman) for the C gene alignment.                                                                                                                                                                                                                                            |
 | v_cigar_aa                  | string                                      | CIGAR string for the V gene alignment.                                                                                                                                                                                                                                                                |
 | j_cigar_aa                  | string                                      | CIGAR string for the J gene alignment.                                                                                                                                                                                                                                                                |
-| v_support_aa                | number                                      | V gene alignment E-value. Note: Every value less than 1.4e-45 will appear as 0.0 (due to single-precision floating point standard limitation)                                                                                                                                                         |
-| j_support_aa                | number                                      | J gene alignment E-value. Note: Every value less than 1.4e-45 will appear as 0.0 (due to single-precision floating point standard limitation)                                                                                                                                                         |
+| c_cigar_aa                  | string                                      | CIGAR string for the C gene alignment.                                                                                                                                                                                                                                                                |
+| v_support_aa                | string                                      | V gene alignment E-value as a string in scientific notation with two decimal places (e.g. `2.26e-141`).                                                                                                                                                                                               |
+| j_support_aa                | string                                      | J gene alignment E-value as a string in scientific notation with two decimal places (e.g. `2.26e-141`).                                                                                                                                                                                               |
+| c_support_aa                | string                                      | C gene alignment E-value as a string in scientific notation with two decimal places (e.g. `2.26e-141`).                                                                                                                                                                                               |
 | v_identity_aa               | number                                      | Fractional identity for the V gene alignment.                                                                                                                                                                                                                                                         |
 | j_identity_aa               | number                                      | Fractional identity for the J gene alignment.                                                                                                                                                                                                                                                         |
-| v_sequence_start_aa         | integer                                     | Start position of the V gene in the query sequence (1-based closed interval).                                                                                                                                                                                                                         |
+| c_identity_aa               | number                                      | Fractional identity for the C gene alignment.                                                                                                                                                                                                                                                         |
+| v_sequence_start_aa         | integer                                     | Start position of the V gene in the query sequence, i.e. in `sequence_aa` (1-based closed interval).                                                                                                                                                                                                                         |
 | v_sequence_end_aa           | integer                                     | End position of the V gene in the query sequence (1-based closed interval).                                                                                                                                                                                                                           |
 | j_sequence_start_aa         | integer                                     | Start position of the J gene in the query sequence (1-based closed interval).                                                                                                                                                                                                                         |
 | j_sequence_end_aa           | integer                                     | End position of the J gene in the query sequence (1-based closed interval).                                                                                                                                                                                                                           |
+| c_sequence_start_aa         | integer                                     | Start position of the C gene in the query sequence (1-based closed interval).                                                                                                                                                                                                                         |
+| c_sequence_end_aa           | integer                                     | End position of the C gene in the query sequence (1-based closed interval).                                                                                                                                                                                                                           |
 | v_germline_start_aa         | integer                                     | Alignment start position in the V gene reference sequence (1-based closed interval).                                                                                                                                                                                                                  |
 | v_germline_end_aa           | integer                                     | Alignment end position in the V gene reference sequence (1-based closed interval).                                                                                                                                                                                                                    |
 | j_germline_start_aa         | integer                                     | Alignment start position in the J gene reference sequence (1-based closed interval).                                                                                                                                                                                                                  |
 | j_germline_end_aa           | integer                                     | Alignment end position in the J gene reference sequence (1-based closed interval).                                                                                                                                                                                                                    |
+| c_germline_start_aa         | integer                                     | Alignment start position in the C gene reference sequence (1-based closed interval).                                                                                                                                                                                                                  |
+| c_germline_end_aa           | integer                                     | Alignment end position in the C gene reference sequence (1-based closed interval).                                                                                                                                                                                                                    |
 | fwr1_start_aa               | integer                                     | FWR1 start position in the query sequence (1-based closed interval).                                                                                                                                                                                                                                  |
 | fwr1_end_aa                 | integer                                     | FWR1 end position in the query sequence (1-based closed interval).                                                                                                                                                                                                                                    |
 | cdr1_start_aa               | integer                                     | CDR1 start position in the query sequence (1-based closed interval).                                                                                                                                                                                                                                  |
@@ -464,10 +676,13 @@ Airr data format was developed for nucleotide sequences. For the amino acid pipe
 | fwr4_start_aa               | integer                                     | FWR4 start position in the query sequence (1-based closed interval).                                                                                                                                                                                                                                  |
 | fwr4_end_aa                 | integer                                     | FWR4 end position in the query sequence (1-based closed interval).                                                                                                                                                                                                                                    |
 | sequence_aa_scheme_cigar    | string                                      | CIGAR string defining sequence_alignment_aa to scheme alignment.                                                                                                                                                                                                                                      |
-| scheme_residue_mapping      | json string                                 | Scheme numbering of sequence_alignment_aa - positions not present in this sequence are not included.                                                                                                                                                                                                  |
-| positional_scheme_mapping   | json string                                 | Mapping from absolute residue position in sequence_alignment_aa (0-based) to corresponding scheme position.                                                                                                                                                                                           |
-| exc                         | string                                      | Exception (if any) thrown during ANARCI numbering.                                                                                                                                                                                                                                                    |
-| additional_validation_flags | json string                                 | JSON string containing additional validation flags.                                                                                                                                                                                                                                                   |
+| scheme_residue_mapping      | dict[string, string]                        | Scheme numbering of sequence_alignment_aa - positions not present in this sequence are not included. In the CSV output it is saved as a base64-encoded JSON string.                                                                                                                                                          |
+| positional_scheme_mapping   | dict[integer, string]                       | Mapping from absolute residue position in sequence_alignment_aa (0-based) to corresponding scheme position. In the CSV output it is saved as a base64-encoded JSON string.                                                                                                                                                   |
+| c_numbering_scheme          | enum ["eu", "kabat", "imgt"]                | Numbering scheme of the constant region. Present only when c_scheme is set and the constant region is numbered (human IGHG1-4, IGKC, IGLC).                                                                                                                                                                        |
+| c_scheme_residue_mapping    | dict[string, string]                        | Scheme numbering of the constant region - positions not present in this sequence are not included. In the CSV output it is saved as a base64-encoded JSON string.                                                                                                                                                           |
+| c_positional_scheme_mapping | dict[integer, string]                       | Mapping from absolute residue position (0-based, same key space as positional_scheme_mapping) to corresponding constant region scheme position. In the CSV output it is saved as a base64-encoded JSON string.                                                                                                               |
+| exc                         | string                                      | Exception (if any) thrown during ANARCI numbering. In the CSV output it is saved as a base64-encoded string.                                                                                                                                                                                                            |
+| additional_validation_flags | dict[string, boolean]                       | JSON string containing additional validation flags. In the CSV output it is saved as a base64-encoded JSON string.                                                                                                                                                                                                           |
 | query_sequence              | string                                      | The query sequence. (Optional: only available with --multiple-domains flag enabled)                                                                                                                                                                                                                   |
 | segment_start               | integer                                     | Start position of the segment in query_sequence (1-based closed interval). (Optional: only available with --multiple-domains flag enabled)                                                                                                                                                            |
 | segment_end                 | integer                                     | End position of the segment in query_sequence (1-based closed interval).  (Optional: only available with --multiple-domains flag enabled)                                                                                                                                                             |

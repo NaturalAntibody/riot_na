@@ -1,10 +1,12 @@
 import math
 
+import pytest
+
 from riot_na.alignment.alignment_metrics import (
-    GumbellParams,
+    GumbelParams,
     calculate_seq_identity,
     compute_bit_score,
-    compute_evalue,
+    compute_log10_evalue,
     compute_raw_score_aa,
     compute_raw_score_from_bit_score,
 )
@@ -41,26 +43,32 @@ def test_compute_raw_score_aa_for_gap_extension_and_deletion():
 
 def test_compute_bit_score_round_trip():
     raw_score = 42
-    bit_score = compute_bit_score(raw_score=raw_score, gumbell_params=GumbellParams.IGBLAST)
-    reconstructed = compute_raw_score_from_bit_score(bit_score=bit_score, gumbell_params=GumbellParams.IGBLAST)
+    bit_score = compute_bit_score(raw_score=raw_score, gumbel_params=GumbelParams(lambda_=1.08, K=0.28))
+    reconstructed = compute_raw_score_from_bit_score(
+        bit_score=bit_score, gumbel_params=GumbelParams(lambda_=1.08, K=0.28)
+    )
 
     assert math.isclose(reconstructed, raw_score)
 
 
 def test_compute_bit_score_round_trip_for_aa_params():
     raw_score = 87.5
-    bit_score = compute_bit_score(raw_score=raw_score, gumbell_params=GumbellParams.AA)
-    reconstructed = compute_raw_score_from_bit_score(bit_score=bit_score, gumbell_params=GumbellParams.AA)
+    bit_score = compute_bit_score(raw_score=raw_score, gumbel_params=GumbelParams(lambda_=0.2645, K=0.0432))
+    reconstructed = compute_raw_score_from_bit_score(
+        bit_score=bit_score, gumbel_params=GumbelParams(lambda_=0.2645, K=0.0432)
+    )
 
     assert math.isclose(reconstructed, raw_score)
 
 
-def test_compute_evalue():
-    assert compute_evalue(query_length=10, db_length=100, bit_score=5) == 31.25
+def test_compute_log10_evalue():
+    assert compute_log10_evalue(query_length=10, db_length=100, bit_score=5) == pytest.approx(
+        math.log10(1000) - 5 * math.log10(2)
+    )
 
 
-def test_compute_evalue_decreases_with_higher_bit_score():
-    low_score = compute_evalue(query_length=100, db_length=1000, bit_score=10)
-    high_score = compute_evalue(query_length=100, db_length=1000, bit_score=20)
+def test_compute_log10_evalue_decreases_with_higher_bit_score():
+    low_score = compute_log10_evalue(query_length=100, db_length=1000, bit_score=10)
+    high_score = compute_log10_evalue(query_length=100, db_length=1000, bit_score=20)
 
     assert high_score < low_score

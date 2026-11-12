@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, Optional, Sequence
 
 from riot_na.alignment.alignment_utils import unfold_cigar
 from riot_na.config import GENE_DB_DIR
@@ -11,17 +11,24 @@ from riot_na.data.model import (
     AlignmentString,
     ChainType,
     Cigar,
+    CScheme,
     Locus,
     Organism,
     Scheme,
     SchemeAlignment,
 )
-from riot_na.data.scheme_definitions import get_legal_positions
-from riot_na.data.scheme_mapping_facade import SchemeMappingFacade
+from riot_na.data.scheme_definitions import (
+    IMGT_C_DOMAINS,
+    get_c_scheme_positions,
+    get_legal_positions,
+)
+from riot_na.data.scheme_mapping_facade import CSchemeMappingFacade, SchemeMappingFacade
 from riot_na.schemes.collapse_alignment import collapse_alignment_str, collapse_ins_del
 from riot_na.schemes.smooth_alignment import smooth_cdr_junctions
 
 IMGT_REVERSE_ORDER_INSERTIONS = [33, 61, 112]
+# EU positions of germline residues enclosing the lower hinge (EU 231-237)
+EU_LOWER_HINGE_ANCHORS = ("230", "238")
 
 
 def validate_sequence(sequence):
@@ -54,7 +61,7 @@ def force_n_terminus_matches(alignment: AlignmentEntryAA) -> AlignmentEntryAA:
         target_id=alignment.target_id,
         alignment_score=None,
         seq_identity=None,
-        e_value=None,
+        log10_e_value=None,
         q_start=q_start,
         q_end=alignment.q_end,
         t_start=t_start,
@@ -65,6 +72,11 @@ def force_n_terminus_matches(alignment: AlignmentEntryAA) -> AlignmentEntryAA:
         q_seq=alignment.q_seq,
         t_seq=alignment.t_seq,
     )
+
+
+# J genes whose germline lacks the last residue that other J genes of the locus have. The residue is missing in the
+# germline and has a deletion at the end of the scheme mapping, so a query having it can be numbered on that position.
+J_GENES_MISSING_LAST_RESIDUE: dict[tuple[Organism, str], str] = {(Organism.VICUGNA_PACOS, "ighJ-5"): "S"}
 
 
 def force_c_terminus_matches(
@@ -78,11 +90,17 @@ def force_c_terminus_matches(
     q_end = alignment.q_end + c_term_number_of_matches
     t_end = alignment.t_end + c_term_number_of_matches
 
+    # the residue missing in the germline is added as an insertion after the end of the gene, not as a match
+    missing_residue = J_GENES_MISSING_LAST_RESIDUE.get((alignment.species, alignment.target_id))
+    if missing_residue and t_end == len(target_sequence) and query_sequence[q_end : q_end + 1] == missing_residue:
+        fixed_cigar = Cigar(fixed_cigar + "1I")
+        q_end += 1
+
     return AlignmentEntryAA(
         target_id=alignment.target_id,
         alignment_score=None,
         seq_identity=None,
-        e_value=None,
+        log10_e_value=None,
         q_start=alignment.q_start,
         q_end=q_end,
         t_start=alignment.t_start,
@@ -340,12 +358,255 @@ def scheme_alignment(
     )
 
 
-def get_scheme_residue_mapping(numbering: IntermediateNumbering) -> dict[str, str]:
+def clip_to_gene_scheme_alignment(
+    query_gene_alignment_str: AlignmentString, gene_scheme_alignment_str: AlignmentString
+) -> AlignmentString:
+    # germline residues past the end of the gene scheme alignment (e.g. membrane exons of C genes) have no
+    # scheme positions, drop the part of the query aligned to them
+    numbered_gene_length = gene_scheme_alignment_str.count("M") + gene_scheme_alignment_str.count("I")
+    gene_position = 0
+
+    for i, op in enumerate(query_gene_alignment_str):
+        if gene_position == numbered_gene_length:
+            return AlignmentString(query_gene_alignment_str[:i])
+        if op in {"M", "D", "N"}:
+            gene_position = gene_position + 1
+
+    return query_gene_alignment_str
+
+
+def get_germline_scheme_indices(
+    gene_scheme_alignment_str: AlignmentString, scheme_positions: Sequence[str]
+) -> dict[str, int]:
+    """Indices of germline residues on scheme positions."""
+    indices: dict[str, int] = {}
+    scheme_index = germline_index = 0
+
+    for op in gene_scheme_alignment_str:
+        if op == "M":
+            indices[scheme_positions[scheme_index]] = germline_index
+        if op in {"M", "D"}:
+            scheme_index = scheme_index + 1
+        if op in {"M", "I"}:
+            germline_index = germline_index + 1
+
+    return indices
+
+
+def get_lower_hinge_anchors(
+    eu_gene_scheme_alignment_str: Optional[AlignmentString], chain_type: ChainType
+) -> Optional[tuple[int, int]]:
+    """Indices of germline residues on EU 230 and 238, None if the germline has no lower hinge."""
+    if not eu_gene_scheme_alignment_str:
+        return None
+
+    indices = get_germline_scheme_indices(eu_gene_scheme_alignment_str, get_c_scheme_positions(CScheme.EU, chain_type))
+    first_anchor, last_anchor = EU_LOWER_HINGE_ANCHORS
+    if first_anchor not in indices or last_anchor not in indices:
+        return None
+    return indices[first_anchor], indices[last_anchor]
+
+
+def _count_identities(query_gene_alignment_str: str, query: str, germline: str) -> int:
+    identities = 0
+    query_position = germline_position = 0
+
+    for op in query_gene_alignment_str:
+        if op == "M" and query[query_position] == germline[germline_position]:
+            identities = identities + 1
+        if op in {"M", "I"}:
+            query_position = query_position + 1
+        if op in {"M", "D"}:
+            germline_position = germline_position + 1
+
+    return identities
+
+
+def place_lower_hinge_indels(
+    query_gene_alignment_str: AlignmentString,
+    query: str,
+    germline: str,
+    query_start: int,
+    anchors: tuple[int, int],
+) -> AlignmentString:
+    """
+    Smith-Waterman places gaps where substitution scores are the highest, so a residue of the lower hinge
+    (EU 231-237) missing in the query or an extra one is placed depending on the mutations next to it, e.g. IGHG1
+    with E233P/L234V/L235A/ΔG236 is aligned with L234 missing. It is placed right before G237 instead, where IGHG2
+    lacks G236 in EU and Kabat mappings (the Fc engineering convention, IMGT places the IGHG2 deletion at CH2 1.4),
+    unless the alignment pairs more identical residues. Lower hinges differing from the germline by more residues
+    are left as aligned.
+
+    anchors - indices of germline residues on EU 230 and 238, both have to be aligned.
+    """
+    first_anchor, last_anchor = anchors
+    # germline index of an anchor -> its index in the alignment string and the index of the query residue paired with it
+    aligned_anchors: dict[int, tuple[int, int]] = {}
+    query_position, germline_position = query_start, 0
+
+    for i, op in enumerate(query_gene_alignment_str):
+        if op == "M" and germline_position in anchors:
+            aligned_anchors[germline_position] = (i, query_position)
+        if op in {"M", "I"}:
+            query_position = query_position + 1
+        if op in {"M", "D", "N"}:
+            germline_position = germline_position + 1
+
+    if len(aligned_anchors) < 2:
+        return query_gene_alignment_str
+
+    (first_op_index, first_query_position), (last_op_index, last_query_position) = (
+        aligned_anchors[first_anchor],
+        aligned_anchors[last_anchor],
+    )
+    hinge_query = query[first_query_position + 1 : last_query_position]
+    hinge_germline = germline[first_anchor + 1 : last_anchor]
+    paired = min(len(hinge_query), len(hinge_germline))
+    if abs(len(hinge_query) - len(hinge_germline)) != 1 or not paired:
+        return query_gene_alignment_str
+
+    # residues are paired from EU 231 on, the last one with G237
+    indel = "I" if len(hinge_query) > len(hinge_germline) else "D"
+    placed = (paired - 1) * "M" + indel + "M"
+
+    aligned = query_gene_alignment_str[first_op_index + 1 : last_op_index]
+    if _count_identities(placed, hinge_query, hinge_germline) < _count_identities(aligned, hinge_query, hinge_germline):
+        return query_gene_alignment_str
+
+    return AlignmentString(
+        query_gene_alignment_str[: first_op_index + 1] + placed + query_gene_alignment_str[last_op_index:]
+    )
+
+
+def c_scheme_alignment(
+    c_alignment: AlignmentEntryAA,
+    c_gene_scheme_alignment_str: AlignmentString,
+    c_scheme: CScheme,
+    query_offset: int = 0,
+    lower_hinge_anchors: Optional[tuple[int, int]] = None,
+) -> SchemeAlignment:
+    """
+    Align query C region to the C scheme. query_offset is the position of the C alignment query
+    (the query left after J alignment) in the whole query. lower_hinge_anchors are indices of germline residues on
+    EU 230 and 238 of IGHG germlines.
+    """
+    c_query_gene_alignment_str = collapse_alignment_str(unfold_cigar(c_alignment.cigar))
+    # unaligned query residues before the C alignment are not numbered, unlike V no S ops are added
+    c_query_gene_alignment_str = AlignmentString(c_alignment.t_start * "N" + c_query_gene_alignment_str)
+    if lower_hinge_anchors:
+        c_query_gene_alignment_str = place_lower_hinge_indels(
+            c_query_gene_alignment_str, c_alignment.q_seq, c_alignment.t_seq, c_alignment.q_start, lower_hinge_anchors
+        )
+    c_query_gene_alignment_str = clip_to_gene_scheme_alignment(c_query_gene_alignment_str, c_gene_scheme_alignment_str)
+
+    # germline insertions next to germline deletions (e.g. Kabat 107A of lambda C after missing 107) are kept,
+    # so unlike V the alignment is not collapsed
+    c_query_scheme_alignment_str = _merge_cigars(c_query_gene_alignment_str, c_gene_scheme_alignment_str)
+
+    q_start = query_offset + c_alignment.q_start
+    q_end = q_start + c_query_gene_alignment_str.count("M") + c_query_gene_alignment_str.count("I")
+
+    return SchemeAlignment(
+        target_id=c_scheme.value,
+        q_start=q_start,
+        q_end=q_end,
+        alignment_str=c_query_scheme_alignment_str,
+    )
+
+
+def _move_position_to_last_insertion(numbering: IntermediateNumbering, scheme_id: int) -> IntermediateNumbering:
+    # residues following a position whose insertions precede it can't be its insertions, the position goes to the
+    # last of them and the residues before it become insertions of the previous position
+    residues = numbering.get(scheme_id, [])
+    if not any(insertion for _, insertion in residues):
+        return numbering
+
+    previous_residues = numbering.get(scheme_id - 1, [])
+    previous_insertions = len([residue for residue in previous_residues if residue[1]])
+    numbering[scheme_id - 1] = previous_residues + [
+        (residue, previous_insertions + i + 1) for i, (residue, _) in enumerate(residues[:-1])
+    ]
+    numbering[scheme_id] = [(residues[-1][0], 0)]
+    return numbering
+
+
+def _move_insertions_to_next_position(
+    numbering: IntermediateNumbering, scheme_id: int, keep: int = 0
+) -> IntermediateNumbering:
+    # insertions preceding the next position are numbered towards it, the last one is .1
+    residues = numbering.get(scheme_id, [])
+    moved = [residue for residue in residues if residue[1]][keep:]
+    if not moved:
+        return numbering
+
+    remaining = residues[: len(residues) - len(moved)]
+    if remaining:
+        numbering[scheme_id] = remaining
+    else:
+        del numbering[scheme_id]
+
+    numbering[scheme_id + 1] = [(residue, len(moved) - i) for i, (residue, _) in enumerate(moved)] + numbering.get(
+        scheme_id + 1, []
+    )
+    return numbering
+
+
+def fix_imgt_c_numbering(numbering: IntermediateNumbering, scheme_positions: Sequence[str]) -> IntermediateNumbering:
+    """
+    produce_numbering attaches insertions to the preceding scheme position. In IMGT C-DOMAIN numbering insertions
+    before position 1 (1.x) belong to it, and insertions between 84 and 85 are split: 84.x follow 84, 85.x
+    precede 85, the odd one goes to 84 (IGKC 84.1-84.5, 85.4-85.1). Residues inserted after position 1 or 85 can't
+    be numbered as their insertions, so the position goes to the last inserted residue and the residues before it
+    become insertions before it (1.x, or 84.x and 85.x split as above).
+    """
+    scheme_ids = {position: i + 1 for i, position in enumerate(scheme_positions)}
+
+    for domain in IMGT_C_DOMAINS:
+        if f"{domain}_1" not in scheme_ids:
+            continue
+
+        position_1 = scheme_ids[f"{domain}_1"]
+        numbering = _move_position_to_last_insertion(numbering, position_1)
+        numbering = _move_insertions_to_next_position(numbering, position_1 - 1)
+
+        numbering = _move_position_to_last_insertion(numbering, scheme_ids[f"{domain}_85"])
+        position_84 = scheme_ids[f"{domain}_84"]
+        de_turn_insertions = len([residue for residue in numbering.get(position_84, []) if residue[1]])
+        numbering = _move_insertions_to_next_position(
+            numbering, position_84, keep=de_turn_insertions - de_turn_insertions // 2
+        )
+
+    return dict(sorted(numbering.items()))
+
+
+def produce_c_numbering(
+    query: str, c_sch_alignment: SchemeAlignment, c_scheme: CScheme, chain_type: ChainType
+) -> dict[str, str]:
+    """
+    Scheme residue mapping of query C region aligned to the C scheme.
+    """
+    c_scheme_positions = get_c_scheme_positions(c_scheme, chain_type)
+
+    c_numbering = produce_numbering(query, c_sch_alignment.alignment_str, c_sch_alignment.q_start)
+    if c_scheme == CScheme.IMGT:
+        c_numbering = fix_imgt_c_numbering(c_numbering, c_scheme_positions)
+
+    return get_scheme_residue_mapping(c_numbering, c_scheme_positions)
+
+
+def get_scheme_residue_mapping(
+    numbering: IntermediateNumbering, scheme_positions: Optional[Sequence[str]] = None
+) -> dict[str, str]:
+    """
+    scheme_positions - labels of scheme positions (1-based numbering indices), by default positions are labeled
+    with their indices
+    """
     result: dict[str, str] = {}
 
     for scheme_id, residues in numbering.items():
+        scheme_position = scheme_positions[scheme_id - 1] if scheme_positions else str(scheme_id)
         for residue, insertion in residues:
-            scheme_id_str = str(scheme_id) if not insertion else f"{scheme_id}.{insertion}"
+            scheme_id_str = scheme_position if not insertion else f"{scheme_position}.{insertion}"
             result[scheme_id_str] = residue
 
     return result
@@ -418,6 +679,10 @@ class SchemeAligner:
         for scheme in Scheme:
             self.scheme_mapping_facades[scheme] = SchemeMappingFacade(scheme, allowed_species, db_dir)
 
+        self.c_scheme_mapping_facades: dict[CScheme, CSchemeMappingFacade] = {
+            c_scheme: CSchemeMappingFacade(c_scheme, db_dir) for c_scheme in CScheme
+        }
+
     def align_to_scheme(
         self, aa_alignments: AlignmentsAA, scheme: Scheme, extend_alignment: bool = True
     ) -> Optional[SchemeAlignment]:
@@ -455,6 +720,32 @@ class SchemeAligner:
 
         return sch_alignment
 
+    def align_c_to_scheme(self, aa_alignments: AlignmentsAA, c_scheme: CScheme) -> Optional[SchemeAlignment]:
+        """
+        Align C region to the C scheme. Returns None if there is no C alignment or the C gene has no scheme mapping.
+        """
+        if not (aa_alignments.v and aa_alignments.c):
+            return None
+
+        c_gene_scheme_alignment_str = self.c_scheme_mapping_facades[c_scheme].get_mapping(
+            aa_alignments.c.species, aa_alignments.c.target_id
+        )
+        if c_gene_scheme_alignment_str is None:
+            return None
+
+        # C is aligned to the query left after V and J alignments (or V alignment, if J was not found)
+        c_query_offset = aa_alignments.v.q_end + (aa_alignments.j.q_end if aa_alignments.j else 0)
+
+        # the lower hinge is found by EU positions in all C schemes
+        lower_hinge_anchors = get_lower_hinge_anchors(
+            self.c_scheme_mapping_facades[CScheme.EU].get_mapping(aa_alignments.c.species, aa_alignments.c.target_id),
+            ChainType.from_locus(aa_alignments.c.locus),
+        )
+
+        return c_scheme_alignment(
+            aa_alignments.c, c_gene_scheme_alignment_str, c_scheme, c_query_offset, lower_hinge_anchors
+        )
+
 
 if __name__ == "__main__":
     import json
@@ -466,7 +757,7 @@ if __name__ == "__main__":
         target_id="IGHV4-59*01",
         alignment_score=None,
         seq_identity=None,
-        e_value=None,
+        log10_e_value=None,
         q_start=6,
         q_end=82,
         q_seq="LRRPCPTCSISDGSISSYYWNWIRQSPGKGLEWIGHIHYSGSTHYNPSLQSRVSISIDTSKNHFSLKLRSVTAVDTAVYYCARWGHFDTSGYFVVDYWGQGTLVTVSS",
@@ -482,7 +773,7 @@ if __name__ == "__main__":
         target_id="IGHJ4*02",
         alignment_score=None,
         seq_identity=None,
-        e_value=None,
+        log10_e_value=None,
         q_start=16,
         q_end=23,
         q_seq="RWGHFDTSGYFVVDYWGQGTLVTVSS",

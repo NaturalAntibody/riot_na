@@ -1,4 +1,4 @@
-"""Helpers shared by the hand-triggered regression baselines."""
+"""Helpers shared by the hand-triggered regression baselines (ngs_baseline, multidomain_baseline)."""
 
 from __future__ import annotations
 
@@ -56,7 +56,7 @@ def diff_entry(expected: Any, actual: Any) -> dict[str, dict[str, Any]]:
 
 
 def query_sequence(*entries: Any) -> str | None:
-    """Input sequence numbered into the first of ``entries`` that has one."""
+    """Input sequence numbered into the first of ``entries`` that has one (full molecule for segmented entries)."""
     for entry in entries:
         for name in ("query_sequence", "sequence", "sequence_aa"):
             if value := getattr(entry, name, None):
