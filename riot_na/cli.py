@@ -35,9 +35,7 @@ class EnumChoice(click.ParamType):
     def __init__(self, enum: Type[Enum]) -> None:
         self.enum = enum
 
-    def get_metavar(
-        self, param: click.Parameter, ctx: Optional[click.Context] = None
-    ) -> str:  # pylint: disable=arguments-differ
+    def get_metavar(self, param: click.Parameter, ctx: Optional[click.Context] = None) -> str:
         return "[" + "|".join(member.name for member in self.enum) + "]"
 
     def convert(self, value: Any, param: Optional[click.Parameter], ctx: Optional[click.Context]) -> Enum:
