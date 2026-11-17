@@ -121,6 +121,9 @@ class Organism(str, Enum):
     CUSTOM = "custom"
 
 
+DEFAULT_SPECIES = (Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS)
+
+
 class ShortRegion(str, Enum):
     FW1 = "fw1"
     FW2 = "fw2"

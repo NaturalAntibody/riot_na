@@ -3,18 +3,14 @@ from pathlib import Path
 from typing import Optional
 
 from riot_na.alignment.gene_aligner import GeneAligner
-from riot_na.alignment.nt_gene_alignments import (
-    DEFAULT_SPECIES,
-    align_djc_nt,
-    create_djc_aligners_nt,
-)
+from riot_na.alignment.nt_gene_alignments import align_djc_nt, create_djc_aligners_nt
 from riot_na.alignment.params import DEFAULT_ALIGNER_PARAMS, AlignerParams
 from riot_na.alignment.segment_gene_aligner import (
     SegmentGeneAligner,
     create_v_gene_aligner,
 )
 from riot_na.config import GENE_DB_DIR
-from riot_na.data.model import Locus, Organism, SegmentAlignmentsNT
+from riot_na.data.model import DEFAULT_SPECIES, Locus, Organism, SegmentAlignmentsNT
 
 logger = logging.getLogger(__name__)
 

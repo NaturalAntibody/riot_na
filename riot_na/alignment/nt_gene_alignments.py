@@ -11,6 +11,7 @@ from riot_na.alignment.gene_aligner import (
 from riot_na.alignment.params import DEFAULT_ALIGNER_PARAMS, AlignerParams
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
+    DEFAULT_SPECIES,
     AlignmentEntryNT,
     AlignmentsNT,
     GermlineGene,
@@ -101,9 +102,6 @@ class VDJCAlignerNT:
         except ValueError as e:
             logger.error("Error aligning %s: %s", v_alignment.q_seq, e)
             return AlignmentsNT()
-
-
-DEFAULT_SPECIES = (Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS)
 
 
 def _create_organism_c_aligners_nt(

@@ -19,6 +19,7 @@ from riot_na.alignment.skbio_alignment import align_aa
 from riot_na.alignment.translate import translate
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
+    DEFAULT_SPECIES,
     AlignmentEntryAA,
     AlignmentsAA,
     AlignmentsNT,
@@ -366,9 +367,6 @@ class VJCAlignmentTranslatorAA:
             c_gene_aa = None
             c_aa_alignment = None
         return masked_aa_for_c, c_gene_id, c_gene_aa, c_aa_alignment
-
-
-DEFAULT_SPECIES = (Organism.HOMO_SAPIENS, Organism.MUS_MUSCULUS, Organism.VICUGNA_PACOS)
 
 
 def aa_genes_dir(db_dir: Path) -> Path:

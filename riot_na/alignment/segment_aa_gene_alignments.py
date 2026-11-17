@@ -3,7 +3,6 @@ from pathlib import Path
 from typing import Optional
 
 from riot_na.alignment.aa_gene_alignments import (
-    DEFAULT_SPECIES,
     aa_genes_dir,
     align_jc_aa,
     create_jc_aligners_aa,
@@ -15,7 +14,7 @@ from riot_na.alignment.segment_gene_aligner import (
     create_aa_v_gene_aligner,
 )
 from riot_na.config import GENE_DB_DIR
-from riot_na.data.model import Locus, Organism, SegmentAlignmentsAA
+from riot_na.data.model import DEFAULT_SPECIES, Locus, Organism, SegmentAlignmentsAA
 
 logger = logging.getLogger(__name__)
 
