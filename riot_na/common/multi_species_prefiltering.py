@@ -9,7 +9,9 @@ from riot_na.data.model import (
     SpeciesGeneMatch,
     SpeciesPrefilteringResult,
 )
-from riot_na.riot_na import PrefilteringResult  # pylint: disable=no-name-in-module
+from riot_na.riot_prefiltering import (  # pylint: disable=no-name-in-module
+    PrefilteringResult,
+)
 
 
 class MultiSpeciesPrefiltering:

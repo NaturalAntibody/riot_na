@@ -2,7 +2,7 @@
 # flake8: noqa
 # isort: skip_file
 __version__ = "5.3.0"
-from riot_na.riot_na import Prefiltering, GeneMatch
+from riot_na.riot_prefiltering import Prefiltering, GeneMatch
 from riot_na.api.riot_numbering import (
     RiotNumberingAA,
     RiotNumberingNT,
