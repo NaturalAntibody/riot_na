@@ -105,6 +105,15 @@ class Scheme(str, Enum):
 
 
 @unique
+class CScheme(str, Enum):
+    """Numbering schemes of the constant region (human IGHG1-4, IGKC and IGLC)."""
+
+    EU = "eu"
+    KABAT = "kabat"
+    IMGT = "imgt"
+
+
+@unique
 class Organism(str, Enum):
     HOMO_SAPIENS = "human"
     MUS_MUSCULUS = "mouse"
@@ -245,6 +254,9 @@ class AirrRearrangementEntryNT:  # pylint: disable=too-many-instance-attributes
     sequence_aa_scheme_cigar: Optional[Cigar] = None
     scheme_residue_mapping: Optional[dict[str, str]] = None
     positional_scheme_mapping: Optional[dict[int, str]] = None
+    c_numbering_scheme: Optional[str] = None
+    c_scheme_residue_mapping: Optional[dict[str, str]] = None
+    c_positional_scheme_mapping: Optional[dict[int, str]] = None
     exc: Optional[str] = None
     additional_validation_flags: Optional[EntryValidationResults] = None
 
@@ -351,6 +363,9 @@ class AirrRearrangementEntryAA:  # pylint: disable=too-many-instance-attributes
     sequence_aa_scheme_cigar: Optional[Cigar] = None
     scheme_residue_mapping: Optional[dict[str, str]] = None
     positional_scheme_mapping: Optional[dict[int, str]] = None
+    c_numbering_scheme: Optional[str] = None
+    c_scheme_residue_mapping: Optional[dict[str, str]] = None
+    c_positional_scheme_mapping: Optional[dict[int, str]] = None
     exc: Optional[str] = None
     additional_validation_flags: Optional[EntryValidationResults] = None
 
@@ -399,6 +414,12 @@ def serialize_airr_entry(entry: AirrRearrangementEntry_co) -> dict[str, str]:
     )
     entry_dict["positional_scheme_mapping"] = entry_dict["positional_scheme_mapping"] and base64_encode(
         json.dumps(entry_dict["positional_scheme_mapping"], separators=(",", ":"))
+    )
+    entry_dict["c_scheme_residue_mapping"] = entry_dict["c_scheme_residue_mapping"] and base64_encode(
+        json.dumps(entry_dict["c_scheme_residue_mapping"], separators=(",", ":"))
+    )
+    entry_dict["c_positional_scheme_mapping"] = entry_dict["c_positional_scheme_mapping"] and base64_encode(
+        json.dumps(entry_dict["c_positional_scheme_mapping"], separators=(",", ":"))
     )
     entry_dict["exc"] = entry_dict["exc"] and base64_encode(entry_dict["exc"])
     entry_dict["additional_validation_flags"] = entry_dict["additional_validation_flags"] and base64_encode(

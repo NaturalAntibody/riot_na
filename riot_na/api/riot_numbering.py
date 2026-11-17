@@ -14,11 +14,17 @@ from riot_na.alignment.aa_gene_alignments import (
     create_vjc_alignment_translator_aa,
 )
 from riot_na.alignment.nt_gene_alignments import VDJCAlignerNT, create_vdjc_aligner_nt
+from riot_na.alignment.segment_gene_aligner import (
+    SegmentGeneAligner,
+    SegmentGeneAlignerAA,
+)
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
     AirrRearrangementEntryAA,
     AirrRearrangementEntryNT,
+    AlignmentsAA,
     ChainType,
+    CScheme,
     Organism,
     Scheme,
 )
@@ -32,9 +38,37 @@ from riot_na.schemes.scheme_alignment import (
     fix_imgt_cdrs_numbering,
     get_positional_scheme_mapping,
     get_scheme_residue_mapping,
+    produce_c_numbering,
     produce_numbering,
     sort_imgt_numbering,
 )
+
+MULTIPLE_DOMAINS_NOT_ENABLED = (
+    "return_all_domains requires numbering created with return_all_domains=True, "
+    "e.g. create_riot_aa(return_all_domains=True)"
+)
+
+
+def number_c_region(
+    scheme_aligner: SchemeAligner, query: str, aa_alignments: AlignmentsAA, c_scheme: CScheme
+) -> Optional[tuple[dict[str, str], dict[int, str]]]:
+    """
+    Number C region of the query. Returns scheme residue mapping and positional scheme mapping
+    or None if the C gene has no scheme mapping.
+    """
+    c_sch_alignment = scheme_aligner.align_c_to_scheme(aa_alignments, c_scheme)
+    if not c_sch_alignment:
+        return None
+
+    assert aa_alignments.c
+    chain_type = ChainType.from_locus(aa_alignments.c.locus)
+
+    c_scheme_residue_mapping = produce_c_numbering(query, c_sch_alignment, c_scheme, chain_type)
+    if not c_scheme_residue_mapping:
+        return None
+
+    c_positional_scheme_mapping = get_positional_scheme_mapping(c_scheme_residue_mapping, c_sch_alignment.q_start)
+    return c_scheme_residue_mapping, c_positional_scheme_mapping
 
 
 class RiotNumberingNT:
@@ -55,6 +89,8 @@ class RiotNumberingNT:
         query_sequence: str,
         scheme: Scheme = ...,
         extend_alignment: bool = ...,
+        *,
+        c_scheme: Optional[CScheme] = ...,
     ) -> AirrRearrangementEntryNT: ...
 
     @overload
@@ -65,6 +101,8 @@ class RiotNumberingNT:
         scheme: Scheme = ...,
         extend_alignment: bool = ...,
         return_all_domains: Literal[True] = ...,
+        *,
+        c_scheme: Optional[CScheme] = ...,
     ) -> list[AirrRearrangementEntryNT]: ...
 
     @overload
@@ -75,6 +113,8 @@ class RiotNumberingNT:
         scheme: Scheme = ...,
         extend_alignment: bool = ...,
         return_all_domains: Literal[False] = ...,
+        *,
+        c_scheme: Optional[CScheme] = ...,
     ) -> AirrRearrangementEntryNT: ...
 
     @overload
@@ -85,6 +125,8 @@ class RiotNumberingNT:
         scheme: Scheme = ...,
         extend_alignment: bool = ...,
         return_all_domains: bool = ...,
+        *,
+        c_scheme: Optional[CScheme] = ...,
     ) -> AirrRearrangementEntryNT | list[AirrRearrangementEntryNT]: ...
 
     def run_on_sequence(
@@ -94,6 +136,7 @@ class RiotNumberingNT:
         scheme: Scheme = Scheme.IMGT,
         extend_alignment: bool = True,
         return_all_domains: bool = False,
+        c_scheme: Optional[CScheme] = None,
     ) -> AirrRearrangementEntryNT | list[AirrRearrangementEntryNT]:  # pylint: disable=too-many-statements
         """
         Align and number nucleotide sequence.
@@ -103,13 +146,18 @@ class RiotNumberingNT:
         - header : Fasta sequence header, usually this is simply sequence ID.
         - query_sequence : Nucleotide sequence to number.
         - scheme : Which numbering scheme to use (default IMGT).
-        - return_all_domains: If True, return all domains of multiple domain proteins.
+        - return_all_domains: If True, return all domains of multiple domain proteins. Requires numbering created
+        with return_all_domains=True, which returns the best scoring domain only if return_all_domains is False.
         - extend_alignment: Extend alignments to cover full sequence.
+        - c_scheme : Numbering scheme of the constant region (eu, kabat or imgt). Only human IGHG1-4, IGKC and IGLC
+        constant regions are numbered, EU numbering is not defined for IGLC. By default constant region is not numbered.
 
         Returns:
         -----------
         AirrRearrangementEntryNT object with alignment results (Extended AIRR format)
         """
+        if return_all_domains and not isinstance(self.vdjc_aligner.v_aligner, SegmentGeneAligner):
+            raise ValueError(MULTIPLE_DOMAINS_NOT_ENABLED)
         query_sequence = query_sequence.upper().replace("U", "T")
         sequence = ""
         segment_start = -1
@@ -129,6 +177,7 @@ class RiotNumberingNT:
         results = []
 
         for alignment in alignments:
+            c_numbering = None
             if alignment.v:
                 sequence = alignment.v.q_seq
                 segment_start = alignment.segment_start or 0
@@ -168,6 +217,14 @@ class RiotNumberingNT:
                         positional_scheme_mapping = get_positional_scheme_mapping(
                             scheme_residue_mapping, sch_alignment.q_start
                         )
+
+                        if c_scheme:
+                            c_numbering = number_c_region(
+                                self.scheme_aligner,
+                                translated_alignments.translated_query,
+                                translated_alignments.aa_alignments,
+                                c_scheme,
+                            )
                 except AssertionError as err:
                     scheme_alignment_exc = str(err)
 
@@ -207,6 +264,10 @@ class RiotNumberingNT:
                     )
                 )
 
+            if c_numbering:
+                assert c_scheme
+                airr_builder.with_c_scheme_numbering(c_scheme, *c_numbering)
+
             if scheme_alignment_exc:
                 airr_builder.with_scheme_alignment_exc(scheme_alignment_exc)
 
@@ -240,6 +301,10 @@ class RiotNumberingAA:
         query_sequence: str,
         scheme: Scheme = ...,
         extend_alignment: bool = ...,
+        *,
+        v_gene: Optional[str] = ...,
+        j_gene: Optional[str] = ...,
+        c_scheme: Optional[CScheme] = ...,
     ) -> AirrRearrangementEntryAA: ...
 
     @overload
@@ -250,6 +315,10 @@ class RiotNumberingAA:
         scheme: Scheme = ...,
         extend_alignment: bool = ...,
         return_all_domains: Literal[True] = ...,
+        *,
+        v_gene: Optional[str] = ...,
+        j_gene: Optional[str] = ...,
+        c_scheme: Optional[CScheme] = ...,
     ) -> list[AirrRearrangementEntryAA]: ...
 
     @overload
@@ -260,6 +329,10 @@ class RiotNumberingAA:
         scheme: Scheme = ...,
         extend_alignment: bool = ...,
         return_all_domains: Literal[False] = ...,
+        *,
+        v_gene: Optional[str] = ...,
+        j_gene: Optional[str] = ...,
+        c_scheme: Optional[CScheme] = ...,
     ) -> AirrRearrangementEntryAA: ...
 
     @overload
@@ -270,6 +343,10 @@ class RiotNumberingAA:
         scheme: Scheme = ...,
         extend_alignment: bool = ...,
         return_all_domains: bool = ...,
+        *,
+        v_gene: Optional[str] = ...,
+        j_gene: Optional[str] = ...,
+        c_scheme: Optional[CScheme] = ...,
     ) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]: ...
 
     def run_on_sequence(
@@ -279,6 +356,9 @@ class RiotNumberingAA:
         scheme: Scheme = Scheme.IMGT,
         extend_alignment: bool = True,
         return_all_domains: bool = False,
+        v_gene: Optional[str] = None,
+        j_gene: Optional[str] = None,
+        c_scheme: Optional[CScheme] = None,
     ) -> AirrRearrangementEntryAA | list[AirrRearrangementEntryAA]:  # pylint: disable=too-many-statements
         """
         Align and number amino acid sequence.
@@ -293,12 +373,22 @@ class RiotNumberingAA:
         to the germline sequence at 5' or / and 3' ends the result may not show that part of the gene.
         This option appends missing amino acids, so the result covers full gene sequence. Beware that
         those query fragments are not truly a part of alignemnt and are shown only for convenience!
-        - return_all_domains: If True, return all domains of multiple domain proteins.
+        - return_all_domains: If True, return all domains of multiple domain proteins. Requires numbering created
+        with return_all_domains=True, which returns the best scoring domain only if return_all_domains is False.
+        - v_gene, j_gene : Align to these exact germlines (e.g. IGHV3-7*01, IGHJ4*02) instead of
+        searching the germline database. Both have to be given together. Gene databases are not
+        prefiltered then, but alignment thresholds still apply. Germlines are looked up in the species
+        the numbering was created for, human germlines first.
+        - c_scheme : Numbering scheme of the constant region (eu, kabat or imgt). Only human IGHG1-4, IGKC and IGLC
+        constant regions are numbered, EU numbering is not defined for IGLC. By default constant region is not numbered.
 
         Returns:
         -----------
         AirrRearrangementEntryAA object with alignment results (Extended AIRR format)
         """
+        assert (v_gene is None) == (j_gene is None), "Both v_gene and j_gene have to be specified"
+        if return_all_domains and not isinstance(self.vjc_aligner_aa.v_aligner, SegmentGeneAlignerAA):
+            raise ValueError(MULTIPLE_DOMAINS_NOT_ENABLED)
         query_sequence = query_sequence.upper()
         sequence_aa = query_sequence
         sch_alignment = None
@@ -310,11 +400,17 @@ class RiotNumberingAA:
         segment_end = -1
 
         # produce alignments for v,j,c
-        alignments = self.vjc_aligner_aa.produce_aa_alignments(query_sequence)
+        if v_gene and j_gene:
+            alignments = self.vjc_aligner_aa.produce_aa_alignments_for_genes(
+                query_sequence, v_gene=v_gene, j_gene=j_gene
+            )
+        else:
+            alignments = self.vjc_aligner_aa.produce_aa_alignments(query_sequence)
 
         results = []
 
         for alignment in alignments:
+            c_numbering = None
             if alignment.v:
                 segment_start = alignment.segment_start or 0
                 segment_end = alignment.segment_end or len(alignment.v.q_seq)
@@ -345,6 +441,9 @@ class RiotNumberingAA:
                 except AssertionError as err:
                     scheme_alignment_exc = str(err)
 
+                if c_scheme:
+                    c_numbering = number_c_region(self.scheme_aligner, alignment.v.q_seq, alignment, c_scheme)
+
             # produce airr result
             # this is separated on purpose to enable other output formats
             airr_builder = AirrBuilderAA(header, query_sequence, scheme)
@@ -372,6 +471,10 @@ class RiotNumberingAA:
                         positional_scheme_mapping
                     )
                 )
+
+            if c_numbering:
+                assert c_scheme
+                airr_builder.with_c_scheme_numbering(c_scheme, *c_numbering)
 
             if scheme_alignment_exc:
                 airr_builder.with_scheme_alignment_exc(scheme_alignment_exc)

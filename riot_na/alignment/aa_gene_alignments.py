@@ -6,8 +6,9 @@ from typing import Optional, Sequence
 
 from ssw_aligner import StripedSmithWaterman
 
-from riot_na.alignment.alignment_utils import infer_reading_frame
+from riot_na.alignment.alignment_utils import align_c, infer_reading_frame
 from riot_na.alignment.gene_aligner import (
+    GENE_SELECTION_SPECIES_ORDER,
     GeneAlignerAA,
     create_aa_c_gene_aligner,
     create_aa_j_gene_aligner,
@@ -69,6 +70,52 @@ class VJCAlignerAA:
                 )
         return results
 
+    def produce_aa_alignments_for_genes(self, query: str, v_gene: str, j_gene: str) -> list[AlignmentsAA]:
+        """
+        Align query to the given V and J germlines, skipping prefiltering.
+
+        Germlines are given by their exact names, e.g. IGHV3-7*01 and IGHJ4*02, and looked up in the species
+        the aligner was created for, human first. The J germline is aligned to the part of the query left over
+        by the V alignment, so the J locus follows from the V germline. C genes are not assigned.
+        """
+        v_aligner = self._get_gene_selection_v_aligner()
+        result = AlignmentsAA()
+
+        v_aa_alignments = v_aligner.align_to_genes(query, [v_gene])
+        if not v_aa_alignments:
+            return [result]
+
+        v_aa_alignment = v_aa_alignments[0]
+        result.v = v_aa_alignment
+
+        query_j = v_aa_alignment.q_seq[v_aa_alignment.q_end :]
+        if query_j:
+            j_aligner = self._get_j_aligner(v_aa_alignment.locus, j_gene)
+            j_aa_alignments = j_aligner.align_to_genes(query_j, [j_gene])
+            if j_aa_alignments:
+                result.j = j_aa_alignments[0]
+
+        return [result]
+
+    def assert_genes_exist(self, v_gene: str, j_gene: str) -> None:
+        """Fail fast on unknown germline names, without aligning anything."""
+        v_germline = self._get_gene_selection_v_aligner().get_gene(v_gene)
+        self._get_j_aligner(v_germline.locus, j_gene)
+
+    def _get_gene_selection_v_aligner(self) -> GeneAlignerAA:
+        assert isinstance(
+            self.v_aligner, GeneAlignerAA
+        ), "Selecting germlines by name is not supported in multiple domains mode"
+        return self.v_aligner
+
+    def _get_j_aligner(self, locus: Locus, j_gene: str) -> GeneAlignerAA:
+        """J aligner of the locus with the given germline, human first."""
+        for species in GENE_SELECTION_SPECIES_ORDER:
+            j_aligner = self.j_aligners.get(species, {}).get(locus)
+            if j_aligner is not None and j_aligner.find_gene(j_gene) is not None:
+                return j_aligner
+        raise AssertionError(f"Gene {j_gene} not found in {locus.value} J germline database")
+
     def _produce_vjc_aa_alignment(self, v_aa_segment_alignment: AlignmentSegment) -> AlignmentsAA:
         result = AlignmentsAA()
         result.segment_start = v_aa_segment_alignment.segment_start
@@ -89,19 +136,19 @@ class VJCAlignerAA:
             j_aligner = self.j_aligners[species][locus]
             j_aa_alignment = j_aligner.align(query_j)[0].best_alignment
 
-            if j_aa_alignment is None:
-                return result
-
-            result.j = j_aa_alignment
-
-            if self.c_aligners:
+            # C follows J or V, if J was not found
+            query_c = query_j
+            if j_aa_alignment is not None:
+                result.j = j_aa_alignment
                 query_c = query_j[j_aa_alignment.q_end :]
-                if query_c:
-                    c_aligner = self.c_aligners[species][locus]
-                    assert c_aligner is not None
-                    c_aa_alignment = c_aligner.align(query_c)[0].best_alignment
-                    if c_aa_alignment is not None:
-                        result.c = c_aa_alignment
+
+            if self.c_aligners and query_c:
+                result.c = align_c(
+                    self.c_aligners[species],
+                    locus,
+                    query_c,
+                    lambda c_aligner: c_aligner.align(query_c)[0].best_alignment,
+                )
 
         return result
 
@@ -244,12 +291,13 @@ class VJCAlignmentTranslatorAA:
                 extended_j_aa_alignment = None
 
             masked_aa_for_c, c_gene_id, c_gene_aa, c_aa_alignment = self.generate_c_aa_alignment(
-                alignments, aligned_sequence_aa, species, locus, extended_j_aa_alignment, v_aa_alignment.q_end
+                alignments, aligned_sequence_aa, species, extended_j_aa_alignment, v_aa_alignment.q_end
             )
 
-            if self.c_aligners is not None:
-                c_aln_length_threshold = self.c_aligners[species][locus].alignment_length_threshold or 0
-                if c_aa_alignment is not None and (  # pylint: disable=too-many-boolean-expressions
+            if self.c_aligners is not None and c_aa_alignment is not None:
+                assert alignments.c
+                c_aln_length_threshold = self.c_aligners[species][alignments.c.locus].alignment_length_threshold or 0
+                if (  # pylint: disable=too-many-boolean-expressions
                     c_aa_alignment.q_start == -1
                     or c_aa_alignment.q_end == -1
                     or c_aa_alignment.t_start == -1
@@ -261,7 +309,9 @@ class VJCAlignmentTranslatorAA:
             if c_aa_alignment:
                 assert c_gene_aa
                 assert c_gene_id
+                assert alignments.c
 
+                # C gene can be of another locus and species than V gene
                 extended_c_aa_alignment = AlignmentEntryAA(
                     target_id=c_gene_id,
                     alignment_score=c_aa_alignment.alignment_score,
@@ -272,8 +322,8 @@ class VJCAlignmentTranslatorAA:
                     t_start=c_aa_alignment.t_start,
                     t_end=c_aa_alignment.t_end,
                     cigar=c_aa_alignment.cigar,
-                    species=v_alignment.species,
-                    locus=v_alignment.locus,
+                    species=alignments.c.species,
+                    locus=alignments.c.locus,
                     q_seq=masked_aa_for_c,
                     t_seq=c_gene_aa,
                 )
@@ -319,17 +369,18 @@ class VJCAlignmentTranslatorAA:
         alignments: AlignmentsNT,
         aligned_sequence_aa: str,
         species: Organism,
-        locus: Locus,
         extended_j_aa_alignment: AlignmentEntryAA | None,
         j_offset: int,
     ) -> tuple[str, str | None, str | None, InternalAlignmentEntryAA | None]:
-        if alignments.c and extended_j_aa_alignment:
-            masked_aa_for_c = aligned_sequence_aa[extended_j_aa_alignment.q_end + j_offset :]
+        if alignments.c:
+            # C follows J or V, if J was not found
+            c_offset = j_offset + extended_j_aa_alignment.q_end if extended_j_aa_alignment else j_offset
+            masked_aa_for_c = aligned_sequence_aa[c_offset:]
 
             c_gene_id = alignments.c.target_id
 
             assert self.c_aligners
-            c_gene = self.c_aligners[species][locus].gene_lookup[alignments.c.lookup_gene_id()]
+            c_gene = self.c_aligners[species][alignments.c.locus].gene_lookup[alignments.c.lookup_gene_id()]
             c_gene_aa = c_gene.sequence
 
             c_aligner = StripedSmithWaterman(masked_aa_for_c, **AA_ALIGNER_PARAMS)

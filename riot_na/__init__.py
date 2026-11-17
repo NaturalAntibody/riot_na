@@ -20,6 +20,7 @@ from riot_na.data.model import (
     ShortRegion,
     ChainType,
     Scheme,
+    CScheme,
     Organism,
     Locus,
 )
@@ -45,6 +46,7 @@ __all__ = [
     "ShortRegion",
     "ChainType",
     "Scheme",
+    "CScheme",
     "Organism",
     "Locus",
     "utils",
