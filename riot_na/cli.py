@@ -1,15 +1,20 @@
 import time
 from pathlib import Path
-from typing import Any, Optional
+from typing import Optional, Type
 
 import click
 import psutil
 
 from riot_na.api.api_mp import run_on_file_mp
+from riot_na.api.multidomain_riot_numbering import (
+    create_multidomain_riot_aa,
+    create_multidomain_riot_nt,
+)
 from riot_na.api.riot_numbering import create_riot_aa, create_riot_nt
 from riot_na.common.io import write_airr_iter_to_csv
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
+    AirrRearrangementEntry_co,
     AirrRearrangementEntryAA,
     AirrRearrangementEntryNT,
     CScheme,
@@ -19,6 +24,16 @@ from riot_na.data.model import (
     SegmentedAirrRearrangementEntryAA,
     SegmentedAirrRearrangementEntryNT,
 )
+
+
+def _write_or_print(
+    output_file: Optional[Path], record_type: Type[AirrRearrangementEntry_co], results: list[AirrRearrangementEntry_co]
+) -> None:
+    if output_file:
+        write_airr_iter_to_csv(output_file, record_type, results)
+    else:
+        for result in results:
+            print(result.__dict__)
 
 
 @click.command()
@@ -138,45 +153,39 @@ def run_riot(  # pylint: disable=too-many-arguments
         elapsed_time = end - start
         print("Execution time:", time.strftime("%H:%M:%S", time.gmtime(elapsed_time)))
     elif sequence:
-        result: Any
-        record_type: Any
-        match input_type:
-            case InputType.NT:
-                numbering_nt = create_riot_nt(
-                    allowed_species=species_list, db_dir=GENE_DB_DIR, return_all_domains=multiple_domains
+        match input_type, multiple_domains:
+            case InputType.NT, False:
+                result_nt = create_riot_nt(allowed_species=species_list, db_dir=GENE_DB_DIR).run_on_sequence(
+                    header="-", query_sequence=sequence, scheme=scheme, c_scheme=c_scheme
                 )
-                record_type = AirrRearrangementEntryNT if not multiple_domains else SegmentedAirrRearrangementEntryNT
-                result = numbering_nt.run_on_sequence(
-                    header="-",
-                    query_sequence=sequence,
-                    scheme=scheme,
-                    return_all_domains=multiple_domains,
-                    c_scheme=c_scheme,
-                )
-            case InputType.AA:
-                numbering_aa = create_riot_aa(
-                    allowed_species=species_list, db_dir=GENE_DB_DIR, return_all_domains=multiple_domains
-                )
-                record_type = AirrRearrangementEntryAA if not multiple_domains else SegmentedAirrRearrangementEntryAA
-                result = numbering_aa.run_on_sequence(
+                _write_or_print(output_file, AirrRearrangementEntryNT, [result_nt])
+            case InputType.NT, True:
+                results_nt = create_multidomain_riot_nt(
+                    allowed_species=species_list, db_dir=GENE_DB_DIR
+                ).run_on_sequence(header="-", query_sequence=sequence, scheme=scheme, c_scheme=c_scheme)
+                _write_or_print(output_file, SegmentedAirrRearrangementEntryNT, results_nt)
+            case InputType.AA, False:
+                result_aa = create_riot_aa(allowed_species=species_list, db_dir=GENE_DB_DIR).run_on_sequence(
                     header="-",
                     query_sequence=sequence,
                     scheme=scheme,
                     extend_alignment=extend_alignment,
-                    return_all_domains=multiple_domains,
                     v_gene=v_gene,
                     j_gene=j_gene,
                     c_scheme=c_scheme,
                 )
-
-        if output_file:
-            write_airr_iter_to_csv(output_file, record_type, [result] if not multiple_domains else result)
-        else:
-            if not multiple_domains:
-                print(result.__dict__)
-            else:
-                for single_result in result:
-                    print(single_result.__dict__)
+                _write_or_print(output_file, AirrRearrangementEntryAA, [result_aa])
+            case InputType.AA, True:
+                results_aa = create_multidomain_riot_aa(
+                    allowed_species=species_list, db_dir=GENE_DB_DIR
+                ).run_on_sequence(
+                    header="-",
+                    query_sequence=sequence,
+                    scheme=scheme,
+                    extend_alignment=extend_alignment,
+                    c_scheme=c_scheme,
+                )
+                _write_or_print(output_file, SegmentedAirrRearrangementEntryAA, results_aa)
 
     else:
         print("Need to specify input sequence or FASTA file!")

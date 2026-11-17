@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Generic, Optional, TypeVar
 
 from riot_na.airr.airr_validator import validate_airr_entry
 from riot_na.alignment.alignment_utils import (
@@ -18,22 +18,33 @@ from riot_na.data.model import (
     RegionOffsetsNT,
     Scheme,
     SchemeAlignment,
-    SegmentedAirrRearrangementEntryNT,
     TranslatedAlignmentsNT,
 )
 
+RearrangementT = TypeVar("RearrangementT", bound=AirrRearrangementEntryNT)
 
-class AirrBuilder:  # pylint: disable=too-many-instance-attributes
-    def __init__(self, sequence_header: str, sequence: str, scheme: Scheme):
-        self.sequence_header = sequence_header
-        self.sequence = sequence
-        self.scheme = scheme
+
+def is_complete_vdj(fwr1_start: Optional[int], fwr4_end: Optional[int]) -> Optional[bool]:
+    """Whether FWR1 start and FWR4 end were found (-1 or 0 if not), None if region offsets were not inferred."""
+    for position in (fwr1_start, fwr4_end):
+        if position is None:
+            return None
+        if position in (0, -1):
+            return False
+    return True
+
+
+class AirrBuilder(Generic[RearrangementT]):  # pylint: disable=too-many-instance-attributes
+    """Builds the given AIRR rearrangement entry, which carries the sequence header, sequence and scheme."""
+
+    def __init__(self, rearrangement: RearrangementT):
+        self.sequence_header = rearrangement.sequence_header
+        self.sequence = rearrangement.sequence
+        self.scheme = Scheme(rearrangement.numbering_scheme)
 
         self.sequence_aa: Optional[str] = None
 
-        self.rearrangement = AirrRearrangementEntryNT(
-            sequence_header=sequence_header, sequence=sequence, numbering_scheme=scheme.value
-        )
+        self.rearrangement = rearrangement
 
         self.v_gene_sequence: Optional[str] = None
         self.v_gene_alignment: Optional[AlignmentEntryNT] = None
@@ -386,7 +397,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
             return sequence_aa_segment[start - 1 : end]
         return None
 
-    def build(self):  # pylint: disable=too-many-statements
+    def build(self) -> RearrangementT:  # pylint: disable=too-many-statements
         if self.v_gene_alignment is None:
             return self.rearrangement
 
@@ -430,7 +441,7 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
 
             vj_junction_alignment_str = vd_junction_alignment_str + d_aln_str + dj_junction_alignment_str
 
-        full_alignment_str = v_aln_str + vj_junction_alignment_str + j_aln_str
+        full_alignment_str = AlignmentString(v_aln_str + vj_junction_alignment_str + j_aln_str)
 
         sequence_alignment, germline_alignment = align_sequences(
             sequence_alignment_segment, germline_segment, full_alignment_str
@@ -439,13 +450,13 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         self.rearrangement.germline_alignment = germline_alignment
 
         if self.rearrangement.sequence_alignment_aa:
-            if self.rearrangement.cdr3 is not None:
+            if self.nt_offsets is not None and self.rearrangement.cdr3 is not None:
                 self.rearrangement.junction = self._extract_region(
-                    self.rearrangement.cdr3_start - 3, self.rearrangement.cdr3_end + 3
+                    self.nt_offsets.cdr3_start - 3, self.nt_offsets.cdr3_end + 3
                 )
                 self.rearrangement.junction_length = len(self.rearrangement.junction or "")
 
-            if self.rearrangement.cdr3_aa is not None:
+            if self.aa_offsets is not None and self.rearrangement.cdr3_aa is not None:
                 jun_start_aa = self.aa_offsets.cdr3_start_aa - 1
                 jun_end_aa = self.aa_offsets.cdr3_end_aa + 1
 
@@ -455,19 +466,15 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
             # annotate
             self.rearrangement.stop_codon = "*" in self.rearrangement.sequence_alignment_aa
 
-        self.rearrangement.complete_vdj = (
-            self.rearrangement.fwr1_start
-            and self.rearrangement.fwr1_start != -1
-            and self.rearrangement.fwr4_end
-            and self.rearrangement.fwr4_end != -1
-        )
+        self.rearrangement.complete_vdj = is_complete_vdj(self.rearrangement.fwr1_start, self.rearrangement.fwr4_end)
 
         # airr defines frameshift as sum of all insertions and deletions on gene alignment
-        self.rearrangement.v_frameshift = self.rearrangement.v_cigar and has_frameshift(self.rearrangement.v_cigar)
-        self.rearrangement.j_frameshift = self.rearrangement.j_cigar and has_frameshift(self.rearrangement.j_cigar)
+        self.rearrangement.v_frameshift = has_frameshift(self.v_gene_alignment.cigar)
+        self.rearrangement.j_frameshift = has_frameshift(self.j_gene_alignment.cigar) if self.j_gene_alignment else None
 
-        if self.rearrangement.j_frame is not None:
-            j_frame_start = self.rearrangement.j_alignment_start - 1 + self.rearrangement.j_frame
+        j_alignment_start = self.rearrangement.j_alignment_start
+        if self.rearrangement.j_frame is not None and j_alignment_start is not None:
+            j_frame_start = j_alignment_start - 1 + self.rearrangement.j_frame
             self.rearrangement.vj_in_frame = (j_frame_start % 3) == self.rearrangement.v_frame
 
             productive = not self.rearrangement.stop_codon and self.rearrangement.vj_in_frame
@@ -479,20 +486,3 @@ class AirrBuilder:  # pylint: disable=too-many-instance-attributes
         self.rearrangement.additional_validation_flags = validate_airr_entry(self.rearrangement, scheme=self.scheme)
 
         return self.rearrangement
-
-
-class SegmentedAirrBuilder(AirrBuilder):
-    def __init__(self, sequence_header: str, sequence: str, scheme: Scheme, query_sequence: str):
-        super().__init__(sequence_header, sequence, scheme)
-
-        self.rearrangement: SegmentedAirrRearrangementEntryNT = SegmentedAirrRearrangementEntryNT(
-            sequence_header=sequence_header,
-            sequence=sequence,
-            numbering_scheme=scheme.value,
-            query_sequence=query_sequence,
-        )
-
-    def with_segment_start_end(self, segment_start: int, segment_end: int):
-        self.rearrangement.segment_start = segment_start + 1
-        self.rearrangement.segment_end = segment_end
-        return self

@@ -161,7 +161,7 @@ class SegmentGeneAligner:
 
         return all_alignments
 
-    def align(self, query: str, both_strains: bool = True) -> Sequence[AlignmentSegment]:
+    def align(self, query: str, both_strains: bool = True) -> Sequence[AlignmentSegment[AlignmentEntryNT]]:
         """
         Perform segment-based alignment of the query sequence.
 
@@ -303,7 +303,7 @@ class SegmentGeneAlignerAA:
 
         return all_alignments
 
-    def align(self, query: str) -> Sequence[AlignmentSegment]:
+    def align(self, query: str) -> Sequence[AlignmentSegment[AlignmentEntryAA]]:
         """
         Perform segment-based amino acid alignment of the query sequence.
 
