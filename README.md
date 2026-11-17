@@ -11,6 +11,31 @@ Antibodies are a cornerstone of the immune system, playing a pivotal role in ide
 
 </details>
 
+## Table of contents
+- [Links](#links)
+- [Requirements](#requirements)
+- [Quickstart](#quickstart)
+- [Installation](#installation)
+- [Usage](#usage)
+  - [CLI](#cli)
+  - [API Nucleotides](#api-nucleotides)
+  - [API Amino Acids](#api-amino-acids)
+  - [Selecting germlines by name](#selecting-germlines-by-name)
+  - [Constant region germlines](#constant-region-germlines)
+  - [Alignment thresholds](#alignment-thresholds)
+  - [Constant region numbering](#constant-region-numbering)
+  - [Caching](#caching)
+  - [Multiprocessing](#multiprocessing)
+- [Multidomains support](#multidomains-support)
+  - [Migrating from 5.x](#migrating-from-5x)
+- [Germline database](#germline-database)
+- [Data format](#data-format)
+  - [AirrRearrangementNT fields definitions](#airrrearrangementnt-fields-definitions)
+  - [AirrRearrangementAA field definitions](#airrrearrangementaa-field-definitions)
+- [Examples](#examples)
+- [Development](#development)
+- [Citing this work](#citing-this-work)
+
 ## Links:
 - [PyPI](https://pypi.org/project/riot-na/)
 - [Source code](https://github.com/NaturalAntibody/riot_na)
