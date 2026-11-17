@@ -1,12 +1,21 @@
 import math
-import os
 from functools import cached_property, partial
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
 from ssw_aligner import StripedSmithWaterman
 
-from riot_na.alignment.alignment_metrics import GumbellParams, compute_bit_score
+from riot_na.alignment.alignment_metrics import (
+    compute_bit_score,
+    log10_evalue_threshold,
+)
+from riot_na.alignment.gumbel import get_gumbel_params
+from riot_na.alignment.params import (
+    DEFAULT_ALIGNER_PARAMS,
+    AASSWParams,
+    AlignerParams,
+    NTSSWParams,
+)
 from riot_na.alignment.skbio_alignment import (
     align_aa,  # type: ignore  # pylint: disable=import-error
 )
@@ -34,10 +43,8 @@ GENE_SELECTION_SPECIES_ORDER = (
     *(species for species in Organism if species != Organism.HOMO_SAPIENS),
 )
 
-ALIGNER_PARAMS = {"match_score": 1, "mismatch_score": -1, "gap_open_penalty": 4, "gap_extend_penalty": 1}
 
-
-class GeneAligner:
+class GeneAligner:  # pylint: disable=too-many-instance-attributes
     def __init__(
         self,
         genes: Sequence[Gene],
@@ -47,15 +54,21 @@ class GeneAligner:
         modulo_n: int,
         e_value_threshold: Optional[float] = None,
         alignment_length_threshold: Optional[int] = None,
+        min_seq_identity: Optional[float] = None,
+        ssw_params: NTSSWParams = DEFAULT_ALIGNER_PARAMS.v_nt.aligner,
     ) -> None:
 
+        self.ssw_params = ssw_params
+        self.gumbel_params = get_gumbel_params(ssw_params)
         self.prefiltering = MultiSpeciesPrefiltering(genes, kmer_size, distance_threshold, top_n, modulo_n)
 
         self.gene_lookup = create_gene_lookup(genes)
         self.db_length = sum(len(gene.sequence) for gene in genes)
 
         self.e_value_threshold = e_value_threshold
+        self.log10_e_value_threshold = log10_evalue_threshold(e_value_threshold)
         self.alignment_length_threshold = alignment_length_threshold
+        self.min_seq_identity = min_seq_identity
 
     def _prefilter(self, query: str, both_strains: bool) -> SpeciesPrefilteringResult:
         """Prefilter genes and return species-aware gene matches."""
@@ -66,9 +79,9 @@ class GeneAligner:
         return self.prefiltering.calculate_top_matches(query)
 
     def _align_sequences(self, query: str, prefiltering_result: SpeciesPrefilteringResult) -> list[AlignmentEntryNT]:
-        aligner = StripedSmithWaterman(query, **ALIGNER_PARAMS)
+        aligner = StripedSmithWaterman(query, **self.ssw_params.kwargs())
         rev_comp_aligner = (
-            StripedSmithWaterman(prefiltering_result.rev_comp_query, **ALIGNER_PARAMS)
+            StripedSmithWaterman(prefiltering_result.rev_comp_query, **self.ssw_params.kwargs())
             if prefiltering_result.rev_comp_query
             else None
         )
@@ -90,17 +103,22 @@ class GeneAligner:
                 target=target_gene.sequence,
                 query=current_query,
                 db_length=self.db_length,
+                gumbel_params=self.gumbel_params,
                 rev_comp=gene_match.rev_comp,
             )
 
             alignment_length = alignment.t_end - alignment.t_start
 
-            if self.e_value_threshold is not None:
-                assert alignment.e_value is not None
-                if alignment.e_value > self.e_value_threshold:
+            if self.log10_e_value_threshold is not None:
+                assert alignment.log10_e_value is not None
+                if alignment.log10_e_value > self.log10_e_value_threshold:
                     continue
             if self.alignment_length_threshold is not None:
                 if alignment_length < self.alignment_length_threshold:
+                    continue
+            if self.min_seq_identity is not None:
+                assert alignment.seq_identity is not None
+                if alignment.seq_identity < self.min_seq_identity:
                     continue
 
             result.append(
@@ -108,7 +126,7 @@ class GeneAligner:
                     target_id=alignment.target_id,
                     alignment_score=alignment.alignment_score,
                     seq_identity=alignment.seq_identity,
-                    e_value=alignment.e_value,
+                    log10_e_value=alignment.log10_e_value,
                     q_start=alignment.q_start,
                     q_end=alignment.q_end,
                     q_len=alignment.q_len,
@@ -138,19 +156,14 @@ class GeneAligner:
         Upper bound of alignment scores (bit scores) of the query to the genes: aligned nucleotides score at most
         match_score, mismatches and gaps lower the score.
         """
-        return compute_bit_score(ALIGNER_PARAMS["match_score"] * min(len(query), self._max_gene_length))
+        return compute_bit_score(
+            self.ssw_params.match_score * min(len(query), self._max_gene_length), gumbel_params=self.gumbel_params
+        )
 
     @cached_property
     def _max_gene_length(self) -> int:
         return max((len(gene.sequence) for gene in self.gene_lookup.values()), default=0)
 
-
-AA_ALIGNER_PARAMS = {
-    "gap_open_penalty": 11,
-    "gap_extend_penalty": 1,
-    "protein": True,
-    "substitution_matrix": BLOSUM_62,
-}
 
 # best substitution score of every residue, residues missing in the matrix get the best score of the matrix
 _MAX_SUBSTITUTION_SCORES_AA = {
@@ -180,8 +193,10 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
         max_cdr3_length: Optional[int] = None,
         min_seq_identity: Optional[float] = None,
         min_internal_alignment_length: Optional[int] = None,
-        max_fragment_germline_start: int = 0,
+        ssw_params: AASSWParams = DEFAULT_ALIGNER_PARAMS.v_aa.aligner,
     ) -> None:
+        self.ssw_params = ssw_params
+        self.gumbel_params = get_gumbel_params(ssw_params)
         # Initialize the base prefiltering directly with species-aware keys
         self.prefiltering = MultiSpeciesPrefiltering(genes, kmer_size, distance_threshold, top_n, modulo_n)
 
@@ -189,11 +204,11 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
         self.db_length = sum(len(gene.sequence) for gene in genes)
 
         self.e_value_threshold = e_value_threshold
+        self.log10_e_value_threshold = log10_evalue_threshold(e_value_threshold)
         self.alignment_length_threshold = alignment_length_threshold
         self.max_cdr3_length = max_cdr3_length
         self.min_seq_identity = min_seq_identity
         self.min_internal_alignment_length = min_internal_alignment_length
-        self.max_fragment_germline_start = max_fragment_germline_start
 
     def find_gene(self, gene_id: str) -> Optional[Gene | GeneAA]:
         """
@@ -219,7 +234,7 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
     def _align_sequences(
         self, query: str, prefiltering_result: SpeciesPrefilteringResult
     ) -> Sequence[AlignmentEntryAA]:
-        aligner = StripedSmithWaterman(query, **AA_ALIGNER_PARAMS)
+        aligner = StripedSmithWaterman(query, **self.ssw_params.kwargs())
 
         result = []
 
@@ -232,13 +247,14 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
                 target=target_gene.sequence,
                 query=query,
                 db_length=self.db_length,
+                gumbel_params=self.gumbel_params,
             )
 
             alignment_length = alignment.t_end - alignment.t_start
 
-            if self.e_value_threshold is not None:
-                assert alignment.e_value is not None
-                if alignment.e_value > self.e_value_threshold:
+            if self.log10_e_value_threshold is not None:
+                assert alignment.log10_e_value is not None
+                if alignment.log10_e_value > self.log10_e_value_threshold:
                     continue
             if self.alignment_length_threshold is not None:
                 if alignment_length < self.alignment_length_threshold:
@@ -251,12 +267,7 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
                 if alignment.seq_identity < self.min_seq_identity:
                     continue
             if self.min_internal_alignment_length is not None:
-                # alignments shorter than that have to start at the beginning of the germline, or at most
-                # max_fragment_germline_start residues after it if they start at the beginning of the query too
-                if alignment_length < self.min_internal_alignment_length and (
-                    alignment.t_start > self.max_fragment_germline_start
-                    or (alignment.t_start > 0 and alignment.q_start > self.max_fragment_germline_start)
-                ):
+                if alignment_length < self.min_internal_alignment_length:
                     continue
 
             result.append(
@@ -264,7 +275,7 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
                     target_id=alignment.target_id,
                     alignment_score=alignment.alignment_score,
                     seq_identity=alignment.seq_identity,
-                    e_value=alignment.e_value,
+                    log10_e_value=alignment.log10_e_value,
                     q_start=alignment.q_start,
                     q_end=alignment.q_end,
                     t_start=alignment.t_start,
@@ -288,7 +299,7 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
     def max_alignment_score(self, query: str) -> float:
         """Upper bound of alignment scores (bit scores) of the query to the genes (see max_raw_alignment_score_aa)."""
         return compute_bit_score(
-            min(self._max_gene_raw_score, max_raw_alignment_score_aa(query)), gumbell_params=GumbellParams.AA
+            min(self._max_gene_raw_score, max_raw_alignment_score_aa(query)), gumbel_params=self.gumbel_params
         )
 
     @cached_property
@@ -320,122 +331,6 @@ class GeneAlignerAA:  # pylint: disable=too-many-instance-attributes
         prefiltering_result = SpeciesPrefilteringResult(query=query, rev_comp_query="", top_matches=gene_matches)
 
         return self._align_sequences(query, prefiltering_result)
-
-
-def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> dict:
-    # ideally this should be read from a file or env
-    match germline_gene:
-        case GermlineGene.V:
-            return {
-                "kmer_size": int(os.environ.get("KMER_SIZE_V_NT", 5)),
-                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_V_NT", 13)),
-                "top_n": int(os.environ.get("TOP_N_V_NT", 12)),
-                "modulo_n": int(os.environ.get("MODULO_N_V_NT", 2)),
-                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_NT", 0.05)),
-                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_NT", 100)),
-            }
-        case GermlineGene.D:
-            return {
-                "kmer_size": int(os.environ.get("KMER_SIZE_D_NT", 5)),
-                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_D_NT", 3)),
-                "top_n": int(os.environ.get("TOP_N_D_NT", 5)),
-                "modulo_n": int(os.environ.get("MODULO_N_D_NT", 1)),
-            }
-        case GermlineGene.J:
-            assert locus is not None
-            match locus:
-                case Locus.IGH:
-                    return {
-                        "kmer_size": int(os.environ.get("KMER_SIZE_JH_NT", 5)),
-                        "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_JH_NT", 3)),
-                        "top_n": int(os.environ.get("TOP_N_JH_NT", 5)),
-                        "modulo_n": int(os.environ.get("MODULO_N_JH_NT", 2)),
-                    }
-                case Locus.IGK:
-                    return {
-                        "kmer_size": int(os.environ.get("KMER_SIZE_JK_NT", 5)),
-                        "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_JK_NT", 5)),
-                        "top_n": int(os.environ.get("TOP_N_JK_NT", 5)),
-                        "modulo_n": int(os.environ.get("MODULO_N_JK_NT", 1)),
-                    }
-                case Locus.IGL:
-                    return {
-                        "kmer_size": int(os.environ.get("KMER_SIZE_JL_NT", 5)),
-                        "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_JL_NT", 7)),
-                        "top_n": int(os.environ.get("TOP_N_JL_NT", 5)),
-                        "modulo_n": int(os.environ.get("MODULO_N_JL_NT", 2)),
-                    }
-        case GermlineGene.C:
-            assert locus is not None
-            match locus:
-                case Locus.IGH:
-                    return {
-                        "kmer_size": int(os.environ.get("KMER_SIZE_CH_NT", 5)),
-                        "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_CH_NT", 5)),
-                        "top_n": int(os.environ.get("TOP_N_CH_NT", 5)),
-                        "modulo_n": int(os.environ.get("MODULO_N_CH_NT", 2)),
-                        "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_CH_NT", 0.05)),
-                    }
-                case Locus.IGK:
-                    return {
-                        "kmer_size": int(os.environ.get("KMER_SIZE_CK_NT", 3)),
-                        "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_CK_NT", 5)),
-                        "top_n": int(os.environ.get("TOP_N_CK_NT", 3)),
-                        "modulo_n": int(os.environ.get("MODULO_N_CK_NT", 1)),
-                        "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_CK_NT", 0.05)),
-                    }
-                case Locus.IGL:
-                    return {
-                        "kmer_size": int(os.environ.get("KMER_SIZE_CL_NT", 3)),
-                        "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_CL_NT", 5)),
-                        "top_n": int(os.environ.get("TOP_N_CL_NT", 3)),
-                        "modulo_n": int(os.environ.get("MODULO_N_CL_NT", 1)),
-                        "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_CL_NT", 0.05)),
-                    }
-
-
-def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
-    # ideally this should be read from a file or env
-
-    match germline_gene:
-        case GermlineGene.V:
-            return {
-                "kmer_size": int(os.environ.get("KMER_SIZE_V_AA", 3)),
-                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_V_AA", 3)),
-                "top_n": int(os.environ.get("TOP_N_V_AA", 20)),
-                "modulo_n": int(os.environ.get("MODULO_N_V_AA", 1)),
-                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_AA", 1e-45)),
-                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_AA", 50)),
-            }
-        case GermlineGene.J:
-            return {
-                "kmer_size": int(os.environ.get("KMER_SIZE_J_AA", 3)),
-                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_J_AA", 3)),
-                "top_n": int(os.environ.get("TOP_N_J_AA", 5)),
-                "modulo_n": int(os.environ.get("MODULO_N_J_AA", 1)),
-                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_J_AA", 5)),
-                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_J_AA", 0.001)),
-                "max_cdr3_length": int(os.environ.get("MAX_CDR3_LENGTH_J_AA", 60)),
-            }
-        case GermlineGene.C:
-            return {
-                "kmer_size": int(os.environ.get("KMER_SIZE_C_AA", 3)),
-                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_C_AA", 3)),
-                "top_n": int(os.environ.get("TOP_N_C_AA", 5)),
-                "modulo_n": int(os.environ.get("MODULO_N_C_AA", 2)),
-                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_C_AA", 4)),
-                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_C_AA", 0.05)),
-                # filter out matches of non antibody regions following V region, e.g. proline rich CAR hinges
-                # to IgG and IgA hinges. Short C regions (e.g. CH1 fragments in Fabs) start at the C germline start.
-                "min_seq_identity": float(os.environ.get("MIN_SEQ_IDENTITY_C_AA", 0.4)),
-                "min_internal_alignment_length": int(os.environ.get("MIN_INTERNAL_ALIGNMENT_LENGTH_C_AA", 50)),
-                # the first C residue is encoded by the J-C junction codon (its first nucleotide comes from J), so it is
-                # missing or different when J ends differently, e.g. absorbed by J alignment or mutated. C fragments
-                # without it start right after J (or at the start of the query of the constant region aligner)
-                "max_fragment_germline_start": int(os.environ.get("MAX_FRAGMENT_GERMLINE_START_C_AA", 1)),
-            }
-        case _:
-            raise ValueError("AA aligner not supported for gene type")
 
 
 def get_gene_parsing_function(gene_type: GermlineGene) -> Callable[[Sequence[str], FastaRecord], Gene]:
@@ -489,7 +384,11 @@ def read_genes(path: Path, parsing_fn):
     return result
 
 
-def create_v_gene_aligner(allowed_species: Sequence[Organism], db_dir: Path = GENE_DB_DIR) -> GeneAligner:
+def create_v_gene_aligner(
+    allowed_species: Sequence[Organism],
+    db_dir: Path = GENE_DB_DIR,
+    params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
+) -> GeneAligner:
     genes = []
 
     if not allowed_species:
@@ -503,14 +402,17 @@ def create_v_gene_aligner(allowed_species: Sequence[Organism], db_dir: Path = GE
 
         genes.extend(species_genes)
 
-    aligner_params = get_aligner_params(GermlineGene.V, None)
-    genes_aligner = GeneAligner(genes, **aligner_params)
+    genes_aligner = GeneAligner(genes, **params.v_nt.kwargs(), ssw_params=params.v_nt.aligner)
 
     return genes_aligner
 
 
 def create_aligner(
-    organism: Organism, germline_gene: GermlineGene, locus: Locus, db_dir: Path = GENE_DB_DIR
+    organism: Organism,
+    germline_gene: GermlineGene,
+    locus: Locus,
+    db_dir: Path = GENE_DB_DIR,
+    params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
 ) -> GeneAligner:
     assert germline_gene != GermlineGene.V
 
@@ -521,13 +423,15 @@ def create_aligner(
     )
     genes = read_genes(gene_path, gene_parsing_function)
 
-    aligner_params = get_aligner_params(germline_gene, locus)
-    genes_aligner = GeneAligner(genes, **aligner_params)
+    gene_params = params.nt_gene(germline_gene, locus)
+    genes_aligner = GeneAligner(genes, **gene_params.kwargs(), ssw_params=gene_params.aligner)
 
     return genes_aligner
 
 
-def create_aa_v_gene_aligner(allowed_species: Sequence[Organism], aa_genes_dir: Path) -> GeneAlignerAA:
+def create_aa_v_gene_aligner(
+    allowed_species: Sequence[Organism], aa_genes_dir: Path, params: AlignerParams = DEFAULT_ALIGNER_PARAMS
+) -> GeneAlignerAA:
     genes = []
 
     if not allowed_species:
@@ -542,31 +446,32 @@ def create_aa_v_gene_aligner(allowed_species: Sequence[Organism], aa_genes_dir: 
 
         genes.extend(species_genes)
 
-    aligner_params = get_aa_aligner_params(GermlineGene.V)
-    genes_aligner = GeneAlignerAA(genes, **aligner_params)
+    genes_aligner = GeneAlignerAA(genes, **params.v_aa.kwargs(), ssw_params=params.v_aa.aligner)
 
     return genes_aligner
 
 
-def create_aa_j_gene_aligner(organism: Organism, locus: Locus, aa_genes_dir: Path) -> GeneAlignerAA:
+def create_aa_j_gene_aligner(
+    organism: Organism, locus: Locus, aa_genes_dir: Path, params: AlignerParams = DEFAULT_ALIGNER_PARAMS
+) -> GeneAlignerAA:
     input_path = aa_genes_dir / "j_genes" / organism.value / f"{locus.value}.fasta"
     assert input_path.exists(), f"Input germline file: {str(input_path)} does not exists"
 
     genes = read_genes(input_path, partial(parse_gene_aa, species=organism))
 
-    aligner_params = get_aa_aligner_params(GermlineGene.J)
-    genes_aligner = GeneAlignerAA(genes, **aligner_params)
+    genes_aligner = GeneAlignerAA(genes, **params.j_aa.kwargs(), ssw_params=params.j_aa.aligner)
 
     return genes_aligner
 
 
-def create_aa_c_gene_aligner(organism: Organism, locus: Locus, aa_genes_dir: Path) -> GeneAlignerAA:
+def create_aa_c_gene_aligner(
+    organism: Organism, locus: Locus, aa_genes_dir: Path, params: AlignerParams = DEFAULT_ALIGNER_PARAMS
+) -> GeneAlignerAA:
     input_path = aa_genes_dir / "c_genes" / organism.value / f"{locus.value}.fasta"
     assert input_path.exists(), f"Input germline file: {str(input_path)} does not exists"
 
     genes = read_genes(input_path, partial(parse_gene_aa, species=organism))
 
-    aligner_params = get_aa_aligner_params(GermlineGene.C)
-    genes_aligner = GeneAlignerAA(genes, **aligner_params)
+    genes_aligner = GeneAlignerAA(genes, **params.c_aa.kwargs(), ssw_params=params.c_aa.aligner)
 
     return genes_aligner

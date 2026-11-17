@@ -1,19 +1,21 @@
-import os
 from functools import partial
 from pathlib import Path
 from typing import Callable, Optional, Sequence
 
 from ssw_aligner import StripedSmithWaterman
 
-from riot_na.alignment.gene_aligner import AA_ALIGNER_PARAMS, ALIGNER_PARAMS
-from riot_na.alignment.gene_aligner import (
-    get_aa_aligner_params as gene_aa_aligner_params,
-)
-from riot_na.alignment.gene_aligner import get_aligner_params as gene_aligner_params
+from riot_na.alignment.alignment_metrics import log10_evalue_threshold
 from riot_na.alignment.gene_aligner import (
     get_gene_parsing_function,
     parse_gene_aa,
     read_genes,
+)
+from riot_na.alignment.gumbel import get_gumbel_params
+from riot_na.alignment.params import (
+    DEFAULT_ALIGNER_PARAMS,
+    AASSWParams,
+    AlignerParams,
+    NTSSWParams,
 )
 from riot_na.alignment.skbio_alignment import align, align_aa
 from riot_na.common.gene_match_utils import create_gene_lookup
@@ -29,14 +31,13 @@ from riot_na.data.model import (
     Gene,
     GeneAA,
     GermlineGene,
-    Locus,
     Organism,
     SegmentMatch,
     SpeciesPrefilteringSegmentResult,
 )
 
 
-class SegmentGeneAligner:
+class SegmentGeneAligner:  # pylint: disable=too-many-instance-attributes
     """
     Segment-based gene aligner that provides alignments for each detected domain/segment.
 
@@ -47,7 +48,7 @@ class SegmentGeneAligner:
     Compatible with GeneAligner interface for easy replacement.
     """
 
-    def __init__(
+    def __init__(  # pylint: disable=too-many-arguments
         self,
         genes: Sequence[Gene],
         kmer_size: int = 6,
@@ -58,7 +59,12 @@ class SegmentGeneAligner:
         alignment_length_threshold: Optional[int] = None,
         min_prefiltering_coverage: int = 30,
         min_segment_length: int = 30,
+        min_seq_identity: Optional[float] = None,
+        ssw_params: NTSSWParams = DEFAULT_ALIGNER_PARAMS.segment_v_nt.aligner,
     ) -> None:
+        self.ssw_params = ssw_params
+        self.gumbel_params = get_gumbel_params(ssw_params)
+        self.min_seq_identity = min_seq_identity
         # Initialize the Rust-based prefiltering
         self.prefiltering = MultiSpeciesSegmentPrefiltering(
             all_genes=genes,
@@ -76,6 +82,7 @@ class SegmentGeneAligner:
 
         # Alignment parameters
         self.e_value_threshold = e_value_threshold
+        self.log10_e_value_threshold = log10_evalue_threshold(e_value_threshold)
         self.alignment_length_threshold = alignment_length_threshold
 
     # Compatibility method to match GeneAligner interface
@@ -96,7 +103,7 @@ class SegmentGeneAligner:
             current_query = rev_comp_query if gene_info.rev_comp else query
 
             # Create aligner for this query
-            aligner = StripedSmithWaterman(current_query, **ALIGNER_PARAMS)
+            aligner = StripedSmithWaterman(current_query, **self.ssw_params.kwargs())
 
             # Get target sequence
             target_gene = self.gene_lookup[gene_info.species_gene_id]
@@ -108,26 +115,30 @@ class SegmentGeneAligner:
                 target=target_gene.sequence,
                 query=current_query,
                 db_length=self.db_length,
+                gumbel_params=self.gumbel_params,
                 rev_comp=gene_info.rev_comp,
             )
 
             # Apply filtering criteria
             alignment_length = alignment.t_end - alignment.t_start
 
-            if self.e_value_threshold is not None:
-                if alignment.e_value > self.e_value_threshold:
+            if self.log10_e_value_threshold is not None:
+                if alignment.log10_e_value > self.log10_e_value_threshold:
                     continue
 
             if self.alignment_length_threshold is not None:
                 if alignment_length < self.alignment_length_threshold:
                     continue
 
+            if self.min_seq_identity is not None and alignment.seq_identity < self.min_seq_identity:
+                continue
+
             # Convert to AlignmentEntryNT
             alignment_entry = AlignmentEntryNT(
                 target_id=alignment.target_id,
                 alignment_score=alignment.alignment_score,
                 seq_identity=alignment.seq_identity,
-                e_value=alignment.e_value,
+                log10_e_value=alignment.log10_e_value,
                 q_start=alignment.q_start,
                 q_end=alignment.q_end,
                 q_len=alignment.q_len,
@@ -184,7 +195,7 @@ class SegmentGeneAligner:
         )
 
 
-class SegmentGeneAlignerAA:
+class SegmentGeneAlignerAA:  # pylint: disable=too-many-instance-attributes
     """
     Amino acid version of the segment-based gene aligner.
 
@@ -203,7 +214,12 @@ class SegmentGeneAlignerAA:
         max_cdr3_length: Optional[int] = None,  # Added for compatibility with GeneAlignerAA
         min_prefiltering_coverage: int = 20,
         min_segment_length: int = 60,
+        min_seq_identity: Optional[float] = None,
+        ssw_params: AASSWParams = DEFAULT_ALIGNER_PARAMS.segment_v_aa.aligner,
     ) -> None:
+        self.ssw_params = ssw_params
+        self.gumbel_params = get_gumbel_params(ssw_params)
+        self.min_seq_identity = min_seq_identity
         self.prefiltering = MultiSpeciesSegmentPrefiltering(
             genes,
             kmer_size,
@@ -220,6 +236,7 @@ class SegmentGeneAlignerAA:
 
         # Alignment parameters
         self.e_value_threshold = e_value_threshold
+        self.log10_e_value_threshold = log10_evalue_threshold(e_value_threshold)
         self.alignment_length_threshold = alignment_length_threshold
         self.max_cdr3_length = max_cdr3_length  # Added for compatibility
 
@@ -233,7 +250,7 @@ class SegmentGeneAlignerAA:
         alignments = []
 
         # Create aligner for this query
-        aligner = StripedSmithWaterman(query, **AA_ALIGNER_PARAMS)
+        aligner = StripedSmithWaterman(query, **self.ssw_params.kwargs())
 
         for gene_info in segment.matching_genes:
             # Note: AA version doesn't support reverse complement
@@ -250,18 +267,26 @@ class SegmentGeneAlignerAA:
                 target=target_sequence,
                 query=query,
                 db_length=self.db_length,
+                gumbel_params=self.gumbel_params,
             )
 
             # Apply filtering criteria
             alignment_length = alignment.t_end - alignment.t_start
 
-            if self.e_value_threshold is not None:
-                if alignment.e_value and alignment.e_value > self.e_value_threshold:
+            if self.log10_e_value_threshold is not None:
+                if alignment.log10_e_value is not None and alignment.log10_e_value > self.log10_e_value_threshold:
                     continue
 
             if self.alignment_length_threshold is not None:
                 if alignment_length < self.alignment_length_threshold:
                     continue
+
+            if (
+                self.min_seq_identity is not None
+                and alignment.seq_identity is not None
+                and alignment.seq_identity < self.min_seq_identity
+            ):
+                continue
 
             # Apply max_cdr3_length filter for compatibility with GeneAlignerAA
             if self.max_cdr3_length is not None:
@@ -273,7 +298,7 @@ class SegmentGeneAlignerAA:
                 target_id=alignment.target_id,
                 alignment_score=alignment.alignment_score,
                 seq_identity=alignment.seq_identity,
-                e_value=alignment.e_value,
+                log10_e_value=alignment.log10_e_value,
                 q_start=alignment.q_start,
                 q_end=alignment.q_end,
                 t_start=alignment.t_start,
@@ -351,47 +376,11 @@ def align_segments(
     return segment_alignments[::-1]
 
 
-def get_aligner_params(germline_gene: GermlineGene, locus: Optional[Locus]) -> dict:
-    """Get aligner parameters for different germline gene types"""
-    # ideally this should be read from a file or env
-
-    match germline_gene:
-        case GermlineGene.V:
-            return {
-                "kmer_size": int(os.environ.get("KMER_SIZE_V_NT", 5)),
-                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_V_NT", 13)),
-                "top_n": int(os.environ.get("TOP_N_V_NT", 12)),
-                "modulo_n": int(os.environ.get("MODULO_N_V_NT", 2)),
-                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_NT", 0.05)),
-                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_NT", 100)),
-                "min_prefiltering_coverage": int(os.environ.get("MIN_PREFILTERING_COVERAGE_V_NT", 75)),
-                "min_segment_length": int(os.environ.get("MIN_SEGMENT_LENGTH_V_NT", 100)),
-            }
-        case _:
-            return gene_aligner_params(germline_gene, locus)
-
-
-def get_aa_aligner_params(germline_gene: GermlineGene) -> dict:
-    """Get amino acid aligner parameters for different germline gene types"""
-    # ideally this should be read from a file or env
-
-    match germline_gene:
-        case GermlineGene.V:
-            return {
-                "kmer_size": int(os.environ.get("KMER_SIZE_V_AA", 3)),
-                "distance_threshold": int(os.environ.get("DISTANCE_THRESHOLD_V_AA", 4)),
-                "top_n": int(os.environ.get("TOP_N_V_AA", 12)),
-                "modulo_n": int(os.environ.get("MODULO_N_V_AA", 1)),
-                "e_value_threshold": float(os.environ.get("E_VALUE_THRESHOLD_V_AA", 1e-55)),
-                "alignment_length_threshold": int(os.environ.get("ALIGNMENT_LENGTH_THRESHOLD_V_AA", 50)),
-                "min_prefiltering_coverage": int(os.environ.get("MIN_PREFILTERING_COVERAGE_V_AA", 32)),
-                "min_segment_length": int(os.environ.get("MIN_SEGMENT_LENGTH_V_AA", 35)),
-            }
-        case _:
-            return gene_aa_aligner_params(germline_gene)
-
-
-def create_v_gene_aligner(allowed_species: Sequence[Organism], db_dir: Path = GENE_DB_DIR) -> SegmentGeneAligner:
+def create_v_gene_aligner(
+    allowed_species: Sequence[Organism],
+    db_dir: Path = GENE_DB_DIR,
+    params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
+) -> SegmentGeneAligner:
     """Create V gene segment aligner"""
     genes = []
 
@@ -405,12 +394,13 @@ def create_v_gene_aligner(allowed_species: Sequence[Organism], db_dir: Path = GE
         species_genes = read_genes(input_path, gene_parsing_function)
         genes.extend(species_genes)
 
-    aligner_params = get_aligner_params(GermlineGene.V, None)
-    genes_aligner = SegmentGeneAligner(genes, **aligner_params)
+    genes_aligner = SegmentGeneAligner(genes, **params.segment_v_nt.kwargs(), ssw_params=params.segment_v_nt.aligner)
     return genes_aligner
 
 
-def create_aa_v_gene_aligner(allowed_species: Sequence[Organism], aa_genes_dir: Path) -> SegmentGeneAlignerAA:
+def create_aa_v_gene_aligner(
+    allowed_species: Sequence[Organism], aa_genes_dir: Path, params: AlignerParams = DEFAULT_ALIGNER_PARAMS
+) -> SegmentGeneAlignerAA:
     """Create amino acid V gene segment aligner"""
     genes = []
 
@@ -425,6 +415,5 @@ def create_aa_v_gene_aligner(allowed_species: Sequence[Organism], aa_genes_dir: 
         species_genes = read_genes(input_path, partial(parse_gene_aa, species=species))
         genes.extend(species_genes)
 
-    aligner_params = get_aa_aligner_params(GermlineGene.V)
-    genes_aligner = SegmentGeneAlignerAA(genes, **aligner_params)
+    genes_aligner = SegmentGeneAlignerAA(genes, **params.segment_v_aa.kwargs(), ssw_params=params.segment_v_aa.aligner)
     return genes_aligner

@@ -1,6 +1,7 @@
 import time
+from enum import Enum
 from pathlib import Path
-from typing import Optional, Type
+from typing import Any, Optional, Type
 
 import click
 import psutil
@@ -26,6 +27,28 @@ from riot_na.data.model import (
 )
 
 
+class EnumChoice(click.ParamType):
+    """Choice of an enum member, given by its name or value in any case (e.g. ``HOMO_SAPIENS``, ``human``, ``Human``)."""
+
+    name = "choice"
+
+    def __init__(self, enum: Type[Enum]) -> None:
+        self.enum = enum
+
+    def get_metavar(self, param: click.Parameter, ctx: Optional[click.Context] = None) -> str:
+        return "[" + "|".join(member.name for member in self.enum) + "]"
+
+    def convert(self, value: Any, param: Optional[click.Parameter], ctx: Optional[click.Context]) -> Enum:
+        if isinstance(value, self.enum):
+            return value
+        key = str(value).lower()
+        for member in self.enum:
+            if key in (member.name.lower(), str(member.value).lower()):
+                return member
+        choices = ", ".join(f"{member.name} ({member.value})" for member in self.enum)
+        return self.fail(f"{value!r} is not one of {choices}.", param, ctx)
+
+
 def _write_or_print(
     output_file: Optional[Path], record_type: Type[AirrRearrangementEntry_co], results: list[AirrRearrangementEntry_co]
 ) -> None:
@@ -42,13 +65,13 @@ def _write_or_print(
 @click.option("-o", "--output-file", type=Path, help="Path to output CSV file. If not specified, stdout is used.")
 @click.option(
     "--scheme",
-    type=click.Choice(Scheme),  # type: ignore
+    type=EnumChoice(Scheme),
     default=Scheme.IMGT,
     help="Which numbering scheme should be used: imgt, kabat, chothia, martin. Default IMGT",
 )
 @click.option(
     "--c-scheme",
-    type=click.Choice(CScheme),  # type: ignore
+    type=EnumChoice(CScheme),
     default=None,
     help=(
         "Numbering scheme of the constant region: eu, kabat, imgt. Only human IGHG1-4, IGKC and IGLC constant regions "
@@ -57,13 +80,23 @@ def _write_or_print(
 )
 @click.option(
     "--species",
-    type=click.Choice(Organism),  # type: ignore
+    type=EnumChoice(Organism),
     default=None,
     help="Which species germline sequences should be used. Default is all species.",
 )
 @click.option(
+    "--c-genes-species",
+    type=EnumChoice(Organism),
+    default=None,
+    help=(
+        "Align constant regions only to C germlines of this species, whatever the species of the variable region. "
+        "Useful e.g. for humanization analysis. "
+        "Default is C germlines of the species of the variable region (none for mouse)."
+    ),
+)
+@click.option(
     "--input-type",
-    type=click.Choice(InputType),  # type: ignore
+    type=EnumChoice(InputType),
     default=InputType.NT,
     help="What kind of sequences are provided on input. Default is nucleotide sequences.",
 )
@@ -80,8 +113,9 @@ def _write_or_print(
     type=bool,
     default=False,
     help=(
-        "Include unaligned beginning of the query sequence in numbering."
-        "This option impacts only amino acid sequences."
+        "Include unaligned beginning and end of the query sequence in numbering. "
+        "Works for amino acid and nucleotide sequences. For nucleotides the extension is done after translation, "
+        "on the amino acid alignment."
     ),
 )
 @click.option(
@@ -115,6 +149,7 @@ def run_riot(  # pylint: disable=too-many-arguments
     scheme: Scheme,
     c_scheme: Optional[CScheme],
     species: Optional[Organism],
+    c_genes_species: Optional[Organism],
     input_type: InputType,
     ncpu: int,
     extend_alignment: bool,
@@ -148,6 +183,7 @@ def run_riot(  # pylint: disable=too-many-arguments
             v_gene=v_gene,
             j_gene=j_gene,
             c_scheme=c_scheme,
+            c_genes_organism=c_genes_species,
         )
         end = time.perf_counter()
         elapsed_time = end - start
@@ -155,17 +191,19 @@ def run_riot(  # pylint: disable=too-many-arguments
     elif sequence:
         match input_type, multiple_domains:
             case InputType.NT, False:
-                result_nt = create_riot_nt(allowed_species=species_list, db_dir=GENE_DB_DIR).run_on_sequence(
-                    header="-", query_sequence=sequence, scheme=scheme, c_scheme=c_scheme
-                )
+                result_nt = create_riot_nt(
+                    allowed_species=species_list, db_dir=GENE_DB_DIR, c_genes_organism=c_genes_species
+                ).run_on_sequence(header="-", query_sequence=sequence, scheme=scheme, c_scheme=c_scheme)
                 _write_or_print(output_file, AirrRearrangementEntryNT, [result_nt])
             case InputType.NT, True:
                 results_nt = create_multidomain_riot_nt(
-                    allowed_species=species_list, db_dir=GENE_DB_DIR
+                    allowed_species=species_list, db_dir=GENE_DB_DIR, c_genes_organism=c_genes_species
                 ).run_on_sequence(header="-", query_sequence=sequence, scheme=scheme, c_scheme=c_scheme)
                 _write_or_print(output_file, SegmentedAirrRearrangementEntryNT, results_nt)
             case InputType.AA, False:
-                result_aa = create_riot_aa(allowed_species=species_list, db_dir=GENE_DB_DIR).run_on_sequence(
+                result_aa = create_riot_aa(
+                    allowed_species=species_list, db_dir=GENE_DB_DIR, c_genes_organism=c_genes_species
+                ).run_on_sequence(
                     header="-",
                     query_sequence=sequence,
                     scheme=scheme,
@@ -177,7 +215,7 @@ def run_riot(  # pylint: disable=too-many-arguments
                 _write_or_print(output_file, AirrRearrangementEntryAA, [result_aa])
             case InputType.AA, True:
                 results_aa = create_multidomain_riot_aa(
-                    allowed_species=species_list, db_dir=GENE_DB_DIR
+                    allowed_species=species_list, db_dir=GENE_DB_DIR, c_genes_organism=c_genes_species
                 ).run_on_sequence(
                     header="-",
                     query_sequence=sequence,

@@ -1,0 +1,21 @@
+{
+  "alp_settings": {
+    "n_samples": 100000,
+    "seed": 42,
+    "gap_convention": "open_includes_extend"
+  },
+  "params": {
+    "aa|matrix=blosum62|gap_open=11|gap_extend=1": {
+      "lambda": 0.24469104392222985,
+      "K": 0.02610308892347016
+    },
+    "aa|matrix=blosum62|gap_open=11|gap_extend=5": {
+      "lambda": 0.29639176400676326,
+      "K": 0.09267903992588092
+    },
+    "nt|match=1|mismatch=-1|gap_open=4|gap_extend=1": {
+      "lambda": 1.0639716657839087,
+      "K": 0.2638817033919292
+    }
+  }
+}

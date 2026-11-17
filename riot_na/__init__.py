@@ -34,6 +34,19 @@ from riot_na.data.model import (
     Organism,
     Locus,
 )
+from riot_na.alignment.params import (
+    AlignerParams,
+    DEFAULT_ALIGNER_PARAMS,
+    PrefilteringParams,
+    Thresholds,
+    AAThresholds,
+    GeneParams,
+    AAGeneParams,
+    SegmentGeneParams,
+    SegmentAAGeneParams,
+    NTSSWParams,
+    AASSWParams,
+)
 from riot_na.api import utils
 
 __all__ = [
@@ -53,6 +66,17 @@ __all__ = [
     "get_or_create_multidomain_riot_aa",
     "get_or_create_multidomain_riot_nt",
     "run_on_file_mp",
+    "AlignerParams",
+    "DEFAULT_ALIGNER_PARAMS",
+    "PrefilteringParams",
+    "Thresholds",
+    "AAThresholds",
+    "GeneParams",
+    "AAGeneParams",
+    "SegmentGeneParams",
+    "SegmentAAGeneParams",
+    "NTSSWParams",
+    "AASSWParams",
     "get_regions_definitions",
     "get_region",
     "Regions",

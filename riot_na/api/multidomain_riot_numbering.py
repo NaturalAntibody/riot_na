@@ -9,6 +9,11 @@ from riot_na.alignment.aa_gene_alignments import (
     VJCAlignmentTranslatorAA,
     create_vjc_alignment_translator_aa,
 )
+from riot_na.alignment.params import (
+    DEFAULT_ALIGNER_PARAMS,
+    AlignerParams,
+    warn_c_genes_organism,
+)
 from riot_na.alignment.segment_aa_gene_alignments import (
     SegmentVJCAlignerAA,
     create_segment_vjc_aligner_aa,
@@ -57,7 +62,10 @@ class MultidomainRiotNumberingNT:
         - header : Fasta sequence header, usually this is simply sequence ID.
         - query_sequence : Nucleotide sequence to number.
         - scheme : Which numbering scheme to use (default IMGT).
-        - extend_alignment: Extend alignments to cover full sequence.
+        - extend_alignment: Include the unaligned beginning (V gene) and end (J gene) of the query in the numbering.
+        The nucleotide alignments are not changed: the extension is done after translation, on the amino acid
+        alignments, and covers only the part of the query aligned on the nucleotide level. Beware that those query
+        fragments are not truly a part of alignment and are shown only for convenience!
         - c_scheme : Numbering scheme of the constant region (eu, kabat or imgt). Only human IGHG1-4, IGKC and IGLC
         constant regions are numbered, EU numbering is not defined for IGLC. By default constant region is not numbered.
 
@@ -128,6 +136,7 @@ class MultidomainRiotNumberingAA:
         to the germline sequence at 5' or / and 3' ends the result may not show that part of the gene.
         This option appends missing amino acids, so the result covers full gene sequence. Beware that
         those query fragments are not truly a part of alignemnt and are shown only for convenience!
+        For alpaca ighJ-5, which lacks the last S of other J genes, a following S in the query is added as well.
         - c_scheme : Numbering scheme of the constant region (eu, kabat or imgt). Only human IGHG1-4, IGKC and IGLC
         constant regions are numbered, EU numbering is not defined for IGLC. By default constant region is not numbered.
 
@@ -175,6 +184,8 @@ class MultidomainRiotNumberingAA:
 def create_multidomain_riot_nt(
     allowed_species: Optional[tuple[Organism, ...]] = None,
     db_dir: Path = GENE_DB_DIR,
+    c_genes_organism: Optional[Organism] = None,
+    params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
 ) -> MultidomainRiotNumberingNT:
     """
     Factory function for creating MultidomainRiotNumberingNT object, which numbers all domains of multiple domain
@@ -184,13 +195,24 @@ def create_multidomain_riot_nt(
     -----------
     - allowed_species : Limit gene database to specified Organism tuple (default use all species - mouse, human and alpaca).
     - db_dir : Path to gene and scheme mappings database directory (default use embeded database).
+    - c_genes_organism : Align constant regions to C germlines of this organism only, for V alignments of any
+    species. Default is to use C germlines of the species of the V alignment (mouse has none, so its constant regions
+    are not aligned). Useful e.g. for humanization analysis. Constant regions of another organism are less similar
+    to the germlines, a warning is printed as the minimum sequence identity of C alignments may need lowering.
+    - params : Thresholds and Smith-Waterman parameters of the gene aligners (default: the established RIOT settings,
+    see riot_na.alignment.params). To change them pass a modified copy of DEFAULT_ALIGNER_PARAMS.
 
     Returns:
     -----------
     MultidomainRiotNumberingNT object used for performing alignment and numbering.
     """
-    segment_vdjc_aligner_nt = create_segment_vdjc_aligner_nt(allowed_species=allowed_species, db_dir=db_dir)
-    vjc_alignment_translator_aa = create_vjc_alignment_translator_aa(allowed_species=allowed_species, db_dir=db_dir)
+    warn_c_genes_organism(c_genes_organism, params)
+    segment_vdjc_aligner_nt = create_segment_vdjc_aligner_nt(
+        allowed_species=allowed_species, db_dir=db_dir, c_genes_organism=c_genes_organism, params=params
+    )
+    vjc_alignment_translator_aa = create_vjc_alignment_translator_aa(
+        allowed_species=allowed_species, db_dir=db_dir, c_genes_organism=c_genes_organism, params=params
+    )
     scheme_aligner = SchemeAligner(allowed_species=allowed_species, db_dir=db_dir)
     return MultidomainRiotNumberingNT(segment_vdjc_aligner_nt, vjc_alignment_translator_aa, scheme_aligner)
 
@@ -198,6 +220,8 @@ def create_multidomain_riot_nt(
 def create_multidomain_riot_aa(
     allowed_species: Optional[tuple[Organism, ...]] = None,
     db_dir: Path = GENE_DB_DIR,
+    c_genes_organism: Optional[Organism] = None,
+    params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
 ) -> MultidomainRiotNumberingAA:
     """
     Factory function for creating MultidomainRiotNumberingAA object, which numbers all domains of multiple domain
@@ -207,12 +231,21 @@ def create_multidomain_riot_aa(
     -----------
     - allowed_species : Limit gene database to specified Organism tuple (default use all species - mouse, human and alpaca).
     - db_dir : Path to gene and scheme mappings database directory (default use embeded database).
+    - c_genes_organism : Align constant regions to C germlines of this organism only, for V alignments of any
+    species. Default is to use C germlines of the species of the V alignment (mouse has none, so its constant regions
+    are not aligned). Useful e.g. for humanization analysis. Constant regions of another organism are less similar
+    to the germlines, a warning is printed as the minimum sequence identity of C alignments may need lowering.
+    - params : Thresholds and Smith-Waterman parameters of the gene aligners (default: the established RIOT settings,
+    see riot_na.alignment.params). To change them pass a modified copy of DEFAULT_ALIGNER_PARAMS.
 
     Returns:
     -----------
     MultidomainRiotNumberingAA object used for performing alignment and numbering.
     """
-    segment_vjc_aligner_aa = create_segment_vjc_aligner_aa(allowed_species=allowed_species, db_dir=db_dir)
+    warn_c_genes_organism(c_genes_organism, params)
+    segment_vjc_aligner_aa = create_segment_vjc_aligner_aa(
+        allowed_species=allowed_species, db_dir=db_dir, c_genes_organism=c_genes_organism, params=params
+    )
     scheme_aligner = SchemeAligner(allowed_species=allowed_species, db_dir=db_dir)
     return MultidomainRiotNumberingAA(segment_vjc_aligner_aa, scheme_aligner)
 
@@ -221,13 +254,21 @@ def create_multidomain_riot_aa(
 def get_or_create_multidomain_riot_nt(
     allowed_species: Optional[tuple[Organism, ...]] = None,
     db_dir: Path = GENE_DB_DIR,
+    c_genes_organism: Optional[Organism] = None,
+    params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
 ) -> MultidomainRiotNumberingNT:
-    return create_multidomain_riot_nt(allowed_species=allowed_species, db_dir=db_dir)
+    return create_multidomain_riot_nt(
+        allowed_species=allowed_species, db_dir=db_dir, c_genes_organism=c_genes_organism, params=params
+    )
 
 
 @cached({})
 def get_or_create_multidomain_riot_aa(
     allowed_species: Optional[tuple[Organism, ...]] = None,
     db_dir: Path = GENE_DB_DIR,
+    c_genes_organism: Optional[Organism] = None,
+    params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
 ) -> MultidomainRiotNumberingAA:
-    return create_multidomain_riot_aa(allowed_species=allowed_species, db_dir=db_dir)
+    return create_multidomain_riot_aa(
+        allowed_species=allowed_species, db_dir=db_dir, c_genes_organism=c_genes_organism, params=params
+    )

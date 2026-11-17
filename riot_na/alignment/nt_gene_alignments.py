@@ -8,6 +8,7 @@ from riot_na.alignment.gene_aligner import (
     create_aligner,
     create_v_gene_aligner,
 )
+from riot_na.alignment.params import DEFAULT_ALIGNER_PARAMS, AlignerParams
 from riot_na.config import GENE_DB_DIR
 from riot_na.data.model import (
     DEFAULT_SPECIES,
@@ -27,7 +28,7 @@ def align_djc_nt(
     j_aligners: dict[Organism, dict[Locus, GeneAligner]],
     c_aligners: dict[Organism, dict[Locus, GeneAligner]],
 ) -> AlignmentsNT:
-    """Align J, C and D genes to the part of the query following the V alignment."""
+    """Align J, C and D genes to the part of the query following the V alignment. C and D are aligned only after J."""
     aligments_nt = AlignmentsNT(v=v_alignment)
 
     query_v = v_alignment.q_seq
@@ -42,15 +43,14 @@ def align_djc_nt(
     j_aligner = j_aligners[species][locus]
     j_alignment = j_aligner.align(query_j, both_strains=False)
 
-    # C follows J or V, if J was not found
-    c_query_start = v_alignment.q_end
-    if j_alignment is not None:
-        j_alignment = offset_alignments(v_alignment.q_end, j_alignment)
-        aligments_nt.j = j_alignment
-        c_query_start = j_alignment.q_end
+    if j_alignment is None:
+        return aligments_nt
+
+    j_alignment = offset_alignments(v_alignment.q_end, j_alignment)
+    aligments_nt.j = j_alignment
 
     # mask c input (query_db_clean -> valn_end + jaln_end)
-    query_c = query_v[c_query_start:]
+    query_c = query_v[j_alignment.q_end :]
 
     if query_c:
         # align c
@@ -62,9 +62,9 @@ def align_djc_nt(
         )
 
         if c_alignment is not None:
-            aligments_nt.c = offset_alignments(c_query_start, c_alignment)
+            aligments_nt.c = offset_alignments(j_alignment.q_end, c_alignment)
 
-    if locus == Locus.IGH and j_alignment is not None:
+    if locus == Locus.IGH:
         # mask d input (query_db_clean -> valn_end + jaln_end)
         query_d = query_v[v_alignment.q_end : j_alignment.q_start]
         if query_d:
@@ -104,15 +104,53 @@ class VDJCAlignerNT:
             return AlignmentsNT()
 
 
+def _create_organism_c_aligners_nt(
+    organism: Organism, db_dir: Path, params: AlignerParams = DEFAULT_ALIGNER_PARAMS
+) -> dict[Locus, GeneAligner]:
+    """C aligners by locus of the organism, empty if there are no C germlines of the organism."""
+    if not (Path(db_dir) / "gene_db" / "c_genes" / organism.value).exists():
+        return {}
+
+    return {
+        locus: create_aligner(
+            organism=organism, germline_gene=GermlineGene.C, locus=locus, db_dir=db_dir, params=params
+        )
+        for locus in Locus
+        # at the moment we only have heavy genes
+        if not (organism == Organism.VICUGNA_PACOS and locus != Locus.IGH)
+    }
+
+
+def _create_c_aligners_nt(
+    allowed_species: tuple[Organism, ...],
+    db_dir: Path,
+    c_genes_organism: Optional[Organism],
+    params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
+) -> dict[Organism, dict[Locus, GeneAligner]]:
+    """C aligners of the species of the V alignment: of its own C germlines or of c_genes_organism, if given."""
+    if c_genes_organism is None:
+        return {organism: _create_organism_c_aligners_nt(organism, db_dir, params) for organism in allowed_species}
+
+    c_organism_aligners = _create_organism_c_aligners_nt(c_genes_organism, db_dir, params)
+    if not c_organism_aligners:
+        raise ValueError(f"There are no C germlines of {c_genes_organism} in {db_dir}")
+    return {organism: c_organism_aligners for organism in allowed_species}
+
+
 def create_djc_aligners_nt(
-    allowed_species: tuple[Organism, ...], db_dir: Path
+    allowed_species: tuple[Organism, ...],
+    db_dir: Path,
+    c_genes_organism: Optional[Organism] = None,
+    params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
 ) -> tuple[
     dict[Organism, GeneAligner], dict[Organism, dict[Locus, GeneAligner]], dict[Organism, dict[Locus, GeneAligner]]
 ]:
     """D, J and C aligners of the allowed species (by locus)."""
     d_aligners = {}
     for organism in allowed_species:
-        d_aligner = create_aligner(organism=organism, germline_gene=GermlineGene.D, locus=Locus.IGH, db_dir=db_dir)
+        d_aligner = create_aligner(
+            organism=organism, germline_gene=GermlineGene.D, locus=Locus.IGH, db_dir=db_dir, params=params
+        )
         d_aligners[organism] = d_aligner
 
     j_aligners: dict[Organism, dict[Locus, GeneAligner]] = {}
@@ -124,30 +162,14 @@ def create_djc_aligners_nt(
             if organism == Organism.VICUGNA_PACOS and locus != Locus.IGH:
                 continue
 
-            j_aligner = create_aligner(organism=organism, germline_gene=GermlineGene.J, locus=locus, db_dir=db_dir)
+            j_aligner = create_aligner(
+                organism=organism, germline_gene=GermlineGene.J, locus=locus, db_dir=db_dir, params=params
+            )
             organism_aligners[locus] = j_aligner
 
         j_aligners[organism] = organism_aligners
 
-    c_aligners: dict[Organism, dict[Locus, GeneAligner]] = {}
-
-    for organism in allowed_species:
-
-        organism_aligners = c_aligners.get(organism, {})
-
-        if organism not in [Organism.HOMO_SAPIENS, Organism.VICUGNA_PACOS, Organism.CUSTOM]:
-            c_organism = Organism.HOMO_SAPIENS
-        else:
-            c_organism = organism
-
-        for locus in Locus:
-            if organism == Organism.VICUGNA_PACOS and locus != Locus.IGH:
-                continue
-
-            c_aligner = create_aligner(organism=c_organism, germline_gene=GermlineGene.C, locus=locus, db_dir=db_dir)
-            organism_aligners[locus] = c_aligner
-
-        c_aligners[organism] = organism_aligners
+    c_aligners = _create_c_aligners_nt(allowed_species, db_dir, c_genes_organism, params)
 
     return d_aligners, j_aligners, c_aligners
 
@@ -155,10 +177,12 @@ def create_djc_aligners_nt(
 def create_vdjc_aligner_nt(
     allowed_species: Optional[tuple[Organism, ...]] = None,
     db_dir: Path = GENE_DB_DIR,
+    c_genes_organism: Optional[Organism] = None,
+    params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
 ) -> VDJCAlignerNT:
     allowed_species = allowed_species or DEFAULT_SPECIES
 
-    v_aligner = create_v_gene_aligner(allowed_species=allowed_species, db_dir=db_dir)
-    d_aligners, j_aligners, c_aligners = create_djc_aligners_nt(allowed_species, db_dir)
+    v_aligner = create_v_gene_aligner(allowed_species=allowed_species, db_dir=db_dir, params=params)
+    d_aligners, j_aligners, c_aligners = create_djc_aligners_nt(allowed_species, db_dir, c_genes_organism, params)
 
     return VDJCAlignerNT(v_aligner, d_aligners, j_aligners, c_aligners)

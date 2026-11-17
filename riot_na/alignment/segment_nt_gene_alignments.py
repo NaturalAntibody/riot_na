@@ -4,6 +4,7 @@ from typing import Optional
 
 from riot_na.alignment.gene_aligner import GeneAligner
 from riot_na.alignment.nt_gene_alignments import align_djc_nt, create_djc_aligners_nt
+from riot_na.alignment.params import DEFAULT_ALIGNER_PARAMS, AlignerParams
 from riot_na.alignment.segment_gene_aligner import (
     SegmentGeneAligner,
     create_v_gene_aligner,
@@ -54,10 +55,12 @@ class SegmentVDJCAlignerNT:
 def create_segment_vdjc_aligner_nt(
     allowed_species: Optional[tuple[Organism, ...]] = None,
     db_dir: Path = GENE_DB_DIR,
+    c_genes_organism: Optional[Organism] = None,
+    params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
 ) -> SegmentVDJCAlignerNT:
     allowed_species = allowed_species or DEFAULT_SPECIES
 
-    v_aligner = create_v_gene_aligner(allowed_species=allowed_species, db_dir=db_dir)
-    d_aligners, j_aligners, c_aligners = create_djc_aligners_nt(allowed_species, db_dir)
+    v_aligner = create_v_gene_aligner(allowed_species=allowed_species, db_dir=db_dir, params=params)
+    d_aligners, j_aligners, c_aligners = create_djc_aligners_nt(allowed_species, db_dir, c_genes_organism, params)
 
     return SegmentVDJCAlignerNT(v_aligner, d_aligners, j_aligners, c_aligners)

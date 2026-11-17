@@ -1,5 +1,6 @@
 import itertools
 import multiprocessing as mp
+import warnings
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Any, Iterator, Optional
@@ -8,6 +9,12 @@ from psutil import cpu_count
 from tqdm import tqdm
 
 from riot_na.alignment.aa_gene_alignments import create_vjc_aligner_aa
+from riot_na.alignment.gumbel import get_gumbel_params
+from riot_na.alignment.params import (
+    DEFAULT_ALIGNER_PARAMS,
+    AlignerParams,
+    warn_c_genes_organism,
+)
 from riot_na.api.multidomain_riot_numbering import (
     create_multidomain_riot_aa,
     create_multidomain_riot_nt,
@@ -35,8 +42,12 @@ class _WorkerNT:
         scheme: Scheme = Scheme.IMGT,
         db_dir: Path = GENE_DB_DIR,
         c_scheme: Optional[CScheme] = None,
+        c_genes_organism: Optional[Organism] = None,
+        params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
     ) -> None:
-        self.numbering = create_riot_nt(allowed_species=allowed_species, db_dir=db_dir)
+        self.numbering = create_riot_nt(
+            allowed_species=allowed_species, db_dir=db_dir, c_genes_organism=c_genes_organism, params=params
+        )
         self.scheme = scheme
         self.c_scheme = c_scheme
 
@@ -54,8 +65,12 @@ class _MultidomainWorkerNT:
         scheme: Scheme = Scheme.IMGT,
         db_dir: Path = GENE_DB_DIR,
         c_scheme: Optional[CScheme] = None,
+        c_genes_organism: Optional[Organism] = None,
+        params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
     ) -> None:
-        self.numbering = create_multidomain_riot_nt(allowed_species=allowed_species, db_dir=db_dir)
+        self.numbering = create_multidomain_riot_nt(
+            allowed_species=allowed_species, db_dir=db_dir, c_genes_organism=c_genes_organism, params=params
+        )
         self.scheme = scheme
         self.c_scheme = c_scheme
 
@@ -76,8 +91,12 @@ class _WorkerAA:
         v_gene: Optional[str] = None,
         j_gene: Optional[str] = None,
         c_scheme: Optional[CScheme] = None,
+        c_genes_organism: Optional[Organism] = None,
+        params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
     ) -> None:
-        self.numbering = create_riot_aa(allowed_species=allowed_species, db_dir=db_dir)
+        self.numbering = create_riot_aa(
+            allowed_species=allowed_species, db_dir=db_dir, c_genes_organism=c_genes_organism, params=params
+        )
         self.scheme = scheme
         self.extend_alignment = extend_alignment
         self.v_gene = v_gene
@@ -105,8 +124,12 @@ class _MultidomainWorkerAA:
         db_dir: Path = GENE_DB_DIR,
         extend_alignment: bool = False,
         c_scheme: Optional[CScheme] = None,
+        c_genes_organism: Optional[Organism] = None,
+        params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
     ) -> None:
-        self.numbering = create_multidomain_riot_aa(allowed_species=allowed_species, db_dir=db_dir)
+        self.numbering = create_multidomain_riot_aa(
+            allowed_species=allowed_species, db_dir=db_dir, c_genes_organism=c_genes_organism, params=params
+        )
         self.scheme = scheme
         self.extend_alignment = extend_alignment
         self.c_scheme = c_scheme
@@ -143,19 +166,34 @@ def _worker_initializer(  # pylint: disable=too-many-arguments
     v_gene: Optional[str] = None,
     j_gene: Optional[str] = None,
     c_scheme: Optional[CScheme] = None,
+    c_genes_organism: Optional[Organism] = None,
+    params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
 ):
     global worker  # pylint: disable=global-statement,global-variable-undefined
-    match input_type, return_all_domains:
-        case InputType.NT, False:
-            worker = _WorkerNT(allowed_species, scheme, db_dir, c_scheme)  # type: ignore
-        case InputType.NT, True:
-            worker = _MultidomainWorkerNT(allowed_species, scheme, db_dir, c_scheme)  # type: ignore
-        case InputType.AA, False:
-            worker = _WorkerAA(  # type: ignore
-                allowed_species, scheme, db_dir, extend_alignment, v_gene, j_gene, c_scheme
-            )
-        case InputType.AA, True:
-            worker = _MultidomainWorkerAA(allowed_species, scheme, db_dir, extend_alignment, c_scheme)  # type: ignore
+    # warned about once, in the parent process
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", message="c_genes_organism=")
+        match input_type, return_all_domains:
+            case InputType.NT, False:
+                worker = _WorkerNT(allowed_species, scheme, db_dir, c_scheme, c_genes_organism, params)  # type: ignore
+            case InputType.NT, True:
+                worker = _MultidomainWorkerNT(allowed_species, scheme, db_dir, c_scheme, c_genes_organism, params)  # type: ignore
+            case InputType.AA, False:
+                worker = _WorkerAA(  # type: ignore
+                    allowed_species,
+                    scheme,
+                    db_dir,
+                    extend_alignment,
+                    v_gene,
+                    j_gene,
+                    c_scheme,
+                    c_genes_organism,
+                    params,
+                )
+            case InputType.AA, True:
+                worker = _MultidomainWorkerAA(  # type: ignore
+                    allowed_species, scheme, db_dir, extend_alignment, c_scheme, c_genes_organism, params
+                )
 
 
 def _worker_call(*args, **kwds):
@@ -177,15 +215,24 @@ def run_on_file_mp(  # pylint: disable=too-many-arguments
     v_gene: Optional[str] = None,
     j_gene: Optional[str] = None,
     c_scheme: Optional[CScheme] = None,
+    c_genes_organism: Optional[Organism] = None,
+    params: AlignerParams = DEFAULT_ALIGNER_PARAMS,
 ):
     if input_format != "fasta":
         raise ValueError(f"Unsupported input format: {input_format!r}; only 'fasta' is supported")
+
+    warn_c_genes_organism(c_genes_organism, params)
+    # compute Gumbel parameters of overridden scoring systems once, not in every worker
+    for ssw_params in params.ssw_params():
+        get_gumbel_params(ssw_params)
 
     if v_gene and j_gene:
         # Validate germline names here, in the parent process. An exception raised in a pool
         # initializer makes multiprocessing respawn workers indefinitely instead of failing.
         assert input_type == InputType.AA, "Selecting germlines by name is supported only for amino acid sequences"
-        create_vjc_aligner_aa(allowed_species=allowed_species, db_dir=db_dir).assert_genes_exist(v_gene, j_gene)
+        create_vjc_aligner_aa(
+            allowed_species=allowed_species, db_dir=db_dir, c_genes_organism=c_genes_organism, params=params
+        ).assert_genes_exist(v_gene, j_gene)
 
     with mp.Pool(
         processes=n_processes,
@@ -200,6 +247,8 @@ def run_on_file_mp(  # pylint: disable=too-many-arguments
             v_gene,
             j_gene,
             c_scheme,
+            c_genes_organism,
+            params,
         ),
     ) as pool:
         result_iter = tqdm(
