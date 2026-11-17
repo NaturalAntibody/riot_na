@@ -25,6 +25,7 @@ next to the baselines, override with ``--output-path``): one record per differin
 
 from __future__ import annotations
 
+import functools
 import itertools
 import multiprocessing as mp
 from collections.abc import Sequence
@@ -35,6 +36,7 @@ import click
 import tqdm
 from psutil import cpu_count
 
+from riot_na import CScheme
 from riot_na.api.api_mp import _worker_call, _worker_initializer
 from riot_na.common.fasta import parse_fasta
 from riot_na.common.io import count_fasta_records
@@ -87,11 +89,17 @@ def number_fasta(
         total = min(total, limit)
 
     records = itertools.islice(parse_fasta(fasta_path), limit)
-    with mp.Pool(
-        processes=n_processes,
-        initializer=_worker_initializer,
-        initargs=(None, scheme, db_dir, input_type, False, False),
-    ) as pool:
+    initializer = functools.partial(
+        _worker_initializer,
+        allowed_species=None,
+        scheme=scheme,
+        db_dir=db_dir,
+        input_type=input_type,
+        return_all_domains=False,
+        extend_alignment=False,
+        c_scheme=CScheme.IMGT,
+    )
+    with mp.Pool(processes=n_processes, initializer=initializer) as pool:
         results = list(
             tqdm.tqdm(
                 pool.imap(_worker_call, records, chunksize=32),
