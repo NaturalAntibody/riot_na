@@ -10,7 +10,7 @@ from riot_na.data.model import (
     SpeciesGeneMatch,
     SpeciesPrefilteringSegmentResult,
 )
-from riot_na.riot_na import (  # pylint: disable=no-name-in-module
+from riot_na.riot_prefiltering import (  # pylint: disable=no-name-in-module
     PrefilteringSegmentResult,
 )
 
@@ -61,7 +61,7 @@ class MultiSpeciesSegmentPrefiltering:
         for segment in raw_result.segments:
             mapped_matches = []
             for match in segment.matching_genes:
-                (species, locus, name) = match.gene_id.split("|")
+                species, locus, name = match.gene_id.split("|")
                 mapped_matches.append(
                     SpeciesGeneMatch(
                         species_gene_id=match.gene_id,

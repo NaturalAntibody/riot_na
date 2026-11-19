@@ -1,8 +1,16 @@
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from dataclasses import replace
 from itertools import groupby
+from typing import Optional, Protocol, TypeVar
 
-from riot_na.data.model import AlignmentEntry, AlignmentString, Cigar
+from riot_na.data.model import AlignmentEntry, AlignmentString, Cigar, Locus
+
+
+class ScoreBoundedAligner(Protocol):  # pylint: disable=too-few-public-methods
+    def max_alignment_score(self, query: str) -> float: ...
+
+
+CAligner = TypeVar("CAligner", bound=ScoreBoundedAligner)
 
 
 def get_cigar_op_groups(cigar: Cigar) -> Iterator[tuple[int, str]]:
@@ -59,6 +67,50 @@ def infer_reading_frame(t_start: int, t_frame: int) -> int:
 
 def offset_alignments(offset: int, aln: AlignmentEntry) -> AlignmentEntry:
     return replace(aln, q_start=aln.q_start + offset, q_end=aln.q_end + offset)
+
+
+def select_c_alignment(c_alignments: Sequence[Optional[AlignmentEntry]], v_locus: Locus) -> Optional[AlignmentEntry]:
+    """
+    Select the best of C alignments to C genes of different loci. C region can follow V region of another locus
+    in engineered antibodies (e.g. VL-CH1 in CrossMabs), so C genes of all loci are aligned.
+    Alignments are compared by score, as e-values depend on the size of the gene database of each locus.
+    C genes of the V locus win ties.
+    """
+    return max(
+        (alignment for alignment in c_alignments if alignment is not None),
+        key=lambda alignment: (alignment.alignment_score or 0, alignment.locus == v_locus),
+        default=None,
+    )
+
+
+def align_c(
+    c_aligners: Mapping[Locus, CAligner],
+    v_locus: Locus,
+    query: str,
+    align: Callable[[CAligner], Optional[AlignmentEntry]],
+) -> Optional[AlignmentEntry]:
+    """
+    Select the best of C alignments of the query to C genes of all loci (select_c_alignment). C genes of the V locus
+    are aligned first, C genes of other loci only if they can score higher (C genes of the V locus win ties), e.g. CL
+    genes are not aligned to heavy chain constant regions. The result is the same as of aligning all loci.
+    """
+    v_alignment = align(c_aligners[v_locus]) if v_locus in c_aligners else None
+    v_score = v_alignment.alignment_score if v_alignment is not None else None
+    return select_c_alignment(
+        [
+            (
+                v_alignment
+                if locus == v_locus
+                else (
+                    None
+                    if v_score is not None and c_aligner.max_alignment_score(query) <= v_score
+                    else align(c_aligner)
+                )
+            )
+            for locus, c_aligner in c_aligners.items()
+        ],
+        v_locus,
+    )
 
 
 def align_sequences(query: str, target: str, alignment: AlignmentString) -> tuple[str, str]:
