@@ -11,8 +11,8 @@ dependencies = [
     "scipy ~=1.9",
     "tqdm ~= 4.66",
     "cachetools (>=5.5.2,<6.0.0)",
-    "ssw-aligner @ git+https://github.com/NaturalAntibody/ssw-aligner.git",
-    "alp @ git+https://github.com/NaturalAntibody/alp.git",
+    "ssw-aligner-na (>=1.0.0,<2.0.0)",
+    "alp-na (>=1.0.0,<2.0.0)",
 ]
 description = "Antibody numbering software"
 name = "riot_na"
