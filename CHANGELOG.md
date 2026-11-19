@@ -1,6 +1,33 @@
 # CHANGELOG
 
 
+## v5.3.1 (2026-11-18)
+
+### Build System
+
+- Switch ssw-aligner from git to PyPI dependency.
+  ([`8e511e3`](https://github.com/NaturalAntibody/riot_na/commit/8e511e33f84d6992a6fa18f73f374a07fe694fee))
+
+### Testing
+
+- **regression**: Add multidomain therapeutics baseline
+  ([`f55be0b`](https://github.com/NaturalAntibody/riot_na/commit/f55be0beb795081ba7ff6e7b3ef049c4af322fa4))
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+
+- **regression**: Added comparing different versions of pkl
+  ([`4573a32`](https://github.com/NaturalAntibody/riot_na/commit/4573a325d12beb1a4abcf0c47430cdcfa42d094f))
+
+- **regression**: Extracted common functions to separate module
+  ([`fd92a8a`](https://github.com/NaturalAntibody/riot_na/commit/fd92a8ae26c300475b36e4a8c040c36eac441e71))
+
+- **regression**: Fix imports
+  ([`6c0d71b`](https://github.com/NaturalAntibody/riot_na/commit/6c0d71bef4c40cd4d1efcba2fb6b168e6b5f1db3))
+
+- **regression**: Logging and result saving improvements
+  ([`0766ef6`](https://github.com/NaturalAntibody/riot_na/commit/0766ef6ae2c1c3dc452fbfd8253c9034886d3d8f))
+
+
 ## v5.3.0 (2026-07-24)
 
 ### Bug Fixes
